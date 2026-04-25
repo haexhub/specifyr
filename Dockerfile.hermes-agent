@@ -72,7 +72,27 @@ RUN ARCH="$(dpkg --print-architecture)" \
 RUN corepack enable && corepack prepare pnpm@latest --activate
 
 # ------------------------------------------------------------------------------
-# 3) Quarantine: move catalog binaries into /opt/catalog/bin/.
+# 3) Install Hermes Agent CLI.
+#    MUST run BEFORE the quarantine step below — the upstream installer needs
+#    curl, and quarantine relocates curl out of $PATH.
+#
+#    Hermes binary lands in /usr/local/bin/hermes by the upstream installer;
+#    it is NOT a catalog binary and is therefore exempt from the whitelist —
+#    it's the agent's own runtime, not a tool the agent uses.
+#
+#    `set -o pipefail` makes curl failures break the build instead of letting
+#    bash silently succeed on empty input (caught a real regression once).
+# ------------------------------------------------------------------------------
+ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
+# `--skip-setup` skips the interactive setup wizard, which would otherwise
+# read from /dev/tty (unavailable during a Docker build). Run
+# `hermes setup` later inside a live container if profile config is needed.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+RUN curl -fsSL "$HERMES_INSTALL_URL" | bash -s -- --skip-setup
+SHELL ["/bin/sh", "-c"]
+
+# ------------------------------------------------------------------------------
+# 4) Quarantine: move catalog binaries into /opt/catalog/bin/.
 #    After this step, running e.g. `git` will fail with "command not found"
 #    until the entrypoint symlinks it back based on BINARY_WHITELIST.
 #
@@ -93,19 +113,6 @@ RUN mkdir -p /opt/catalog/bin \
     && cp "$(readlink -f "$(which node)")" /opt/catalog/bin/node
 
 # ------------------------------------------------------------------------------
-# 4) Install Hermes Agent CLI.
-#    Hermes lives at https://hermes-agent.nousresearch.com/ and ships an
-#    install.sh. URL is build-arg-overridable to support pinning a version
-#    or pointing to a mirror.
-#
-#    Hermes binary lands in /usr/local/bin/hermes by the upstream installer;
-#    it is NOT a catalog binary and is therefore exempt from the whitelist —
-#    it's the agent's own runtime, not a tool the agent uses.
-# ------------------------------------------------------------------------------
-ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
-RUN curl -fsSL "$HERMES_INSTALL_URL" | bash
-
-# ------------------------------------------------------------------------------
 # 5) Profile mount point + entrypoint.
 # ------------------------------------------------------------------------------
 RUN mkdir -p /profile /workspace
@@ -117,5 +124,5 @@ ENV HERMES_HOME=/profile \
 
 WORKDIR /workspace
 
-ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/hermes-agent-entrypoint"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/hermes-agent-entrypoint"]
 CMD ["hermes", "chat", "-q"]
