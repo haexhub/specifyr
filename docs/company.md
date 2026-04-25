@@ -53,7 +53,6 @@ The path computation is centralised in `src/runners/hermes-paths.js` (`hermesHom
 
 - `payment:execute_unrestricted`
 - `secrets:read_vault`
-- `network:any`
 - any `account:*`
 
 The gate is a pure function: `checkCapability({agent, request, taskAutonomy})` returns `{allowed, reason, requiresApproval}`. The runtime is expected to invoke `ApprovalService` whenever `requiresApproval=true`.

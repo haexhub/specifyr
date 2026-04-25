@@ -59,7 +59,6 @@ Quote: *"ich will hermes eigentlich nicht lokal installieren. alles sollte im do
 | `filesystem:write` | `-v <project>:/workspace:rw` |
 | (no filesystem cap) | no bind mount of project; only HERMES_HOME volume |
 | `network:http` | default bridge network |
-| `network:any` | bridge + raw socket / no firewall |
 | (no network cap) | `--network=none` |
 | `secrets:read_env` | env vars selectively passed (`-e API_TOKEN=…`) |
 | `tools.binaries: [git, jq]` | image includes only the listed binaries (or PATH is restricted via entrypoint to a whitelist) |

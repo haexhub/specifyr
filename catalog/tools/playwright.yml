@@ -8,7 +8,7 @@ env_keys: []
 description: "Headless-browser automation: navigate, click, type, take screenshots, capture network traffic, evaluate JS."
 required_capabilities:
   - shell:execute
-  - network:any
+  - network:http
 tags:
   - browser
   - testing

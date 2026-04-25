@@ -271,7 +271,7 @@ test("wildcard ['*'] in tools.mcp expands to all catalog tools", async () => {
   const agent = {
     role: "x",
     tools: { mcp: ["*"] },
-    capabilities: ["filesystem:read", "shell:execute", "network:any", "secrets:read_env", "account:github", "account:slack"],
+    capabilities: ["filesystem:read", "shell:execute", "network:http", "secrets:read_env", "account:github", "account:slack"],
   };
   const resolved = resolveToolsForAgent(agent, c);
   assert.equal(resolved.length, c.tools.size);

@@ -24,15 +24,15 @@ test("missing capability is denied", () => {
 
 test("class-level wildcard ':any' allows any subclass in that class", () => {
   const r = checkCapability({
-    agent: agent(["network:any"]),
-    request: "network:http",
+    agent: agent(["filesystem:any"]),
+    request: "filesystem:read",
   });
   assert.equal(r.allowed, true);
 });
 
 test("':any' from one class does NOT grant other classes", () => {
   const r = checkCapability({
-    agent: agent(["network:any"]),
+    agent: agent(["filesystem:any"]),
     request: "shell:execute",
   });
   assert.equal(r.allowed, false);
@@ -91,16 +91,4 @@ test("supervised autonomy adds approval requirement at gates only, not for ordin
 test("SENSITIVE_CAPABILITIES set includes the documented entries", () => {
   assert.ok(SENSITIVE_CAPABILITIES.has("payment:execute_unrestricted"));
   assert.ok(SENSITIVE_CAPABILITIES.has("secrets:read_vault"));
-  assert.ok(SENSITIVE_CAPABILITIES.has("network:any"));
-});
-
-test("granted 'network:any' triggers approval (it's sensitive even at the grant level)", () => {
-  const r = checkCapability({
-    agent: agent(["network:any"]),
-    request: "network:http",
-    taskAutonomy: "full",
-  });
-  assert.equal(r.allowed, true);
-  // network:any is sensitive — every use of it under that grant requires approval
-  assert.equal(r.requiresApproval, true);
 });

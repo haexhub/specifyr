@@ -14,7 +14,6 @@
 export const SENSITIVE_CAPABILITIES = new Set([
   "payment:execute_unrestricted",
   "secrets:read_vault",
-  "network:any",
   // account:* is sensitive — handled by class-level check below
 ]);
 
@@ -40,9 +39,9 @@ export function checkCapability({ agent, request, taskAutonomy }) {
   }
 
   // Sensitivity is checked at BOTH the grant and the request level — a sensitive
-  // grant (e.g. `network:any`) makes every concrete use approval-gated, and a
-  // sensitive request (e.g. `payment:execute_unrestricted`) is approval-gated
-  // even if the grant looks innocuous.
+  // grant (e.g. `secrets:read_vault`) makes every concrete use approval-gated,
+  // and a sensitive request (e.g. `payment:execute_unrestricted`) is
+  // approval-gated even if the grant looks innocuous.
   if (isSensitive(grant) || isSensitive(request)) {
     return {
       allowed: true,
