@@ -27,6 +27,11 @@ services:
       NODE_ENV: development
       # Optional: falls gesetzt, nutzt `claude` diesen Key statt OAuth.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Image-Tag, mit dem hermes-docker.js Agenten-Container spawnt. Default
+      # 'hermes-agent:dev' = lokal selbst gebaut. Für GHCR-Konsum: setze
+      # `HERMES_AGENT_IMAGE=ghcr.io/<owner>/hermes-agent:<tag>` in der Shell
+      # vor `docker compose up`, oder hardcode hier.
+      HERMES_AGENT_IMAGE: ${HERMES_AGENT_IMAGE:-hermes-agent:dev}
     volumes:
       # Source bind mount für HMR.
       - .:/app
@@ -39,9 +44,25 @@ services:
       #   - claude_home:/home/node/.claude
       # und das `volumes:`-Block unten einkommentieren + `claude login` im Container ausführen.
       - ${HOME}/.claude:/home/node/.claude
+      # Docker-Socket: erlaubt der haex-corp-App, per `docker run` Hermes-Agent-Container
+      # zu spawnen. SICHERHEITS-HINWEIS: dieser Mount = effektiv root auf dem Host für
+      # alles innerhalb dieses Containers. Acceptabel für Solo-Dev-Setup; in Multi-User-
+      # /Cloud-Deployments stattdessen einen privilegierten Sidecar oder rootless-docker
+      # erwägen. Wir mounten rw, weil `docker run` schreibend auf den Socket zugreifen muss.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      # haex-corp und alle gespawnten Hermes-Agent-Container teilen sich dieses
+      # benutzerdefinierte Bridge-Network. Agenten erreichen die Orchestrator-API
+      # als http://haex-corp:3000.
+      - companies
     # UID/GID-Mapping für Bind-Mounts (Linux). Auf macOS/Windows ignoriert Docker das.
     # Falls dein Host-User nicht UID 1000 hat: `UID=$(id -u) GID=$(id -g) docker compose up`
     user: "${UID:-1000}:${GID:-1000}"
+
+networks:
+  companies:
+    name: companies
+    driver: bridge
 
 # Multi-User-Zukunft: benanntes Volume statt Host-Mount.
 # volumes:

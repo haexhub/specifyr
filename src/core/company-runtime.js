@@ -89,10 +89,13 @@ export class CompanyRuntime extends EventEmitter {
     }
 
     // Provision per-agent Hermes profile dirs (lazy-create; Hermes initializes on first use).
+    // The runnerFactory receives runtime-loaded context as its second arg —
+    // currently the catalog, so docker runners can resolve binary wildcards.
+    // Default factories that take only `agent` ignore the second arg safely.
     for (const agent of this.company.agents.values()) {
       const home = hermesHomeForAgent({ projectRoot: this.projectRoot, role: agent.role });
       await mkdir(home, { recursive: true });
-      this.runners.set(agent.role, this.runnerFactory(agent));
+      this.runners.set(agent.role, this.runnerFactory(agent, { catalog: this.catalog }));
     }
 
     // Queue polling: emits 'task' for every yaml dropped in queueDir.
