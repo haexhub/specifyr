@@ -195,6 +195,44 @@ test("hermes chat invocation uses --yolo, --ignore-user-config, --max-turns", as
   assert.match(args[maxIdx + 1], /^\d+$/);
 });
 
+test("--user is set to host uid:gid by default (cap-drop=ALL needs UID match for bind-mount writes)", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+  const runner = new HermesDockerRunner({
+    ...baseRunnerOptions(),
+    commandRunner: fakeCommandRunner,
+  });
+  await runner.execute(fakeWorkItem(), fakeContext());
+
+  const idx = calls[0].args.indexOf("--user");
+  assert.ok(idx >= 0, "expected --user flag");
+  assert.match(calls[0].args[idx + 1], /^\d+:\d+$/);
+});
+
+test("--user can be overridden explicitly", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+  const runner = new HermesDockerRunner({
+    ...baseRunnerOptions(),
+    userId: "1234:1234",
+    commandRunner: fakeCommandRunner,
+  });
+  await runner.execute(fakeWorkItem(), fakeContext());
+
+  const idx = calls[0].args.indexOf("--user");
+  assert.equal(calls[0].args[idx + 1], "1234:1234");
+});
+
+test("--user can be omitted with userId: null (run as image USER)", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+  const runner = new HermesDockerRunner({
+    ...baseRunnerOptions(),
+    userId: null,
+    commandRunner: fakeCommandRunner,
+  });
+  await runner.execute(fakeWorkItem(), fakeContext());
+
+  assert.equal(calls[0].args.indexOf("--user"), -1);
+});
+
 test("agent.model determines `-m anthropic/<model>`; namespaced models pass through", async () => {
   const { fakeCommandRunner, calls } = makeFakeRunner();
 
@@ -255,20 +293,30 @@ test("falls back to base stub when scope is empty (no docker invocation)", async
   assert.match(result.summary, /no explicit scope/);
 });
 
-test("falls back when commandRunner reports !ok", async () => {
-  const { fakeCommandRunner } = makeFakeRunner({ ok: false, stdout: "", stderr: "boom" });
+test("non-zero docker exit surfaces 'failed' with stderr (no silent fallback)", async () => {
+  const { fakeCommandRunner } = makeFakeRunner({
+    ok: false,
+    code: 125,
+    stdout: "",
+    stderr: "docker: network 'companies' not found.\nSee 'docker run --help'.",
+  });
   const runner = new HermesDockerRunner({
     ...baseRunnerOptions(),
     commandRunner: fakeCommandRunner,
   });
   const result = await runner.execute(fakeWorkItem(), fakeContext());
 
-  // Fallback HermesAgentRunner (with valid scope) returns "completed".
-  assert.equal(result.status, "completed");
-  assert.equal(result.metadata.runner, "hermes-agent");
+  // Crucial: do NOT fall back to the stub (status:"completed" would hide
+  // a real failure). The dispatcher needs to see status:"failed" so it
+  // leaves the queue YAML in place for retry.
+  assert.equal(result.status, "failed");
+  assert.equal(result.metadata.runner, "hermes-docker");
+  assert.equal(result.metadata.exitCode, 125);
+  assert.match(result.summary, /network 'companies' not found/);
+  assert.match(result.transcript, /docker:/);
 });
 
-test("falls back when stdout is empty", async () => {
+test("ok=true with empty stdout still counts as completed (hermes did file-tool work without printing)", async () => {
   const { fakeCommandRunner } = makeFakeRunner({ ok: true, stdout: "", stderr: "" });
   const runner = new HermesDockerRunner({
     ...baseRunnerOptions(),
@@ -277,7 +325,8 @@ test("falls back when stdout is empty", async () => {
   const result = await runner.execute(fakeWorkItem(), fakeContext());
 
   assert.equal(result.status, "completed");
-  assert.equal(result.metadata.runner, "hermes-agent");
+  assert.equal(result.metadata.runner, "hermes-docker");
+  assert.match(result.summary, /no stdout/);
 });
 
 test("capability-mapping error THROWS instead of silently falling back", async () => {

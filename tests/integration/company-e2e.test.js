@@ -122,6 +122,15 @@ function runningContainersForSlug(slug) {
     .filter(Boolean);
 }
 
+async function noContainersAfter(slug, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (runningContainersForSlug(slug).length === 0) return [];
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return runningContainersForSlug(slug);
+}
+
 const { skip } = gate();
 
 test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, async (t) => {
@@ -158,6 +167,30 @@ test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, as
     await fs.rm(projectRoot, { recursive: true, force: true });
   });
 
+  // Surface dispatch outcome to stderr so failures stay diagnosable
+  // (silent-failure path bit us once already; never again).
+  runtime.on("dispatched", (p) => {
+    if (p.result?.status !== "completed") {
+      console.error(
+        "[dispatched non-success]",
+        JSON.stringify(
+          {
+            role: p.role,
+            status: p.result?.status,
+            summary: p.result?.summary,
+            transcript: p.result?.transcript?.slice(0, 1000),
+            metadata: p.result?.metadata,
+          },
+          null,
+          2
+        )
+      );
+    }
+  });
+  runtime.on("dispatch-error", (p) => {
+    console.error("[dispatch-error]", p.path, p.error?.message ?? p.error);
+  });
+
   await runtime.start();
 
   // Drop the task — CEO is expected to read this and produce result.md.
@@ -177,8 +210,9 @@ test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, as
 
   await runtime.stop();
 
-  // Allow Docker a beat to release the container records.
-  await new Promise((r) => setTimeout(r, 1000));
-  const stragglers = runningContainersForSlug(slug);
+  // --rm should remove containers on exit, but timing is racy when the
+  // container exits and the docker daemon hasn't pruned the record yet.
+  // Poll up to 5s for cleanup before failing.
+  const stragglers = await noContainersAfter(slug, 5000);
   assert.deepEqual(stragglers, [], `expected no leaked containers, got: ${stragglers.join(", ")}`);
 });

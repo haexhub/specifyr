@@ -20,7 +20,7 @@ test("baseline hardening flags are emitted for every agent", () => {
   assert.match(s, /--read-only/);
   assert.match(s, /--cap-drop=ALL/);
   assert.match(s, /--security-opt=no-new-privileges/);
-  assert.match(s, /--tmpfs \/tmp:rw,size=64m,mode=1777/);
+  assert.match(s, /--tmpfs \/tmp:rw,size=512m,mode=1777/);
 });
 
 test("HERMES_HOME profile volume is always mounted rw + env set", () => {
@@ -176,9 +176,13 @@ test("empty secrets object is treated as no secrets (no throw, no flags)", () =>
   input.agent.capabilities = ["shell:execute"];
   input.secrets = {};
   const args = capabilityFlags(input);
-  // No -e KEY=value entries beyond HERMES_HOME
+  // No KEY=value secrets beyond the always-emitted runtime env vars.
   const envFlags = args.filter((a, i) => args[i - 1] === "-e");
-  assert.deepEqual(envFlags, ["HERMES_HOME=/profile"]);
+  assert.deepEqual(envFlags.sort(), [
+    "HERMES_HOME=/profile",
+    "PYTHONDONTWRITEBYTECODE=1",
+    "PYTHONUNBUFFERED=1",
+  ]);
 });
 
 test("secrets array (not object) → throws", () => {

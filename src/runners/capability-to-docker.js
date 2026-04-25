@@ -47,13 +47,16 @@
  *   - projectRoot or profileDir not absolute
  */
 
+// /tmp tmpfs sized at 512m — hermes (Python) writes pyc caches, intermediate
+// LLM tooling state, and skills metadata there. 64m was too small and led
+// to OOM-kills (exit 137) with no stderr in the E2E test.
 const BASELINE_FLAGS = Object.freeze([
   "--rm",
   "--read-only",
   "--cap-drop=ALL",
   "--security-opt=no-new-privileges",
   "--tmpfs",
-  "/tmp:rw,size=64m,mode=1777",
+  "/tmp:rw,size=512m,mode=1777",
 ]);
 
 /**
@@ -71,6 +74,17 @@ const BASELINE_FLAGS = Object.freeze([
  * @param {string} [input.image]       container image tag (default: hermes-agent:dev)
  * @param {string} [input.network]     compose network name agents join (e.g. "companies")
  * @param {string} [input.containerName]  optional --name value
+ * @param {string} [input.userId]      `--user UID[:GID]` value. Forces the
+ *                                     container to run as that UID instead
+ *                                     of root. Critical when --cap-drop=ALL
+ *                                     is used: without CAP_DAC_OVERRIDE,
+ *                                     UID 0 inside the container can't
+ *                                     bypass bind-mount permission checks,
+ *                                     so it must MATCH the host user that
+ *                                     owns the bind-mount sources.
+ *                                     Caller passes `${uid}:${gid}` from
+ *                                     process.getuid()/getgid() in the
+ *                                     common case.
  * @returns {string[]}                 docker run argv (after `docker run`, before image tag)
  */
 export function capabilityFlags({
@@ -82,6 +96,7 @@ export function capabilityFlags({
   image = "hermes-agent:dev",
   network,
   containerName,
+  userId,
 }) {
   if (!agent || !Array.isArray(agent.capabilities)) {
     throw new Error("capabilityFlags: agent.capabilities (string[]) is required");
@@ -99,6 +114,7 @@ export function capabilityFlags({
   const flags = [...BASELINE_FLAGS];
 
   if (containerName) flags.push("--name", containerName);
+  if (userId) flags.push("--user", String(userId));
 
   // Resource limits from agent.resources. Both fields are optional and
   // independently emitted. Format-validated here so config drift surfaces
@@ -130,6 +146,16 @@ export function capabilityFlags({
   // project workspace.
   flags.push("-v", `${profileDir}:/profile:rw`);
   flags.push("-e", "HERMES_HOME=/profile");
+
+  // Python runtime hardening:
+  //   PYTHONUNBUFFERED=1         flush stdout/stderr line-by-line so we see
+  //                              hermes output even if the container exits
+  //                              abruptly (caught a real diagnostics gap)
+  //   PYTHONDONTWRITEBYTECODE=1  no .pyc files → no /tmp writes for caches,
+  //                              keeps the 512m tmpfs from filling under
+  //                              long-running hermes invocations
+  flags.push("-e", "PYTHONUNBUFFERED=1");
+  flags.push("-e", "PYTHONDONTWRITEBYTECODE=1");
 
   // Filesystem: project mount mode comes from filesystem:* capability.
   if (caps.has("filesystem:write") || caps.has("filesystem:any")) {

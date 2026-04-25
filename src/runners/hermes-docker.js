@@ -70,6 +70,19 @@ function buildHermesChatArgs(prompt, agent) {
 
 const CONTAINER_NAME_SAFE = /[^a-zA-Z0-9_.-]/g;
 
+/**
+ * Default --user value for spawned containers: matches the host process's
+ * uid:gid so bind-mount writes work even with --cap-drop=ALL stripping
+ * CAP_DAC_OVERRIDE. Returns null on platforms without process.getuid()
+ * (Windows) — caller can override with an explicit userId then.
+ */
+function defaultUserId() {
+  if (typeof process.getuid !== "function") return null;
+  const uid = process.getuid();
+  const gid = process.getgid?.() ?? uid;
+  return `${uid}:${gid}`;
+}
+
 export class HermesDockerRunner extends HermesAgentRunner {
   /**
    * @param {object} options
@@ -85,6 +98,14 @@ export class HermesDockerRunner extends HermesAgentRunner {
    * @param {string} [options.dockerCommand] docker binary, default 'docker'
    * @param {Function} [options.commandRunner]  DI for tests
    * @param {AgentRunner} [options.fallback]
+   * @param {string|null} [options.userId]
+   *                                         `--user UID[:GID]` value. Defaults
+   *                                         to the host process's uid:gid on
+   *                                         Linux (matches bind-mount owner
+   *                                         so cap-dropped containers can
+   *                                         still write). Pass `null` to
+   *                                         omit and let the container run as
+   *                                         the image's default USER (root).
    */
   constructor(options = {}) {
     super();
@@ -103,6 +124,7 @@ export class HermesDockerRunner extends HermesAgentRunner {
     this.dockerCommand = options.dockerCommand ?? "docker";
     this.commandRunner = options.commandRunner ?? runCommand;
     this.fallback = options.fallback ?? new HermesAgentRunner();
+    this.userId = options.userId === undefined ? defaultUserId() : options.userId;
   }
 
   async execute(workItem, runtimeContext) {
@@ -121,29 +143,48 @@ export class HermesDockerRunner extends HermesAgentRunner {
       image: this.image,
       network: this.network,
       containerName: this.#containerNameFor(runtimeContext),
+      userId: this.userId,
     });
 
     const prompt = buildHermesPrompt(workItem, runtimeContext);
     const cmdArgs = buildHermesChatArgs(prompt, this.agent);
     // capabilityFlags(...) places the image as its last entry; everything
     // after that is the container's CMD, which overrides the image's
-    // default CMD. We drop `-i` (no stdin piping any more) and rely on
-    // single-shot `-q QUERY` semantics.
+    // default CMD. No stdin piping — hermes 0.11 reads -q QUERY from argv.
     const result = await this.commandRunner(
       this.dockerCommand,
       ["run", ...flags, ...cmdArgs],
       { cwd: runtimeContext.cwd }
     );
 
-    if (!result.ok || !result.stdout) {
-      return this.fallback.execute(workItem, runtimeContext);
+    // A non-zero docker exit means the container failed to start, hermes
+    // crashed, or auth/model errors. Surface stderr so the dispatcher can
+    // see the cause — falling back to a stub that returns
+    // status:"completed" would hide a real failure (the silent-failure
+    // pattern that wasted an E2E debugging cycle in inkrement 6).
+    if (!result.ok) {
+      return {
+        status: "failed",
+        summary: `hermes-docker exited ${result.code}: ${result.stderr.split("\n")[0] || "no stderr"}`,
+        outputs: [],
+        reviewStatus: "rejected",
+        nextEvent: "investigate",
+        metadata: {
+          runner: this.name,
+          provider: runtimeContext.provider.name,
+          image: this.image,
+          role: this.agent.role,
+          exitCode: result.code,
+        },
+        transcript: result.stderr,
+      };
     }
 
     return {
       status: "completed",
       summary:
-        result.stdout.split("\n")[0] ??
-        `Executed ${workItem.title} with hermes-docker.`,
+        result.stdout.split("\n")[0] ||
+        `Executed ${workItem.title} with hermes-docker (no stdout).`,
       outputs: workItem.expectedOutputs,
       reviewStatus: "accepted",
       nextEvent: "review_result",
