@@ -14,12 +14,22 @@ function buildHermesPrompt(workItem, runtimeContext) {
 }
 
 export class HermesCliRunner extends HermesAgentRunner {
+  /**
+   * @param {object} options
+   * @param {string} [options.command]       hermes binary, default 'hermes'
+   * @param {string} [options.memoryRoot]    HERMES_HOME for this runner instance.
+   *                                         When per-agent isolation is wanted,
+   *                                         pass `hermesHomeForAgent({projectRoot, role})`.
+   * @param {Function} [options.commandRunner]
+   * @param {AgentRunner} [options.fallback]
+   */
   constructor(options = {}) {
     super();
     this.name = "hermes-cli";
     this.command = options.command ?? "hermes";
     this.commandRunner = options.commandRunner ?? runCommand;
     this.fallback = options.fallback ?? new HermesAgentRunner();
+    this.memoryRoot = options.memoryRoot ?? null;
   }
 
   async execute(workItem, runtimeContext) {
@@ -28,9 +38,11 @@ export class HermesCliRunner extends HermesAgentRunner {
     }
 
     const prompt = buildHermesPrompt(workItem, runtimeContext);
+    const env = this.memoryRoot ? { HERMES_HOME: this.memoryRoot } : undefined;
     const result = await this.commandRunner(this.command, ["chat", "-q"], {
       cwd: runtimeContext.cwd,
-      input: `${prompt}\n`
+      input: `${prompt}\n`,
+      env
     });
 
     if (!result.ok || !result.stdout) {
