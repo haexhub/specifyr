@@ -21,6 +21,38 @@ async function withTempProject(fn) {
   }
 }
 
+test("opsToken is auto-generated as a 64-char hex string", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    const a = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDir: queue,
+      runnerFactory: () => ({ stub: true }),
+    });
+    const b = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDir: queue,
+      runnerFactory: () => ({ stub: true }),
+    });
+    assert.match(a.opsToken, /^[0-9a-f]{64}$/);
+    assert.notEqual(a.opsToken, b.opsToken, "tokens should be unique per runtime");
+  });
+});
+
+test("opsToken is overridable for deterministic tests", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDir: queue,
+      runnerFactory: () => ({ stub: true }),
+      opsToken: "fixed-token-for-tests",
+    });
+    assert.equal(runtime.opsToken, "fixed-token-for-tests");
+  });
+});
+
 test("start() loads agents and provisions per-agent .hermes dirs", async () => {
   await withTempProject(async ({ proj, queue }) => {
     const runtime = new CompanyRuntime({

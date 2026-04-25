@@ -22,6 +22,7 @@
 import path from "node:path";
 import { mkdir, unlink } from "node:fs/promises";
 import { EventEmitter } from "node:events";
+import { randomBytes } from "node:crypto";
 
 import { loadCompany } from "../agents/spec-loader.js";
 import { QueuePoller } from "./queue-poller.js";
@@ -49,6 +50,7 @@ export class CompanyRuntime extends EventEmitter {
     slug,
     ceoRole = "ceo",
     approvalService,
+    opsToken,
   } = {}) {
     super();
     if (!projectRoot) throw new Error("CompanyRuntime: projectRoot required");
@@ -75,6 +77,13 @@ export class CompanyRuntime extends EventEmitter {
     // request capability approvals. Injectable for tests; default is a
     // fresh service with the NoopTransport stub.
     this.approvalService = approvalService ?? new CapabilityApprovalService();
+    // Per-runtime bearer token, used by the company-ops MCP server to
+    // authenticate worker-container callbacks. Generated at construction
+    // so it's available immediately for testing; rotated by stop+start.
+    // 32 random bytes → 64-char hex; sufficient entropy for a non-public
+    // single-host service. Override-able via constructor for deterministic
+    // tests.
+    this.opsToken = opsToken ?? randomBytes(32).toString("hex");
     // Dispatch state (queue → runner). Serial FIFO: one task at a time
     // because the CEO is `runner_type: persistent` and we don't want
     // concurrent containers stepping on each other for the same project.

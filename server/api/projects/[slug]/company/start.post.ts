@@ -32,6 +32,7 @@ import {
   registerCompany,
 } from "../../../../utils/company-manager";
 import path from "node:path";
+import { randomBytes } from "node:crypto";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -64,20 +65,32 @@ export default defineEventHandler(async (event) => {
   const { CompanyRuntime } = await getCompanyRuntimeModule();
   const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
 
+  // Generate the per-runtime ops token here so the same value flows into
+  // both the runtime (server-side validation) AND the secretsResolver
+  // closure (worker-side env injection). Constructed before the runtime
+  // because the resolver needs it at runner-build time.
+  const opsToken = randomBytes(32).toString("hex");
+  // URL workers use to call back into the company-ops MCP server.
+  // Default targets the compose service name; override via env for
+  // bare-metal/native runs or alternate routing.
+  const opsUrl =
+    process.env.COMPANY_OPS_URL_BASE ?? "http://haex-corp:3000/mcp";
+
   // Default secrets forwarding: any agent with `secrets:read_env` gets
-  // ANTHROPIC_API_KEY injected into its container. capability-to-docker.js
-  // hard-fails if secrets are passed without the matching capability, so
-  // we only emit the KV when the cap is actually granted. This is the
-  // minimal set today; expand the agent allowlist as more LLM/service
-  // keys come online (OPENAI_API_KEY, GH_TOKEN, etc.).
+  // ANTHROPIC_API_KEY (LLM auth) plus COMPANY_OPS_TOKEN/URL (callback
+  // channel). capability-to-docker.js hard-fails if secrets are passed
+  // without the cap, so we only emit when the cap is granted.
   const runnerFactory = dockerRunnerFactory({
     projectRoot: pHostCwd,
     network: "companies",
     secretsResolver: (agent: any) => {
       if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
-      const env: Record<string, string> = {};
+      const env: Record<string, string> = {
+        COMPANY_OPS_TOKEN: opsToken,
+        COMPANY_OPS_URL: `${opsUrl}/${slug}`,
+      };
       if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
-      return Object.keys(env).length > 0 ? env : undefined;
+      return env;
     },
     // image resolved via factory: explicit > HERMES_AGENT_IMAGE > hermes-agent:dev
   });
@@ -88,6 +101,7 @@ export default defineEventHandler(async (event) => {
     queueDir,
     catalogDir,
     slug,
+    opsToken,
     runnerFactory,
   });
 

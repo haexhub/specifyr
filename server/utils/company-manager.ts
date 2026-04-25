@@ -22,12 +22,39 @@ import { pathToFileURL } from "node:url";
 interface CompanyRuntimeInstance {
   start(): Promise<void>;
   stop(): Promise<void>;
+  opsToken: string;
+  slug: string;
   listAgents(): Array<{ role: string; capabilities: string[]; resources?: unknown }>;
+  getAgent(role: string): {
+    role: string;
+    capabilities: string[];
+    resources?: unknown;
+  } | null;
   getStatus(): {
     status: "running" | "stopped";
     agents: Array<{ role: string; capabilities: string[]; resources: unknown }>;
     queueDepth: number;
   };
+  authorizeWithApproval(input: {
+    role: string;
+    capability: string;
+    taskAutonomy?: string;
+    requestPayload?: unknown;
+  }): Promise<{
+    allowed: boolean;
+    reason?: string;
+    requiresApproval?: boolean;
+    approval?: {
+      decision: "approved" | "denied" | "escalated";
+      by: string;
+      at: string;
+      requestId?: string;
+      escalateTo?: string | null;
+    };
+  }>;
+  getResolvedTools(role: string): unknown[];
+  getResolvedSkills(role: string): unknown[];
+  getResolvedBinaries(role: string): unknown[];
   on(event: string, listener: (...args: unknown[]) => void): void;
 }
 
@@ -39,6 +66,8 @@ interface CompanyRuntimeModule {
     catalogDir?: string;
     runnerFactory?: (agent: unknown, runtimeMeta?: unknown) => unknown;
     hermesBinary?: string;
+    slug?: string;
+    opsToken?: string;
   }) => CompanyRuntimeInstance;
 }
 
