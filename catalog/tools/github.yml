@@ -9,7 +9,7 @@ env_keys:
 description: "Read/write GitHub repos, issues, pull requests, file contents, comments."
 required_capabilities:
   - secrets:read_env
-  - network:http_post
+  - network:http
   - account:github
 tags:
   - vcs

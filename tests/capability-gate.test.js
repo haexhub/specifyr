@@ -25,7 +25,7 @@ test("missing capability is denied", () => {
 test("class-level wildcard ':any' allows any subclass in that class", () => {
   const r = checkCapability({
     agent: agent(["network:any"]),
-    request: "network:http_post",
+    request: "network:http",
   });
   assert.equal(r.allowed, true);
 });
@@ -97,7 +97,7 @@ test("SENSITIVE_CAPABILITIES set includes the documented entries", () => {
 test("granted 'network:any' triggers approval (it's sensitive even at the grant level)", () => {
   const r = checkCapability({
     agent: agent(["network:any"]),
-    request: "network:http_get",
+    request: "network:http",
     taskAutonomy: "full",
   });
   assert.equal(r.allowed, true);

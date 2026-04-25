@@ -5,11 +5,11 @@ command: "curl"
 version_check: "curl --version"
 description: |
   HTTP client for ad-hoc requests. Network access is curl's entire purpose,
-  so network:http_get is required. POST/PUT/DELETE additionally need
-  network:http_post. Saving response bodies to disk needs filesystem:write.
+  so network:http is required. POST/PUT/DELETE additionally need
+  network:http. Saving response bodies to disk needs filesystem:write.
 required_capabilities:
   - shell:execute
-  - network:http_get
+  - network:http
 tags:
   - http
   - core

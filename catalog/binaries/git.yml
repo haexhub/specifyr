@@ -6,8 +6,8 @@ version_check: "git --version"
 description: |
   Distributed version control. Read-only ops (status, log, diff, show) need
   filesystem:read. Mutating ops (add, commit, init, worktree, branch) need
-  filesystem:write. Remote ops add network:http_get (clone, fetch, pull) or
-  network:http_post (push). Each agent must grant the capabilities matching
+  filesystem:write. Remote ops add network:http (clone, fetch, pull) or
+  network:http (push). Each agent must grant the capabilities matching
   the operations it intends to run.
 required_capabilities:
   - shell:execute

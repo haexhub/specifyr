@@ -35,7 +35,7 @@ args: []
 env_keys: []
 description: "Ping a host."
 required_capabilities:
-  - network:http_get
+  - network:http
 tags: [test]
 `
   );
@@ -61,7 +61,7 @@ test("loadTools reads YAML files and returns Map<id, ToolSpec>", async () => {
   assert.equal(tools.get("github").type, "mcp");
   assert.deepEqual(tools.get("github").required_capabilities, [
     "secrets:read_env",
-    "network:http_post",
+    "network:http",
     "account:github",
   ]);
 });
@@ -127,20 +127,22 @@ test("validateCatalogReferences flags unknown skills", async () => {
   assert.ok(codes.includes("E_UNKNOWN_SKILL_REFERENCE"));
 });
 
-test("validateCatalogReferences flags missing capabilities required by referenced tool", async () => {
+test("validateCatalogReferences does NOT enforce required_capabilities — runtime job", async () => {
+  // github tool declares required_capabilities, but the validator now only
+  // checks reference existence. An agent that references a tool without the
+  // declared capabilities should pass validation; runtime enforcement catches
+  // mismatches at actual invocation.
   const c = await loadCatalog(realCatalog);
-  // github requires secrets:read_env, network:http_post, account:github
   const agents = [
     {
       role: "ceo",
       tools: { mcp: ["github"] },
       skills: [],
-      capabilities: ["filesystem:read"],
+      capabilities: ["filesystem:read"], // intentionally missing the github reqs
     },
   ];
   const findings = validateCatalogReferences(agents, c);
-  const codes = findings.map((f) => f.code);
-  assert.ok(codes.includes("E_TOOL_CAPABILITY_MISSING"));
+  assert.deepEqual(findings, []);
 });
 
 test("validateCatalogReferences passes when references and caps line up", async () => {
@@ -224,10 +226,11 @@ test("validateCatalogReferences flags unknown binary references", async () => {
   assert.ok(codes.includes("E_UNKNOWN_BINARY_REFERENCE"));
 });
 
-test("validateCatalogReferences flags binary capability gaps", async () => {
+test("validateCatalogReferences does NOT enforce binary required_capabilities — runtime job", async () => {
+  // curl declares network:http as required; agent doesn't have it. The
+  // validator no longer enforces this — the runtime gate does. So validation
+  // passes here.
   const c = await loadCatalog(realCatalog);
-  // curl requires shell:execute + network:http_get (HTTP is its entire purpose).
-  // Agent has only shell:execute → gap.
   const agents = [
     {
       role: "dev",
@@ -237,8 +240,7 @@ test("validateCatalogReferences flags binary capability gaps", async () => {
     },
   ];
   const findings = validateCatalogReferences(agents, c);
-  const codes = findings.map((f) => f.code);
-  assert.ok(codes.includes("E_BINARY_CAPABILITY_MISSING"));
+  assert.deepEqual(findings, []);
 });
 
 test("validateCatalogReferences passes when binary caps line up", async () => {
@@ -302,11 +304,11 @@ test("wildcard mixed with explicit IDs still expands to all (wildcard subsumes)"
   assert.equal(resolved.length, c.binaries.size);
 });
 
-test("validateCatalogReferences with wildcard still enforces capabilities for each expanded entry", async () => {
+test("validateCatalogReferences with wildcard expands references but does not enforce capabilities", async () => {
   const c = await loadCatalog(realCatalog);
-  // Agent grabs all binaries via wildcard but only has shell:execute.
-  // gh requires shell:execute + network:http_post + secrets:read_env + account:github,
-  // so it should fail with E_BINARY_CAPABILITY_MISSING.
+  // Agent grabs all binaries via wildcard with only shell:execute. The
+  // validator just confirms the wildcard expands cleanly — no capability
+  // check happens here, runtime is the gate.
   const agents = [
     {
       role: "ceo",
@@ -316,9 +318,7 @@ test("validateCatalogReferences with wildcard still enforces capabilities for ea
     },
   ];
   const findings = validateCatalogReferences(agents, c);
-  const codes = findings.map((f) => f.code);
-  // Multiple binaries require additional capabilities, so we expect this code
-  assert.ok(codes.includes("E_BINARY_CAPABILITY_MISSING"));
+  assert.deepEqual(findings, []);
 });
 
 test("validateCatalogReferences accepts wildcard when capabilities are broad enough", async () => {
