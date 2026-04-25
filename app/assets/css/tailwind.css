@@ -1,0 +1,42 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --color-background: #f7f3ea;
+  --color-foreground: #18212b;
+  --color-card: #fffdf8;
+  --color-card-foreground: #18212b;
+  --color-popover: #fffdf8;
+  --color-popover-foreground: #18212b;
+  --color-primary: #c6572f;
+  --color-primary-foreground: #fff8f1;
+  --color-secondary: #e9dfcf;
+  --color-secondary-foreground: #22313d;
+  --color-muted: #efe8db;
+  --color-muted-foreground: #64707a;
+  --color-accent: #d86f42;
+  --color-accent-foreground: #fff7f0;
+  /* Semantic warning color — not provided by shadcn-vue out-of-the-box. Deep amber
+     that contrasts well on the cream background without clashing. Use for non-destructive
+     caution states (interrupted turns, stale artifacts, hook gates). */
+  --color-warning: #a85d12;
+  --color-warning-foreground: #fff8f1;
+  --color-border: rgba(24, 33, 43, 0.12);
+  --color-input: rgba(24, 33, 43, 0.12);
+  --color-ring: rgba(198, 87, 47, 0.4);
+  --radius: 1.2rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
+    background-image:
+      radial-gradient(circle at top left, rgba(198, 87, 47, 0.16), transparent 24%),
+      linear-gradient(145deg, #efe7d9 0%, #f9f6ef 52%, #ece3d3 100%);
+  }
+}

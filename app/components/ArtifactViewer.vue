@@ -1,0 +1,379 @@
+<script setup lang="ts">
+import { marked } from "marked";
+import DOMPurify from "isomorphic-dompurify";
+import { FileWarning, Loader2, RefreshCw, PanelRightClose, Wand2, X } from "lucide-vue-next";
+import { Button } from "~/components/ui/button";
+
+interface ArtifactFile {
+  type: "file";
+  path: string;
+  size: number;
+  mtime: number;
+  content: string;
+}
+
+interface DirectoryEntry {
+  name: string;
+  isFile: boolean;
+  isDirectory: boolean;
+}
+
+interface ArtifactDir {
+  type: "dir";
+  path: string;
+  entries: DirectoryEntry[];
+}
+
+const props = defineProps<{
+  slug: string;
+  candidates: string[];   // ordered list of candidate paths to try
+  reloadToken?: number;   // bump this to force re-fetch (after chat turn completes)
+}>();
+
+const emit = defineEmits<{
+  collapse: [];
+  powerPrompt: [prompt: string];
+}>();
+
+const powerMode = ref(false);
+const selection = ref<{ text: string; anchorTop: number } | null>(null);
+const changeInstruction = ref("");
+const preRef = ref<HTMLElement | null>(null);
+const popoverRef = ref<HTMLDivElement | null>(null);
+
+function clearSelection() {
+  selection.value = null;
+  changeInstruction.value = "";
+}
+
+function onMouseUp() {
+  if (!powerMode.value) return;
+  const sel = typeof window !== "undefined" ? window.getSelection() : null;
+  const text = sel?.toString() ?? "";
+  if (!text.trim()) {
+    clearSelection();
+    return;
+  }
+  // Position popover near the selection's client rect
+  const range = sel!.getRangeAt(0);
+  const rect = range.getBoundingClientRect();
+  const preEl = preRef.value;
+  const preRect = preEl?.getBoundingClientRect();
+  const offsetTop = preRect ? rect.bottom - preRect.top + 4 : 0;
+  selection.value = { text, anchorTop: offsetTop };
+}
+
+function sendPowerPrompt() {
+  if (!selection.value || !file.value) return;
+  const instruction = changeInstruction.value.trim();
+  if (!instruction) return;
+  const prompt = [
+    `In der Datei \`${file.value.path}\`, ändere folgenden Block:`,
+    "```",
+    selection.value.text,
+    "```",
+    `Änderung: ${instruction}`
+  ].join("\n");
+  emit("powerPrompt", prompt);
+  clearSelection();
+}
+
+const loading = ref(false);
+const errorMessage = ref<string | null>(null);
+const selectedPath = ref<string | null>(null);
+const file = ref<ArtifactFile | null>(null);
+const dirEntries = ref<DirectoryEntry[] | null>(null);
+const dirBase = ref<string | null>(null);
+
+const isMarkdown = computed(() => !!file.value?.path.toLowerCase().endsWith(".md"));
+
+// Spec-kit templates embed author hints as HTML comments: <!-- Example: I. Library-First -->.
+// marked preserves comments but DOMPurify strips them, so the hints would vanish. We rewrite
+// each comment into an italic blockquote before rendering — the hint stays visible as a
+// visually distinct callout instead of being sanitized away.
+function surfaceHtmlComments(source: string): string {
+  return source.replace(/<!--\s*([\s\S]*?)\s*-->/g, (_match, inner) => {
+    const text = String(inner)
+      .trim()
+      .replace(/[\r\n]+/g, " ")
+      .replace(/_/g, "\\_");
+    return `\n\n> _${text}_\n\n`;
+  });
+}
+
+// Render markdown to sanitized HTML. In power-mode we keep the raw source view so text-selection
+// maps 1:1 to the underlying markdown (picking rendered HTML text would lose the source context).
+const renderedHtml = computed(() => {
+  const source = file.value?.content ?? "";
+  if (!source) return "";
+  const prepared = surfaceHtmlComments(source);
+  const raw = marked.parse(prepared, { async: false, gfm: true, breaks: false }) as string;
+  return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
+});
+
+type FsResponse = ArtifactFile | ArtifactDir;
+
+async function fetchPath(p: string): Promise<FsResponse | null> {
+  try {
+    return (await $fetch<FsResponse>(`/api/projects/${props.slug}/fs`, {
+      params: { path: p }
+    }));
+  } catch (err) {
+    const status = (err as { statusCode?: number })?.statusCode;
+    if (status === 404) return null;
+    throw err;
+  }
+}
+
+async function resolveCandidate(): Promise<void> {
+  loading.value = true;
+  errorMessage.value = null;
+  file.value = null;
+  dirEntries.value = null;
+  dirBase.value = null;
+  selectedPath.value = null;
+
+  try {
+    // 1) Try each candidate as-is (resolves exact file or directory)
+    for (const candidate of props.candidates) {
+      // Strip spec-kit placeholder <feature> so we can try the containing dir
+      if (candidate.includes("<feature>")) {
+        const base = candidate.split("/<feature>/")[0];
+        const tail = candidate.split("/<feature>/")[1];
+        if (!base || !tail) continue;
+        const baseRes = await fetchPath(base);
+        if (!baseRes) continue;
+        if (baseRes.type === "dir") {
+          // Pick the first feature subdirectory and look for the expected tail file
+          const featureDirs = baseRes.entries.filter((e) => e.isDirectory);
+          if (featureDirs.length === 0) {
+            dirEntries.value = baseRes.entries;
+            dirBase.value = base;
+            continue;
+          }
+          // Pick the most recent-looking (sort by name desc since spec-kit prefixes with numbers)
+          const sorted = [...featureDirs].sort((a, b) => b.name.localeCompare(a.name));
+          for (const feat of sorted) {
+            const full = `${base}/${feat.name}/${tail}`;
+            const res = await fetchPath(full);
+            if (res?.type === "file") {
+              file.value = res;
+              selectedPath.value = full;
+              return;
+            }
+          }
+          // No file found — expose dir listing
+          dirEntries.value = baseRes.entries;
+          dirBase.value = base;
+        }
+      } else {
+        const res = await fetchPath(candidate);
+        if (!res) continue;
+        if (res.type === "file") {
+          file.value = res;
+          selectedPath.value = candidate;
+          return;
+        }
+        if (res.type === "dir") {
+          dirEntries.value = res.entries;
+          dirBase.value = candidate;
+        }
+      }
+    }
+  } catch (err) {
+    errorMessage.value = err instanceof Error ? err.message : "Artefakt konnte nicht geladen werden.";
+  } finally {
+    loading.value = false;
+  }
+}
+
+watch(
+  () => [props.slug, props.candidates.join("|"), props.reloadToken],
+  () => resolveCandidate(),
+  { immediate: true }
+);
+
+// Live watcher: re-resolve whenever something changes in .specify/
+let watcherSource: EventSource | null = null;
+let watcherDebounce: ReturnType<typeof setTimeout> | null = null;
+
+function openWatcher(forSlug: string) {
+  closeWatcher();
+  if (typeof window === "undefined") return;
+  try {
+    watcherSource = new EventSource(`/api/projects/${forSlug}/watch`);
+    watcherSource.addEventListener("change", () => {
+      if (watcherDebounce) clearTimeout(watcherDebounce);
+      watcherDebounce = setTimeout(() => {
+        resolveCandidate();
+      }, 300);
+    });
+    watcherSource.addEventListener("error", () => {
+      // Browser auto-reconnects EventSource by default; no action needed.
+    });
+  } catch {
+    /* SSE unsupported */
+  }
+}
+
+function closeWatcher() {
+  watcherSource?.close();
+  watcherSource = null;
+  if (watcherDebounce) {
+    clearTimeout(watcherDebounce);
+    watcherDebounce = null;
+  }
+}
+
+watch(
+  () => props.slug,
+  (nextSlug) => {
+    if (nextSlug) openWatcher(nextSlug);
+  },
+  { immediate: true }
+);
+
+onUnmounted(() => closeWatcher());
+</script>
+
+<template>
+  <div class="flex h-full flex-col">
+    <div class="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+      <div class="min-w-0 flex-1">
+        <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Artefakt</p>
+        <p class="mt-0.5 truncate font-mono text-xs">
+          {{ selectedPath ?? candidates[0] ?? "–" }}
+        </p>
+      </div>
+      <div class="flex shrink-0 items-center gap-1">
+        <button
+          type="button"
+          class="inline-flex size-7 items-center justify-center rounded-md transition"
+          :class="powerMode ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
+          :title="powerMode ? 'Power-Modus aktiv — Text markieren, um ihn per Chat zu ändern' : 'Power-Modus: Selection-to-Prompt'"
+          @click="powerMode = !powerMode; clearSelection()"
+        >
+          <Wand2 class="size-3.5" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          title="Neu laden"
+          :disabled="loading"
+          @click="resolveCandidate"
+        >
+          <RefreshCw class="size-3.5" :class="loading && 'animate-spin'" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          title="Artefakt ausblenden"
+          @click="emit('collapse')"
+        >
+          <PanelRightClose class="size-3.5" />
+        </button>
+      </div>
+    </div>
+
+    <div class="flex-1 overflow-y-auto">
+      <div v-if="loading" class="flex items-center gap-2 p-4 text-xs text-muted-foreground">
+        <Loader2 class="size-3.5 animate-spin" />
+        <span>Lade…</span>
+      </div>
+
+      <div v-else-if="errorMessage" class="m-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
+        <div class="flex items-start gap-2">
+          <FileWarning class="mt-0.5 size-3.5 shrink-0" />
+          <span>{{ errorMessage }}</span>
+        </div>
+      </div>
+
+      <div v-else-if="file" class="relative">
+        <div
+          v-if="powerMode"
+          class="sticky top-0 z-10 border-b border-primary/30 bg-primary/5 px-4 py-2 text-[11px] text-primary"
+        >
+          <Wand2 class="mr-1 inline size-3" />
+          Power-Modus: Markiere Text, um ihn per Chat ändern zu lassen.
+        </div>
+        <!-- Markdown files render as prose unless power-mode is active. Power-mode drops back to
+             raw source so selections map directly to the underlying markdown that gets sent to
+             the LLM. -->
+        <article
+          v-if="isMarkdown && !powerMode"
+          ref="preRef"
+          class="prose prose-sm relative max-w-none p-4 prose-headings:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground"
+          v-html="renderedHtml"
+        />
+        <pre
+          v-else
+          ref="preRef"
+          class="relative whitespace-pre-wrap wrap-break-word p-4 font-mono text-[12px] leading-6"
+          :class="powerMode && 'cursor-text selection:bg-primary/30'"
+          @mouseup="onMouseUp"
+        >{{ file.content }}</pre>
+
+        <div
+          v-if="selection"
+          ref="popoverRef"
+          class="absolute left-4 right-4 z-20 rounded-md border border-border bg-popover p-3 shadow-lg"
+          :style="{ top: selection.anchorTop + 'px' }"
+        >
+          <div class="flex items-start justify-between gap-2">
+            <p class="text-[11px] font-medium">Auswahl als Prompt ändern</p>
+            <button
+              type="button"
+              class="inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+              @click="clearSelection"
+            >
+              <X class="size-3" />
+            </button>
+          </div>
+          <div class="mt-1.5 rounded border border-border/60 bg-muted/40 p-1.5 text-[10px]">
+            <p class="line-clamp-3 font-mono">{{ selection.text }}</p>
+          </div>
+          <textarea
+            v-model="changeInstruction"
+            rows="2"
+            class="mt-2 w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring"
+            placeholder="Was soll geändert werden?"
+            @keydown.meta.enter.prevent="sendPowerPrompt"
+            @keydown.ctrl.enter.prevent="sendPowerPrompt"
+          />
+          <div class="mt-2 flex justify-end">
+            <Button size="sm" :disabled="!changeInstruction.trim()" @click="sendPowerPrompt">
+              Als Prompt senden
+            </Button>
+          </div>
+        </div>
+
+        <div class="border-t border-border/60 px-4 py-2 text-[10px] text-muted-foreground">
+          {{ file.size }} B · geändert {{ new Date(file.mtime).toLocaleString() }}
+        </div>
+      </div>
+
+      <div v-else-if="dirEntries && dirBase" class="p-4">
+        <p class="mb-2 text-xs font-medium">{{ dirBase }}/</p>
+        <p class="mb-3 text-[11px] text-muted-foreground">
+          Noch keine passende Datei. Sobald eine Session das Artefakt erzeugt, taucht es hier auf.
+        </p>
+        <ul v-if="dirEntries.length" class="space-y-0.5">
+          <li
+            v-for="entry in dirEntries"
+            :key="entry.name"
+            class="flex items-center gap-2 rounded px-2 py-1 text-xs text-muted-foreground"
+          >
+            <span>{{ entry.isDirectory ? "📁" : "📄" }}</span>
+            <code class="font-mono">{{ entry.name }}</code>
+          </li>
+        </ul>
+        <p v-else class="text-[11px] italic text-muted-foreground">Verzeichnis leer.</p>
+      </div>
+
+      <div v-else class="p-4 text-xs text-muted-foreground">
+        <p>Artefakt existiert noch nicht.</p>
+        <p class="mt-1 italic opacity-70">Starte eine Session und tippe den ersten Prompt, um es zu erzeugen.</p>
+      </div>
+    </div>
+  </div>
+</template>

@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:speckit-community.github.io)",
+      "Bash(npx nuxt *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(node --check src/core/app-config.js)",
+      "Bash(node --check src/core/session-store.js)",
+      "Bash(node --check src/core/step-state.js)",
+      "Bash(node --check src/runners/claude-code.js)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(node --check src/core/task-graph.js)",
+      "Bash(node --check src/core/run-store.js)",
+      "Bash(node --check src/core/run-scheduler.js)",
+      "Bash(node --check src/runners/hermes-streaming.js)"
+    ]
+  }
+}

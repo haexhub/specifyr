@@ -1,0 +1,48 @@
+# Development compose — Nuxt dev server with HMR.
+#
+# Usage:
+#   docker compose up --build            # start dev server on http://localhost:3000
+#   docker compose exec haex-corp sh     # shell inside the running container
+#
+# Authentifizierung gegen Anthropic (Solo-Tool-Setup):
+#   - Default: Host-Login wird per Bind-Mount (~/.claude) wiederverwendet. Kein zusätzlicher
+#     Login im Container nötig — der Container sieht genau das, was dein Host-`claude` sieht.
+#   - API-Key: Alternativ/ergänzend ANTHROPIC_API_KEY in .env oder Shell setzen.
+#   - Multi-User später: Statt des Bind-Mounts ein benanntes Volume einhängen und
+#     `docker compose exec haex-corp claude login` pro Setup ausführen. Siehe Kommentar
+#     an der volumes-Zeile unten.
+
+services:
+  haex-corp:
+    build:
+      context: .
+      target: dev
+    image: haex-corp:dev
+    container_name: haex-corp-dev
+    ports:
+      - "3000:3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      NODE_ENV: development
+      # Optional: falls gesetzt, nutzt `claude` diesen Key statt OAuth.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Source bind mount für HMR.
+      - .:/app
+      # Anonymous volumes verhindern, dass Host-node_modules/Nuxt-Caches die Container-
+      # Versionen überschreiben (Alpine-Binaries vs. glibc-Host-Binaries).
+      - /app/node_modules
+      - /app/.nuxt
+      - /app/.output
+      # Host-Login wiederverwenden (Solo-Tool-Default). Für Multi-User später austauschen gegen:
+      #   - claude_home:/home/node/.claude
+      # und das `volumes:`-Block unten einkommentieren + `claude login` im Container ausführen.
+      - ${HOME}/.claude:/home/node/.claude
+    # UID/GID-Mapping für Bind-Mounts (Linux). Auf macOS/Windows ignoriert Docker das.
+    # Falls dein Host-User nicht UID 1000 hat: `UID=$(id -u) GID=$(id -g) docker compose up`
+    user: "${UID:-1000}:${GID:-1000}"
+
+# Multi-User-Zukunft: benanntes Volume statt Host-Mount.
+# volumes:
+#   claude_home:

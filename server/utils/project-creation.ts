@@ -1,0 +1,158 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+async function importModule<T = Record<string, unknown>>(relativePath: string): Promise<T> {
+  const moduleUrl = pathToFileURL(path.join(process.cwd(), relativePath)).href;
+  return import(moduleUrl) as Promise<T>;
+}
+
+interface InstallResult {
+  slug: string;
+  installedAt: string;
+  source: "auto" | "manual";
+  status: "installed" | "failed";
+  message?: string;
+}
+
+async function installExtension(
+  slug: string,
+  projectRoot: string,
+  source: "auto" | "manual",
+  runCommand: typeof import("../../src/utils/process.js").runCommand
+): Promise<InstallResult> {
+  const result = await runCommand("specify", ["extension", "add", slug], { cwd: projectRoot });
+  return {
+    slug,
+    installedAt: new Date().toISOString(),
+    source,
+    status: result.ok ? "installed" : "failed",
+    message: result.ok
+      ? result.stdout?.trim() || undefined
+      : (result.stderr || result.stdout || "specify extension add failed").trim()
+  };
+}
+
+export async function createProjectRecord(options: {
+  title: string;
+  description: string;
+  extensions?: string[];
+  workflow?: string;
+}) {
+  const [{ ArtifactStore }, { runCommand }, { ensureDir, slugify, writeJson }] = await Promise.all([
+    importModule<{ ArtifactStore: new (cwd?: string) => any }>("src/core/artifact-store.js"),
+    importModule<{ runCommand: typeof import("../../src/utils/process.js").runCommand }>("src/utils/process.js"),
+    importModule<{
+      ensureDir: typeof import("../../src/utils/fs.js").ensureDir;
+      slugify: typeof import("../../src/utils/fs.js").slugify;
+      writeJson: typeof import("../../src/utils/fs.js").writeJson;
+    }>("src/utils/fs.js")
+  ]);
+
+  const title = options.title.trim();
+  const description = options.description.trim();
+  const slug = slugify(title);
+
+  if (!slug) {
+    throw new Error("Could not derive a valid project slug.");
+  }
+
+  const cwd = process.cwd();
+  const projectsRoot = path.join(cwd, "projects");
+  const projectRoot = path.join(projectsRoot, slug);
+  const store = new ArtifactStore(cwd);
+
+  await ensureDir(projectsRoot);
+
+  // `specify init` is interactive by default (arrow-key menu for AI selection, git-init prompt).
+  // --ai claude and --no-git make it fully non-interactive so spawn() from Nuxt can succeed.
+  const initArgs = ["init", slug, "--ai", "claude", "--no-git"];
+  const initResult = await runCommand("specify", initArgs, { cwd: projectsRoot });
+  const workflow = options.workflow ?? "spec-kit";
+  const meta = {
+    description,
+    projectRoot,
+    workflow,
+    specifyInit: {
+      attemptedAt: new Date().toISOString(),
+      status: initResult.ok ? "completed" : "pending_manual_setup",
+      command: `specify ${initArgs.join(" ")}`,
+      message: initResult.ok
+        ? initResult.stdout || "Spec Kit initialized successfully."
+        : initResult.stderr || "Could not run `specify init` automatically."
+    }
+  };
+
+  if (!initResult.ok) {
+    await ensureDir(projectRoot);
+  }
+
+  // The community catalog is discovery-only by default in spec-kit. Our UI browses extensions
+  // from there, so we need to opt-in to installation. Registered with priority 1 to take
+  // precedence over the built-in community catalog (priority 2, discovery-only).
+  if (initResult.ok) {
+    await runCommand(
+      "specify",
+      [
+        "extension",
+        "catalog",
+        "add",
+        "https://raw.githubusercontent.com/github/spec-kit/main/extensions/catalog.community.json",
+        "--name",
+        "community-allowed",
+        "--priority",
+        "1",
+        "--install-allowed"
+      ],
+      { cwd: projectRoot }
+    );
+  }
+
+  await store.createProject(slug, title, "", meta);
+  await store.saveArtifact(slug, "run", {
+    slug,
+    currentStage: "draft",
+    status: "draft",
+    approvals: [],
+    completedTaskIds: [],
+    failedTaskIds: [],
+    taskResults: {},
+    updatedAt: new Date().toISOString()
+  });
+
+  // Install chosen extensions (best-effort; failures are recorded but don't abort creation)
+  const chosenExtensions = Array.from(
+    new Set((options.extensions ?? []).map((x) => String(x).trim()).filter(Boolean))
+  );
+  const extensionResults: InstallResult[] = [];
+  if (initResult.ok && chosenExtensions.length > 0) {
+    for (const extSlug of chosenExtensions) {
+      try {
+        extensionResults.push(await installExtension(extSlug, projectRoot, "auto", runCommand));
+      } catch (err) {
+        extensionResults.push({
+          slug: extSlug,
+          installedAt: new Date().toISOString(),
+          source: "auto",
+          status: "failed",
+          message: err instanceof Error ? err.message : String(err)
+        });
+      }
+    }
+  }
+
+  const extensionsManifestPath = path.join(cwd, ".specops", slug, "extensions.json");
+  await writeJson(extensionsManifestPath, {
+    slug,
+    extensions: extensionResults,
+    updatedAt: new Date().toISOString()
+  });
+
+  return {
+    slug,
+    title,
+    description,
+    projectRoot,
+    specifyInit: meta.specifyInit,
+    extensions: extensionResults
+  };
+}

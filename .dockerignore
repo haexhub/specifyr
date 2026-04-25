@@ -1,0 +1,14 @@
+.git
+.gitignore
+node_modules
+.nuxt
+.output
+.specops
+.claude
+.codex
+.specify
+projects
+Dockerfile
+.dockerignore
+docker-compose*.yml
+docs

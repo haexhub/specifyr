@@ -1,0 +1,42 @@
+# Production compose — baut das prod-Stage-Image und startet den Nitro-Server.
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up --build -d
+#   docker compose -f docker-compose.prod.yml logs -f
+#
+# Unterschied zu dev:
+#   - Image-Target `prod` statt `dev` (kein pnpm dev, kein HMR).
+#   - Kein Source-Bind-Mount; nur Runtime-Daten (projects/, .specops/, Credentials) werden
+#     reingereicht. Alles andere ist in der Image-Schicht eingefroren.
+
+services:
+  haex-corp:
+    build:
+      context: .
+      target: prod
+    image: haex-corp:prod
+    container_name: haex-corp-prod
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 3000
+      NODE_ENV: production
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      # Multi-Projekt-Arbeitsbereich: Host-projects/ wird eingehängt, damit Runs am echten
+      # Repo arbeiten. Entferne den Mount, wenn du projects/ stattdessen im Container-Volume
+      # halten willst.
+      - ./projects:/app/projects
+      # Event-/Session-State soll persistieren, ohne den Host zu verschmutzen.
+      - specops_state:/app/.specops
+      # Host-Login wiederverwenden (Solo-Tool-Default). Für Multi-User später:
+      #   - claude_home:/home/node/.claude
+      - ${HOME}/.claude:/home/node/.claude
+    user: "${UID:-1000}:${GID:-1000}"
+
+volumes:
+  specops_state:
+  # Multi-User-Zukunft:
+  # claude_home:

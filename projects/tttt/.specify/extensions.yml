@@ -1,0 +1,66 @@
+installed: []
+settings:
+  auto_execute_hooks: true
+hooks:
+  before_implement:
+  - extension: superb
+    command: speckit.superb.tdd
+    enabled: true
+    optional: false
+    prompt: Execute speckit.superb.tdd?
+    description: 'Mandatory TDD gate. Bridges an installed superpowers test-driven-development
+      skill into the spec-kit task structure before any code is written.
+
+      '
+    condition: null
+  - extension: haex-paperclip
+    command: speckit.haex-paperclip.budget
+    enabled: true
+    optional: false
+    prompt: Execute speckit.haex-paperclip.budget?
+    description: Check active budget before implementation starts
+    condition: null
+  after_tasks:
+  - extension: superb
+    command: speckit.superb.review
+    enabled: true
+    optional: true
+    prompt: Review tasks.md for coverage and TDD-readiness before implementation?
+    description: 'Catches missing or under-specified tasks at planning time. Produces
+      a requirement coverage and TDD-readiness report. Bridge-native logic.
+
+      '
+    condition: null
+  - extension: haex-paperclip
+    command: speckit.haex-paperclip.heartbeat
+    enabled: true
+    optional: true
+    prompt: Run a heartbeat tick to delegate new tasks?
+    description: Auto-delegate tasks to roles defined in the org chart
+    condition: null
+  after_implement:
+  - extension: superb
+    command: speckit.superb.verify
+    enabled: true
+    optional: false
+    prompt: Execute speckit.superb.verify?
+    description: 'Mandatory completion gate. Bridges an installed superpowers verification-before-completion
+      skill and extends it with spec-kit spec-coverage checks. Prevents false completions.
+
+      '
+    condition: null
+  - extension: haex-paperclip
+    command: speckit.haex-paperclip.budget
+    enabled: true
+    optional: false
+    prompt: Execute speckit.haex-paperclip.budget?
+    description: Record cost of the implementation run against the budget
+    condition: null
+  after_specify:
+  - extension: haex-paperclip
+    command: speckit.haex-paperclip.goal
+    enabled: true
+    optional: true
+    prompt: Attach this spec to a Paperclip goal?
+    description: Link generated spec to a long-running goal
+    condition: null

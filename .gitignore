@@ -1,0 +1,13 @@
+.specops/
+.DS_Store
+node_modules/
+
+# Build artefacts
+.nuxt/
+.output/
+
+# Per-agent Hermes memory (runtime state, may contain credentials/sensitive context)
+.hermes/
+
+# Per-machine Claude settings (user-local overrides)
+.claude/settings.local.json

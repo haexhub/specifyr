@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "extensions": {
+    "superb": {
+      "version": "1.3.0",
+      "source": "local",
+      "manifest_hash": "sha256:67185f3f5a9e6617a3fc5e669e9dceeefe12f2a17eb7d5dd7099ac59e3297865",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.superb.check",
+          "speckit.superb.tdd",
+          "speckit.superb.review",
+          "speckit.superb.verify",
+          "speckit.superb.critique",
+          "speckit.superb.debug",
+          "speckit.superb.finish",
+          "speckit.superb.respond"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-04-24T01:18:50.962229+00:00"
+    },
+    "aide": {
+      "version": "1.0.0",
+      "source": "local",
+      "manifest_hash": "sha256:13ce845240ea2bdd47c60ad819dd65df8c8987541fc4c0a7a7aebfc66102c184",
+      "enabled": true,
+      "priority": 10,
+      "registered_commands": {
+        "claude": [
+          "speckit.aide.create-vision",
+          "speckit.aide.create-roadmap",
+          "speckit.aide.create-progress",
+          "speckit.aide.create-queue",
+          "speckit.aide.create-item",
+          "speckit.aide.execute-item",
+          "speckit.aide.feedback-loop"
+        ]
+      },
+      "registered_skills": [],
+      "installed_at": "2026-04-24T11:02:39.897924+00:00"
+    }
+  }
+}
