@@ -10,6 +10,9 @@ tools:
   builtin: [Read, Edit, Bash]
   mcp: []
 capabilities: [filesystem:write, shell:execute]
+resources:
+  cpus: "1.0"
+  memory: "512m"
 status: active
 ---
 

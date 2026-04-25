@@ -195,6 +195,55 @@ test("refuses agent without capabilities array", () => {
   );
 });
 
+test("resources.cpus emits --cpus=<value> (string)", () => {
+  const input = baseInput();
+  input.agent.resources = { cpus: "1.5" };
+  const args = capabilityFlags(input);
+  assert.ok(args.includes("--cpus=1.5"));
+});
+
+test("resources.cpus accepts numeric input (YAML may parse as number)", () => {
+  const input = baseInput();
+  input.agent.resources = { cpus: 2 };
+  const args = capabilityFlags(input);
+  assert.ok(args.includes("--cpus=2"));
+});
+
+test("resources.memory emits --memory=<value>", () => {
+  const input = baseInput();
+  input.agent.resources = { memory: "512m" };
+  const args = capabilityFlags(input);
+  assert.ok(args.includes("--memory=512m"));
+});
+
+test("resources.cpus + memory both emitted independently", () => {
+  const input = baseInput();
+  input.agent.resources = { cpus: "1.0", memory: "1g" };
+  const args = capabilityFlags(input);
+  assert.ok(args.includes("--cpus=1.0"));
+  assert.ok(args.includes("--memory=1g"));
+});
+
+test("invalid cpus format throws (catches 'two', 'eval', etc.)", () => {
+  const input = baseInput();
+  input.agent.resources = { cpus: "two" };
+  assert.throws(() => capabilityFlags(input), /resources\.cpus must be a positive number/);
+});
+
+test("invalid memory format throws", () => {
+  const input = baseInput();
+  input.agent.resources = { memory: "1 gigabyte" };
+  assert.throws(() => capabilityFlags(input), /resources\.memory must be Docker format/);
+});
+
+test("missing resources block emits no resource flags (default)", () => {
+  const input = baseInput();
+  // no input.agent.resources
+  const args = capabilityFlags(input);
+  assert.ok(!args.some((a) => typeof a === "string" && a.startsWith("--cpus=")));
+  assert.ok(!args.some((a) => typeof a === "string" && a.startsWith("--memory=")));
+});
+
 test("flag order: baseline → name → profile mount → workspace → network → whitelist → image", () => {
   const input = baseInput();
   input.agent.capabilities = ["filesystem:write", "network:http"];

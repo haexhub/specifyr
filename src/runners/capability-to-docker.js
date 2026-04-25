@@ -25,6 +25,8 @@
  *   tools.binaries: [...]   →  -e BINARY_WHITELIST=<csv> (consumed by the
  *                              hermes-agent entrypoint; the image holds
  *                              every catalog binary in quarantine)
+ *   agent.resources.cpus    →  --cpus=<value>  (e.g. "1.5" or 2)
+ *   agent.resources.memory  →  --memory=<value> (Docker format: 100m, 1g, …)
  *
  * Baseline hardening applied to every container regardless of capabilities:
  *   --rm                    remove container on exit
@@ -97,6 +99,31 @@ export function capabilityFlags({
   const flags = [...BASELINE_FLAGS];
 
   if (containerName) flags.push("--name", containerName);
+
+  // Resource limits from agent.resources. Both fields are optional and
+  // independently emitted. Format-validated here so config drift surfaces
+  // at start-time, not when docker fails the run.
+  const resources = agent.resources;
+  if (resources && typeof resources === "object") {
+    if (resources.cpus !== undefined && resources.cpus !== null) {
+      const cpus = String(resources.cpus);
+      if (!/^\d+(\.\d+)?$/.test(cpus)) {
+        throw new Error(
+          `capabilityFlags: agent '${agent.role}' resources.cpus must be a positive number, got '${cpus}'`
+        );
+      }
+      flags.push(`--cpus=${cpus}`);
+    }
+    if (resources.memory !== undefined && resources.memory !== null) {
+      const memory = String(resources.memory);
+      if (!/^\d+[bkmgBKMG]?$/.test(memory)) {
+        throw new Error(
+          `capabilityFlags: agent '${agent.role}' resources.memory must be Docker format (e.g. '512m', '2g'), got '${memory}'`
+        );
+      }
+      flags.push(`--memory=${memory}`);
+    }
+  }
 
   // Profile volume (HERMES_HOME) is ALWAYS mounted rw — Hermes needs to
   // persist memory/sessions per-agent. This is the per-agent state, not the

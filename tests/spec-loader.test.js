@@ -66,3 +66,9 @@ test("agent.capabilities is an array", async () => {
   assert.ok(Array.isArray(ceo.capabilities));
   assert.ok(ceo.capabilities.includes("filesystem:read"));
 });
+
+test("agent.resources passes through nested YAML object verbatim", async () => {
+  const agents = await loadAgents(fixture);
+  const dev = agents.get("dev");
+  assert.deepEqual(dev.resources, { cpus: "1.0", memory: "512m" });
+});
