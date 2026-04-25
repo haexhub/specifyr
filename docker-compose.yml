@@ -32,6 +32,13 @@ services:
       # `HERMES_AGENT_IMAGE=ghcr.io/<owner>/hermes-agent:<tag>` in der Shell
       # vor `docker compose up`, oder hardcode hier.
       HERMES_AGENT_IMAGE: ${HERMES_AGENT_IMAGE:-hermes-agent:dev}
+      # Host-Pfad zu diesem Repo (= Host-Equivalent von /app im Container).
+      # Wird gebraucht, wenn haex-corp via /var/run/docker.sock Sibling-Container
+      # spawnt: deren Bind-Mount-Sources werden vom Host-Daemon aufgelöst, nicht
+      # gegen das Container-FS. Default `${PWD}` (`docker compose` setzt das auf
+      # das Verzeichnis der compose-Datei) — passt für das Standard-Setup.
+      # Wenn haex-corp nativ auf dem Host läuft, kann diese Variable leer bleiben.
+      HAEX_CORP_HOST_PROJECT_ROOT: ${HAEX_CORP_HOST_PROJECT_ROOT:-${PWD}}
     volumes:
       # Source bind mount für HMR.
       - .:/app

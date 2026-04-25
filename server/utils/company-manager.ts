@@ -23,6 +23,11 @@ interface CompanyRuntimeInstance {
   start(): Promise<void>;
   stop(): Promise<void>;
   listAgents(): Array<{ role: string; capabilities: string[]; resources?: unknown }>;
+  getStatus(): {
+    status: "running" | "stopped";
+    agents: Array<{ role: string; capabilities: string[]; resources: unknown }>;
+    queueDepth: number;
+  };
   on(event: string, listener: (...args: unknown[]) => void): void;
 }
 

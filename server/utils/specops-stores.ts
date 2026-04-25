@@ -57,6 +57,26 @@ export function projectCwd(slug: string): string {
   return path.join(process.cwd(), "projects", slug);
 }
 
+/**
+ * Host-side equivalent of `process.cwd()` for use in Docker bind-mount sources.
+ *
+ * When haex-corp runs inside a container, `process.cwd()` is `/app` — a path
+ * the Docker daemon cannot resolve when spawning sibling containers via
+ * /var/run/docker.sock (the daemon resolves bind sources against the HOST
+ * filesystem, not against haex-corp's container fs). Operators must set
+ * `HAEX_CORP_HOST_PROJECT_ROOT` to the host path that maps to /app.
+ *
+ * When haex-corp runs natively on the host, the env var is unset and this
+ * falls back to `process.cwd()` — host and container paths coincide.
+ */
+export function hostProjectRoot(): string {
+  return process.env.HAEX_CORP_HOST_PROJECT_ROOT || process.cwd();
+}
+
+export function projectHostCwd(slug: string): string {
+  return path.join(hostProjectRoot(), "projects", slug);
+}
+
 export async function assertProjectExists(slug: string) {
   const fs = await import("node:fs/promises");
   const cwd = projectCwd(slug);

@@ -138,6 +138,23 @@ export class CompanyRuntime extends EventEmitter {
   }
 
   /**
+   * Snapshot for status endpoints. Returns "running" only when the poller
+   * is live; once stop() runs it flips to "stopped". `queueDepth` is the
+   * number of task YAMLs sitting in the queue dir at call time.
+   */
+  getStatus() {
+    return {
+      status: this.poller ? "running" : "stopped",
+      agents: this.listAgents().map((a) => ({
+        role: a.role,
+        capabilities: a.capabilities,
+        resources: a.resources ?? null,
+      })),
+      queueDepth: this.poller ? this.poller.getPendingCount() : 0,
+    };
+  }
+
+  /**
    * Resolve an agent's `tools.mcp` references against the loaded catalog.
    * @returns {ToolSpec[]} hydrated specs
    */

@@ -22,6 +22,7 @@
 
 import {
   projectCwd,
+  projectHostCwd,
   assertProjectExists,
 } from "../../../../utils/specops-stores";
 import {
@@ -47,16 +48,24 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Container-side paths: used by Node code in haex-corp itself (mkdir,
+  // readFile, watchers). When running natively on the host these equal the
+  // host paths.
   const pCwd = projectCwd(slug);
   const orgDir = path.join(pCwd, ".specify", "org");
   const queueDir = path.join(process.cwd(), ".specops", slug, "queue");
   const catalogDir = path.join(process.cwd(), "catalog");
 
+  // Host-side path: passed to dockerRunnerFactory because the Docker daemon
+  // resolves bind-mount sources against the HOST filesystem, not against
+  // haex-corp's container view. See specops-stores.ts:hostProjectRoot.
+  const pHostCwd = projectHostCwd(slug);
+
   const { CompanyRuntime } = await getCompanyRuntimeModule();
   const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
 
   const runnerFactory = dockerRunnerFactory({
-    projectRoot: pCwd,
+    projectRoot: pHostCwd,
     network: "companies",
     // image resolved via factory: explicit > HERMES_AGENT_IMAGE > hermes-agent:dev
   });

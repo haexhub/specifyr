@@ -24,6 +24,10 @@ export class QueuePoller extends EventEmitter {
     if (!queueDir) throw new Error("QueuePoller: queueDir required");
     this.queueDir = queueDir;
     this.watcher = null;
+    // Tracks YAML files currently present in the queue dir. Maintained from
+    // chokidar 'add' / 'unlink' events. "Pending" = sitting in the queue,
+    // not yet consumed (consumers remove the YAML after pickup).
+    this.pending = new Set();
   }
 
   async start() {
@@ -38,9 +42,15 @@ export class QueuePoller extends EventEmitter {
       awaitWriteFinish: { stabilityThreshold: 50, pollInterval: 25 },
     });
 
-    this.watcher.on("add", (file) => this.#handleFile(file));
+    this.watcher.on("add", (file) => {
+      this.pending.add(file);
+      this.#handleFile(file);
+    });
     this.watcher.on("change", (file) => this.#handleFile(file));
-    this.watcher.on("unlink", (file) => this.emit("task-removed", { path: file }));
+    this.watcher.on("unlink", (file) => {
+      this.pending.delete(file);
+      this.emit("task-removed", { path: file });
+    });
     this.watcher.on("error", (err) => this.emit("error", err));
 
     // Wait for chokidar to be ready so initial pickups are flushed before we return.
@@ -57,9 +67,19 @@ export class QueuePoller extends EventEmitter {
     }
   }
 
+  /**
+   * Number of YAML files currently sitting in the queue directory.
+   * Reflects the watcher's view, not a fresh fs scan — kept in sync via
+   * 'add' / 'unlink' chokidar events.
+   */
+  getPendingCount() {
+    return this.pending.size;
+  }
+
   async stop() {
     if (!this.watcher) return;
     await this.watcher.close();
     this.watcher = null;
+    this.pending.clear();
   }
 }

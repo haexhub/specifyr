@@ -97,3 +97,23 @@ test("emits 'task-removed' when a file is deleted", async (t) => {
   const evt = await removedPromise;
   assert.equal(evt.path, filePath);
 });
+
+test("getPendingCount tracks files added & removed", async (t) => {
+  const queue = await createTempQueue();
+  const poller = new QueuePoller({ queueDir: queue });
+  t.after(() => poller.stop());
+  await poller.start();
+  assert.equal(poller.getPendingCount(), 0);
+
+  await fs.writeFile(path.join(queue, "a.yaml"), 'goal: "a"\n');
+  await once(poller, "task");
+  assert.equal(poller.getPendingCount(), 1);
+
+  await fs.writeFile(path.join(queue, "b.yaml"), 'goal: "b"\n');
+  await once(poller, "task");
+  assert.equal(poller.getPendingCount(), 2);
+
+  await fs.unlink(path.join(queue, "a.yaml"));
+  await once(poller, "task-removed");
+  assert.equal(poller.getPendingCount(), 1);
+});
