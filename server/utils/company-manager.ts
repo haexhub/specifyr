@@ -1,0 +1,74 @@
+/**
+ * Company runtime registry & module loaders.
+ *
+ * One CompanyRuntime per project slug, kept in a module-scoped Map for the
+ * lifetime of the Node process. Mirrors the pattern in run-manager.ts.
+ *
+ * Module loading is dynamic (pathToFileURL + import) because src/core/ and
+ * src/runners/ are pure ESM JS modules outside Nitro's bundle — same reason
+ * that run-manager.ts uses loadEsm() for the scheduler / task-graph modules.
+ *
+ * Known limitation (deferred): when haex-corp itself runs inside a container,
+ * `process.cwd()` is /app, but the Hermes-Agent containers spawned via
+ * docker.sock need HOST paths in their bind mounts (the docker daemon
+ * resolves bind sources host-side, not against haex-corp's container fs).
+ * Fix planned for the next iteration via a HAEX_CORP_HOST_PROJECT_ROOT env
+ * var that translates /app/projects/<slug> → <host-path>/projects/<slug>.
+ */
+
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+
+interface CompanyRuntimeInstance {
+  start(): Promise<void>;
+  stop(): Promise<void>;
+  listAgents(): Array<{ role: string; capabilities: string[]; resources?: unknown }>;
+  on(event: string, listener: (...args: unknown[]) => void): void;
+}
+
+interface CompanyRuntimeModule {
+  CompanyRuntime: new (opts: {
+    projectRoot: string;
+    orgDir: string;
+    queueDir: string;
+    catalogDir?: string;
+    runnerFactory?: (agent: unknown, runtimeMeta?: unknown) => unknown;
+    hermesBinary?: string;
+  }) => CompanyRuntimeInstance;
+}
+
+interface DockerRunnerFactoryModule {
+  dockerRunnerFactory: (cfg: {
+    projectRoot: string;
+    image?: string;
+    network?: string;
+    secretsResolver?: (agent: unknown) => Record<string, string>;
+  }) => (agent: unknown, runtimeMeta?: unknown) => unknown;
+}
+
+async function loadEsm<T>(rel: string): Promise<T> {
+  const url = pathToFileURL(path.join(process.cwd(), rel)).href;
+  return import(url) as Promise<T>;
+}
+
+export async function getCompanyRuntimeModule() {
+  return loadEsm<CompanyRuntimeModule>("src/core/company-runtime.js");
+}
+
+export async function getDockerRunnerFactoryModule() {
+  return loadEsm<DockerRunnerFactoryModule>("src/runners/hermes-docker.js");
+}
+
+const registry = new Map<string, CompanyRuntimeInstance>();
+
+export function getActiveCompany(slug: string): CompanyRuntimeInstance | undefined {
+  return registry.get(slug);
+}
+
+export function registerCompany(slug: string, runtime: CompanyRuntimeInstance) {
+  registry.set(slug, runtime);
+}
+
+export function deregisterCompany(slug: string) {
+  registry.delete(slug);
+}
