@@ -31,7 +31,7 @@ This document describes the **runtime side** living in haex-corp. The user-facin
               │  - spawns workers (ephemeral Hermes)│
               └─────────────┬───────────────────────┘
                             │
-                            │ MCP (firma-ops)
+                            │ MCP (company-ops)
                             ▼
               ┌─────────────────────────────┐
               │ Worker agents (Hermes)      │
@@ -74,7 +74,7 @@ Tasks with `isolation: shared` (research, monitoring, trading) skip the worktree
       ↓ chokidar 'add' event
 
 CompanyRuntime emits 'task' event
-  (consumer: CEO process via firma-ops MCP)
+  (consumer: CEO process via company-ops MCP)
 
       ↓ CEO triages → dispatch_to_agent(role, sub_task)
 
@@ -85,9 +85,9 @@ Sub-task lifecycle managed via existing SpecOps stages:
 
 Continuous-mode companies emit synthetic reporting tasks on a cron driven by `reporting_cadence` in the constitution — the queue itself stays the single dispatch funnel.
 
-## firma-ops MCP server
+## company-ops MCP server
 
-Lives in the `speckit-company` repo (`mcp-server/firma-ops/`). The CEO connects to it via Hermes' MCP integration and uses these tools:
+Lives in the `speckit-company` repo (`mcp-server/company-ops/`). The CEO connects to it via Hermes' MCP integration and uses these tools:
 
 - `dispatch_to_agent(role, task)` — route a sub-task to a specific worker
 - `read_artifact(path)` — pull another agent's output file
@@ -95,7 +95,7 @@ Lives in the `speckit-company` repo (`mcp-server/firma-ops/`). The CEO connects 
 - `escalate(reason)` — halt with user-approval request (used for sensitive capabilities or when stuck)
 - `query_org_chart()` — introspect the live org
 
-When `FIRMA_OPS_BASE_URL` is set, firma-ops POSTs back to this haex-corp instance via:
+When `COMPANY_OPS_BASE_URL` is set, company-ops POSTs back to this haex-corp instance via:
 
 - `POST /api/projects/<slug>/company/dispatch`
 - `POST /api/projects/<slug>/company/ask-user`
@@ -103,7 +103,7 @@ When `FIRMA_OPS_BASE_URL` is set, firma-ops POSTs back to this haex-corp instanc
 - `GET /api/projects/<slug>/company/agents`
 - `GET /api/projects/<slug>/company/artifact?path=...`
 
-These endpoints are not implemented yet (Inkrement 4 work). For development, firma-ops falls back to in-process stubs when the env vars are unset.
+These endpoints are not implemented yet (Inkrement 4 work). For development, company-ops falls back to in-process stubs when the env vars are unset.
 
 ## Status — what's done, what's next
 

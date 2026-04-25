@@ -57,7 +57,7 @@ Use kind language. Avoid blame.
 test("loadTools reads YAML files and returns Map<id, ToolSpec>", async () => {
   const tools = await loadTools(path.join(realCatalog, "tools"));
   assert.ok(tools.has("github"));
-  assert.ok(tools.has("firma-ops"));
+  assert.ok(tools.has("company-ops"));
   assert.equal(tools.get("github").type, "mcp");
   assert.deepEqual(tools.get("github").required_capabilities, [
     "secrets:read_env",
@@ -85,11 +85,11 @@ test("loadCatalog returns both tools and skills", async () => {
 
 test("resolveToolsForAgent returns hydrated specs in order", async () => {
   const c = await loadCatalog(realCatalog);
-  const agent = { role: "x", tools: { mcp: ["github", "firma-ops"] } };
+  const agent = { role: "x", tools: { mcp: ["github", "company-ops"] } };
   const resolved = resolveToolsForAgent(agent, c);
   assert.equal(resolved.length, 2);
   assert.equal(resolved[0].id, "github");
-  assert.equal(resolved[1].id, "firma-ops");
+  assert.equal(resolved[1].id, "company-ops");
 });
 
 test("resolveToolsForAgent throws on unknown tool reference", async () => {
@@ -148,7 +148,7 @@ test("validateCatalogReferences passes when references and caps line up", async 
   const agents = [
     {
       role: "ceo",
-      tools: { mcp: ["firma-ops"] }, // requires filesystem:read
+      tools: { mcp: ["company-ops"] }, // requires filesystem:read
       skills: ["tdd"],
       capabilities: ["filesystem:read"],
     },
@@ -261,4 +261,76 @@ test("checkBinaryAvailability splits catalog into present/missing", async () => 
   assert.ok(Array.isArray(missing));
   // node should always be present in the test env
   assert.ok(present.includes("node"), "node should be present on PATH for tests");
+});
+
+test("wildcard ['*'] in tools.mcp expands to all catalog tools", async () => {
+  const c = await loadCatalog(realCatalog);
+  const agent = {
+    role: "x",
+    tools: { mcp: ["*"] },
+    capabilities: ["filesystem:read", "shell:execute", "network:any", "secrets:read_env", "account:github", "account:slack"],
+  };
+  const resolved = resolveToolsForAgent(agent, c);
+  assert.equal(resolved.length, c.tools.size);
+  // includes a known seed
+  assert.ok(resolved.some((t) => t.id === "company-ops"));
+  assert.ok(resolved.some((t) => t.id === "github"));
+});
+
+test("wildcard ['*'] in tools.binaries expands to all catalog binaries", async () => {
+  const c = await loadCatalog(realCatalog);
+  const agent = {
+    role: "x",
+    tools: { binaries: ["*"] },
+  };
+  const resolved = resolveBinariesForAgent(agent, c);
+  assert.equal(resolved.length, c.binaries.size);
+});
+
+test("wildcard ['*'] in skills expands to all catalog skills", async () => {
+  const c = await loadCatalog(realCatalog);
+  const agent = { role: "x", skills: ["*"] };
+  const resolved = resolveSkillsForAgent(agent, c);
+  assert.equal(resolved.length, c.skills.size);
+});
+
+test("wildcard mixed with explicit IDs still expands to all (wildcard subsumes)", async () => {
+  const c = await loadCatalog(realCatalog);
+  const agent = { role: "x", tools: { binaries: ["python3", "*"] } };
+  const resolved = resolveBinariesForAgent(agent, c);
+  assert.equal(resolved.length, c.binaries.size);
+});
+
+test("validateCatalogReferences with wildcard still enforces capabilities for each expanded entry", async () => {
+  const c = await loadCatalog(realCatalog);
+  // Agent grabs all binaries via wildcard but only has shell:execute.
+  // gh requires shell:execute + network:http_post + secrets:read_env + account:github,
+  // so it should fail with E_BINARY_CAPABILITY_MISSING.
+  const agents = [
+    {
+      role: "ceo",
+      tools: { mcp: [], binaries: ["*"] },
+      skills: [],
+      capabilities: ["shell:execute"],
+    },
+  ];
+  const findings = validateCatalogReferences(agents, c);
+  const codes = findings.map((f) => f.code);
+  // Multiple binaries require additional capabilities, so we expect this code
+  assert.ok(codes.includes("E_BINARY_CAPABILITY_MISSING"));
+});
+
+test("validateCatalogReferences accepts wildcard when capabilities are broad enough", async () => {
+  const c = await loadCatalog(realCatalog);
+  // Wildcard skills work without any caps (skills don't have required_capabilities)
+  const agents = [
+    {
+      role: "ceo",
+      tools: { mcp: [], binaries: [] },
+      skills: ["*"],
+      capabilities: ["filesystem:read"],
+    },
+  ];
+  const findings = validateCatalogReferences(agents, c);
+  assert.deepEqual(findings, []);
 });

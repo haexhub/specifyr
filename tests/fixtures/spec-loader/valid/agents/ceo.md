@@ -8,7 +8,7 @@ reports_to: null
 skills: []
 tools:
   builtin: [Read]
-  mcp: [firma-ops]
+  mcp: [company-ops]
 capabilities: [filesystem:read, shell:execute]
 status: active
 ---

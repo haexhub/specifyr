@@ -112,8 +112,8 @@ test("with a catalogDir, getResolvedTools/Skills hydrate references", async () =
     await fs.mkdir(path.join(catalogDir, "tools"), { recursive: true });
     await fs.mkdir(path.join(catalogDir, "skills"), { recursive: true });
     await fs.writeFile(
-      path.join(catalogDir, "tools", "firma-ops.yml"),
-      `id: firma-ops
+      path.join(catalogDir, "tools", "company-ops.yml"),
+      `id: company-ops
 name: "Firma-Ops"
 type: mcp
 transport: stdio
@@ -146,7 +146,7 @@ Red green refactor.
 
     const ceoTools = runtime.getResolvedTools("ceo");
     assert.equal(ceoTools.length, 1);
-    assert.equal(ceoTools[0].id, "firma-ops");
+    assert.equal(ceoTools[0].id, "company-ops");
 
     const devSkills = runtime.getResolvedSkills("dev");
     assert.equal(devSkills.length, 1);
@@ -162,7 +162,7 @@ test("with a catalogDir, dangling references abort start()", async () => {
     const catalogDir = path.join(proj, "catalog");
     await fs.mkdir(path.join(catalogDir, "tools"), { recursive: true });
     await fs.mkdir(path.join(catalogDir, "skills"), { recursive: true });
-    // Empty catalog → fixture references 'firma-ops' which won't exist
+    // Empty catalog → fixture references 'company-ops' which won't exist
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,

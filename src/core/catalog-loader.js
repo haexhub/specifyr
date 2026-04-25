@@ -113,11 +113,29 @@ export async function loadSkills(skillsDir) {
 }
 
 /**
- * @returns {ToolSpec[]} resolved in the order the agent listed them
+ * Expand a reference list against a catalog map.
+ *
+ * `["*"]` (or any list containing `"*"`) expands to all keys of the catalog
+ * map — convenience for "give this agent everything we have". Wildcard
+ * does NOT bypass capability checks; the validator still verifies each
+ * expanded entry's required_capabilities against the agent's grants.
+ *
+ * @param {string[]} refs
+ * @param {Map<string, any>} catalogMap
+ * @returns {string[]} concrete IDs after wildcard expansion
+ */
+export function expandWildcards(refs, catalogMap) {
+  if (!Array.isArray(refs) || refs.length === 0) return [];
+  if (refs.includes("*")) return [...catalogMap.keys()];
+  return refs;
+}
+
+/**
+ * @returns {ToolSpec[]} resolved in the order the agent listed them; `["*"]` expands to all
  * @throws {Error} `unknown tool '<id>'` if any reference is missing
  */
 export function resolveToolsForAgent(agent, catalog) {
-  const refs = agent?.tools?.mcp ?? [];
+  const refs = expandWildcards(agent?.tools?.mcp ?? [], catalog.tools);
   return refs.map((id) => {
     const spec = catalog.tools.get(id);
     if (!spec) throw new Error(`unknown tool '${id}' (referenced by agent '${agent.role}')`);
@@ -126,11 +144,11 @@ export function resolveToolsForAgent(agent, catalog) {
 }
 
 /**
- * @returns {SkillSpec[]} resolved in the order the agent listed them
+ * @returns {SkillSpec[]} resolved in the order the agent listed them; `["*"]` expands to all
  * @throws {Error} `unknown skill '<id>'` if any reference is missing
  */
 export function resolveSkillsForAgent(agent, catalog) {
-  const refs = agent?.skills ?? [];
+  const refs = expandWildcards(agent?.skills ?? [], catalog.skills);
   return refs.map((id) => {
     const spec = catalog.skills.get(id);
     if (!spec) throw new Error(`unknown skill '${id}' (referenced by agent '${agent.role}')`);
@@ -139,11 +157,11 @@ export function resolveSkillsForAgent(agent, catalog) {
 }
 
 /**
- * @returns {Array} resolved binary specs in the order the agent listed them
+ * @returns {Array} resolved binary specs in the order the agent listed them; `["*"]` expands to all
  * @throws {Error} `unknown binary '<id>'` if any reference is missing
  */
 export function resolveBinariesForAgent(agent, catalog) {
-  const refs = agent?.tools?.binaries ?? [];
+  const refs = expandWildcards(agent?.tools?.binaries ?? [], catalog.binaries ?? new Map());
   return refs.map((id) => {
     const spec = catalog.binaries?.get(id);
     if (!spec) throw new Error(`unknown binary '${id}' (referenced by agent '${agent.role}')`);
@@ -166,7 +184,8 @@ export function validateCatalogReferences(agents, catalog) {
       if (g.endsWith(":any")) grantedClasses.add(g.split(":")[0]);
     }
 
-    for (const toolId of agent.tools?.mcp ?? []) {
+    const toolRefs = expandWildcards(agent.tools?.mcp ?? [], catalog.tools);
+    for (const toolId of toolRefs) {
       const tool = catalog.tools.get(toolId);
       if (!tool) {
         findings.push({
@@ -190,7 +209,8 @@ export function validateCatalogReferences(agents, catalog) {
       }
     }
 
-    for (const binId of agent.tools?.binaries ?? []) {
+    const binRefs = expandWildcards(agent.tools?.binaries ?? [], catalog.binaries ?? new Map());
+    for (const binId of binRefs) {
       const bin = catalog.binaries?.get(binId);
       if (!bin) {
         findings.push({
@@ -214,7 +234,8 @@ export function validateCatalogReferences(agents, catalog) {
       }
     }
 
-    for (const skillId of agent.skills ?? []) {
+    const skillRefs = expandWildcards(agent.skills ?? [], catalog.skills);
+    for (const skillId of skillRefs) {
       const skill = catalog.skills.get(skillId);
       if (!skill) {
         findings.push({

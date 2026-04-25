@@ -9,12 +9,12 @@
  *   1. start(): load org-spec, prepare per-agent Hermes profile dirs,
  *      register a runner per agent, start queue polling.
  *   2. on queue 'task' event: dispatch to CEO with task as input;
- *      CEO is expected to call back via the firma-ops MCP server.
+ *      CEO is expected to call back via the company-ops MCP server.
  *   3. stop(): stop the queue-poller, signal CEO to drain, await teardown.
  *
  * NB: This module does not directly enforce capability-gate for tool calls
  * happening inside the Hermes process (Hermes is opaque). The gate is enforced
- * in the firma-ops MCP server, which sits between the Hermes-resident CEO and
+ * in the company-ops MCP server, which sits between the Hermes-resident CEO and
  * any downstream dispatch. CompanyRuntime exposes capability-gate as a utility
  * for that MCP server to call.
  */
@@ -113,7 +113,7 @@ export class CompanyRuntime extends EventEmitter {
 
   /**
    * Authorize a tool/capability use by an agent. Wraps capability-gate so the
-   * firma-ops MCP server has a single entry point.
+   * company-ops MCP server has a single entry point.
    */
   authorize({ role, capability, taskAutonomy }) {
     const agent = this.company?.agents.get(role);
