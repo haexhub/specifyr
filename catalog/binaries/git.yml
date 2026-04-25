@@ -3,10 +3,14 @@ name: "Git"
 type: binary
 command: "git"
 version_check: "git --version"
-description: "Distributed version control. Required for worktree-based task isolation."
+description: |
+  Distributed version control. Read-only ops (status, log, diff, show) need
+  filesystem:read. Mutating ops (add, commit, init, worktree, branch) need
+  filesystem:write. Remote ops add network:http_get (clone, fetch, pull) or
+  network:http_post (push). Each agent must grant the capabilities matching
+  the operations it intends to run.
 required_capabilities:
   - shell:execute
-  - filesystem:write
 tags:
   - vcs
   - core

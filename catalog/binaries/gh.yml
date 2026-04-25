@@ -3,12 +3,14 @@ name: "GitHub CLI"
 type: binary
 command: "gh"
 version_check: "gh --version"
-description: "Official GitHub command-line tool. Use this instead of HTTP for GitHub operations when possible."
+description: |
+  Official GitHub command-line tool. Read-only ops (gh repo view, gh pr list)
+  need network:http_get and account:github. Mutating ops (gh pr create, gh
+  release upload) additionally need network:http_post. Authentication uses
+  secrets:read_env if a GH_TOKEN is provided. Grant the capabilities matching
+  your agent's intended ops.
 required_capabilities:
   - shell:execute
-  - network:http_post
-  - secrets:read_env
-  - account:github
 tags:
   - vcs
   - github

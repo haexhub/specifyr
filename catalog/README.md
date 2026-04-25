@@ -29,6 +29,10 @@ required_capabilities:
 tags: [domain, category]
 ```
 
+## Minimum-required capability principle
+
+`required_capabilities` is the **minimum to invoke the tool/binary at all**, not the maximum needed for every operation. For most binaries that's just `shell:execute`. Exceptions are tools whose entire purpose is a capability class — `curl` requires `network:http_get`, `rg` requires `filesystem:read`. Use-case-specific capabilities (filesystem:write for `git commit`, network:http_post for `gh pr create`) belong in the agent's own `capabilities` list, not in the binary manifest. This way a single binary manifest serves read-only and write-mode agents alike, each with the minimum permissions they actually need.
+
 ## Adding a skill
 
 Drop a new file `catalog/skills/<id>.md`:

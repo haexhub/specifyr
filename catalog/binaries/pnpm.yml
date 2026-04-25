@@ -3,10 +3,13 @@ name: "pnpm"
 type: binary
 command: "pnpm"
 version_check: "pnpm --version"
-description: "Fast, disk-space-efficient package manager for Node.js."
+description: |
+  Fast, disk-space-efficient package manager for Node.js. Read-only ops
+  (pnpm list, pnpm why) need filesystem:read. Install/update ops need
+  filesystem:write and network:http_get to fetch packages. Publish needs
+  network:http_post and typically secrets:read_env for the registry token.
 required_capabilities:
   - shell:execute
-  - network:http_get
 tags:
   - package-manager
   - nodejs

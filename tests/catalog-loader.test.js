@@ -226,11 +226,12 @@ test("validateCatalogReferences flags unknown binary references", async () => {
 
 test("validateCatalogReferences flags binary capability gaps", async () => {
   const c = await loadCatalog(realCatalog);
-  // gh requires shell:execute, network:http_post, secrets:read_env, account:github
+  // curl requires shell:execute + network:http_get (HTTP is its entire purpose).
+  // Agent has only shell:execute → gap.
   const agents = [
     {
       role: "dev",
-      tools: { mcp: [], binaries: ["gh"] },
+      tools: { mcp: [], binaries: ["curl"] },
       skills: [],
       capabilities: ["shell:execute"],
     },

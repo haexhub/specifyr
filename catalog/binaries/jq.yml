@@ -3,7 +3,10 @@ name: "jq"
 type: binary
 command: "jq"
 version_check: "jq --version"
-description: "Command-line JSON processor. Pairs well with curl for HTTP API workflows."
+description: |
+  Command-line JSON processor. Pure transformation: reads stdin (or files
+  when invoked with arg), writes stdout. Grant filesystem:read if you'll
+  pass file arguments rather than piping.
 required_capabilities:
   - shell:execute
 tags:
