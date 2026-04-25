@@ -81,7 +81,7 @@ async function writeMinimalOrg(projectRoot) {
       "tools:",
       "  builtin: [Read, Write]",
       "  mcp: []",
-      "capabilities: [filesystem:read, filesystem:write, shell:execute]",
+      "capabilities: [filesystem:read, filesystem:write, shell:execute, network:http, secrets:read_env]",
       "status: active",
       "---",
       "",
@@ -137,9 +137,13 @@ test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, as
     queueDir,
     runnerFactory: dockerRunnerFactory({
       projectRoot,
-      // No catalog dir → binary whitelist comes from raw agent.tools.binaries
-      // (empty for this minimal CEO spec). The container runs with the default
-      // binary set and Hermes can write/read /workspace via filesystem capability.
+      // CEO needs the LLM key to actually reason. capability-to-docker
+      // throws if we pass secrets without secrets:read_env on the agent —
+      // the spec above grants it.
+      secretsResolver: (agent) =>
+        agent?.capabilities?.includes("secrets:read_env")
+          ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }
+          : undefined,
     }),
   });
 

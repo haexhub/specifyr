@@ -353,6 +353,174 @@ test("dispatch: failed status leaves the file in place (retry on restart)", asyn
   });
 });
 
+// ---------------------------------------------------------------------------
+// authorizeWithApproval — integration with CapabilityApprovalService
+// ---------------------------------------------------------------------------
+
+function recordingApprovalService(decision = "approved") {
+  const calls = [];
+  return {
+    calls,
+    async requestApproval(input) {
+      calls.push(input);
+      return { decision, by: "stub", at: new Date().toISOString(), requestId: "stub-1" };
+    },
+  };
+}
+
+const sensitiveOrgFixture = path.join(__dirname, "fixtures", "spec-loader", "valid");
+
+test("authorizeWithApproval: short-circuits when capability is denied", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    const approvals = recordingApprovalService();
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: sensitiveOrgFixture,
+      queueDir: queue,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+      approvalService: approvals,
+    });
+    await runtime.start();
+
+    const result = await runtime.authorizeWithApproval({
+      role: "ceo",
+      capability: "payment:execute_unrestricted", // not granted to CEO fixture
+    });
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /not granted/);
+    assert.equal(approvals.calls.length, 0, "no approval requested when denied");
+
+    await runtime.stop();
+  });
+});
+
+test("authorizeWithApproval: returns immediately when no approval is required", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    const approvals = recordingApprovalService();
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: sensitiveOrgFixture,
+      queueDir: queue,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+      approvalService: approvals,
+    });
+    await runtime.start();
+
+    const result = await runtime.authorizeWithApproval({
+      role: "ceo",
+      capability: "filesystem:read", // granted, non-sensitive
+    });
+    assert.equal(result.allowed, true);
+    assert.equal(approvals.calls.length, 0, "no approval requested for non-sensitive grant");
+
+    await runtime.stop();
+  });
+});
+
+test("authorizeWithApproval: sensitive cap → calls approvalService and forwards decision", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    // Custom org with a CEO that has a sensitive capability granted
+    const orgDir = path.join(proj, "org");
+    await fs.mkdir(path.join(orgDir, "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(orgDir, "constitution.md"),
+      "---\nschema_version: \"1.0\"\n---\n# Co\n"
+    );
+    await fs.writeFile(
+      path.join(orgDir, "agents", "ceo.md"),
+      [
+        "---",
+        'schema_version: "1.0"',
+        "role: ceo",
+        "reports_to: null",
+        "skills: []",
+        "tools:",
+        "  builtin: []",
+        "  mcp: []",
+        "capabilities: [secrets:read_vault]",
+        "status: active",
+        "---",
+        "# CEO",
+      ].join("\n")
+    );
+
+    const approvals = recordingApprovalService("approved");
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir,
+      queueDir: queue,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+      approvalService: approvals,
+    });
+    await runtime.start();
+
+    const result = await runtime.authorizeWithApproval({
+      role: "ceo",
+      capability: "secrets:read_vault",
+      requestPayload: { vault: "prod-credentials" },
+    });
+    assert.equal(result.allowed, true);
+    assert.equal(approvals.calls.length, 1);
+    assert.equal(approvals.calls[0].slug, "demo");
+    assert.equal(approvals.calls[0].agent.role, "ceo");
+    assert.equal(approvals.calls[0].capability, "secrets:read_vault");
+    assert.deepEqual(approvals.calls[0].requestPayload, { vault: "prod-credentials" });
+    assert.equal(result.approval.decision, "approved");
+
+    await runtime.stop();
+  });
+});
+
+test("authorizeWithApproval: denied/escalated decision → allowed=false with approval shape", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    const orgDir = path.join(proj, "org");
+    await fs.mkdir(path.join(orgDir, "agents"), { recursive: true });
+    await fs.writeFile(
+      path.join(orgDir, "constitution.md"),
+      "---\nschema_version: \"1.0\"\n---\n# Co\n"
+    );
+    await fs.writeFile(
+      path.join(orgDir, "agents", "ceo.md"),
+      [
+        "---",
+        'schema_version: "1.0"',
+        "role: ceo",
+        "reports_to: null",
+        "skills: []",
+        "tools: { builtin: [], mcp: [] }",
+        "capabilities: [secrets:read_vault]",
+        "status: active",
+        "---",
+        "# CEO",
+      ].join("\n")
+    );
+
+    const approvals = recordingApprovalService("denied");
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir,
+      queueDir: queue,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+      approvalService: approvals,
+    });
+    await runtime.start();
+
+    const result = await runtime.authorizeWithApproval({
+      role: "ceo",
+      capability: "secrets:read_vault",
+    });
+    assert.equal(result.allowed, false);
+    assert.match(result.reason, /denied/);
+    assert.equal(result.approval.decision, "denied");
+
+    await runtime.stop();
+  });
+});
+
 test("dispatch: stub runner without execute() emits 'dispatched' with null result and does not throw", async () => {
   // This is the existing test-fixture pattern — confirm we did not break
   // tests that pass `() => ({ stub: true })` runnerFactories.

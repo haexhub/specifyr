@@ -64,9 +64,21 @@ export default defineEventHandler(async (event) => {
   const { CompanyRuntime } = await getCompanyRuntimeModule();
   const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
 
+  // Default secrets forwarding: any agent with `secrets:read_env` gets
+  // ANTHROPIC_API_KEY injected into its container. capability-to-docker.js
+  // hard-fails if secrets are passed without the matching capability, so
+  // we only emit the KV when the cap is actually granted. This is the
+  // minimal set today; expand the agent allowlist as more LLM/service
+  // keys come online (OPENAI_API_KEY, GH_TOKEN, etc.).
   const runnerFactory = dockerRunnerFactory({
     projectRoot: pHostCwd,
     network: "companies",
+    secretsResolver: (agent: any) => {
+      if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
+      const env: Record<string, string> = {};
+      if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+      return Object.keys(env).length > 0 ? env : undefined;
+    },
     // image resolved via factory: explicit > HERMES_AGENT_IMAGE > hermes-agent:dev
   });
 

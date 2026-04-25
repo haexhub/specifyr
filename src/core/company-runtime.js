@@ -29,6 +29,7 @@ import { WorktreeManager } from "./worktree-manager.js";
 import { HermesCliRunner } from "../runners/hermes-cli.js";
 import { hermesHomeForAgent } from "../runners/hermes-paths.js";
 import { checkCapability } from "./capability-gate.js";
+import { CapabilityApprovalService } from "./capability-approval-service.js";
 import {
   loadCatalog,
   resolveToolsForAgent,
@@ -47,6 +48,7 @@ export class CompanyRuntime extends EventEmitter {
     catalogDir,
     slug,
     ceoRole = "ceo",
+    approvalService,
   } = {}) {
     super();
     if (!projectRoot) throw new Error("CompanyRuntime: projectRoot required");
@@ -68,6 +70,11 @@ export class CompanyRuntime extends EventEmitter {
     this.worktrees = new WorktreeManager({ repoRoot: projectRoot });
     this.company = null;
     this.catalog = null;
+    // ApprovalService is owned by the runtime so callers (notably the
+    // future company-ops MCP server) have a single composition seam to
+    // request capability approvals. Injectable for tests; default is a
+    // fresh service with the NoopTransport stub.
+    this.approvalService = approvalService ?? new CapabilityApprovalService();
     // Dispatch state (queue → runner). Serial FIFO: one task at a time
     // because the CEO is `runner_type: persistent` and we don't want
     // concurrent containers stepping on each other for the same project.
@@ -220,6 +227,47 @@ export class CompanyRuntime extends EventEmitter {
       return { allowed: false, reason: `unknown role '${role}'`, requiresApproval: false };
     }
     return checkCapability({ agent, request: capability, taskAutonomy });
+  }
+
+  /**
+   * Authorize a capability call AND, if the gate flags it as needing
+   * approval, block until ApprovalService produces a decision.
+   *
+   * Resolution shape:
+   *   { allowed: true, approval?: {decision, by, at, requestId, ...} }
+   *   { allowed: false, reason: string, approval?: {...} }
+   *
+   * Decision-to-allowed mapping:
+   *   "approved"  → allowed: true
+   *   "denied"    → allowed: false  (caller surfaces denial to the worker)
+   *   "escalated" → allowed: false  (caller / company-ops can re-issue
+   *                                   targeting `approval.escalateTo`)
+   *
+   * Intended caller is the company-ops MCP server (one tool call per
+   * capability). For now the runtime exposes it directly so a thin HTTP
+   * shim or the future MCP layer can call into it.
+   */
+  async authorizeWithApproval({ role, capability, taskAutonomy, requestPayload }) {
+    const gate = this.authorize({ role, capability, taskAutonomy });
+    if (!gate.allowed) return gate;
+    if (!gate.requiresApproval) return gate;
+
+    const agent = this.company?.agents.get(role);
+    const approval = await this.approvalService.requestApproval({
+      slug: this.slug,
+      agent,
+      capability,
+      requestPayload,
+    });
+
+    if (approval.decision === "approved") {
+      return { allowed: true, approval };
+    }
+    return {
+      allowed: false,
+      reason: `approval ${approval.decision} (${approval.by})`,
+      approval,
+    };
   }
 
   /**
