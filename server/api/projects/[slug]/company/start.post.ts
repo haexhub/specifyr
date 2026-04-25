@@ -75,6 +75,7 @@ export default defineEventHandler(async (event) => {
     orgDir,
     queueDir,
     catalogDir,
+    slug,
     runnerFactory,
   });
 

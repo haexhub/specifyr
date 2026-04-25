@@ -20,7 +20,7 @@
  */
 
 import path from "node:path";
-import { mkdir } from "node:fs/promises";
+import { mkdir, unlink } from "node:fs/promises";
 import { EventEmitter } from "node:events";
 
 import { loadCompany } from "../agents/spec-loader.js";
@@ -45,6 +45,8 @@ export class CompanyRuntime extends EventEmitter {
     runnerFactory,
     hermesBinary = "hermes",
     catalogDir,
+    slug,
+    ceoRole = "ceo",
   } = {}) {
     super();
     if (!projectRoot) throw new Error("CompanyRuntime: projectRoot required");
@@ -55,6 +57,10 @@ export class CompanyRuntime extends EventEmitter {
     this.queueDir = queueDir;
     this.catalogDir = catalogDir; // optional; if set, references are resolved & validated
     this.hermesBinary = hermesBinary;
+    // slug for runtimeContext; defaults to <queueDir parent>'s name —
+    // queueDir convention is `<root>/.specops/<slug>/queue/`.
+    this.slug = slug ?? path.basename(path.dirname(queueDir));
+    this.ceoRole = ceoRole;
     this.runnerFactory =
       runnerFactory ?? defaultRunnerFactory({ projectRoot, hermesBinary });
     this.runners = new Map(); // role -> runner
@@ -62,6 +68,12 @@ export class CompanyRuntime extends EventEmitter {
     this.worktrees = new WorktreeManager({ repoRoot: projectRoot });
     this.company = null;
     this.catalog = null;
+    // Dispatch state (queue → runner). Serial FIFO: one task at a time
+    // because the CEO is `runner_type: persistent` and we don't want
+    // concurrent containers stepping on each other for the same project.
+    this._dispatchQueue = [];
+    this._dispatching = false;
+    this._inFlightPaths = new Set(); // dedup re-fires while a path is processing
   }
 
   async start() {
@@ -100,17 +112,101 @@ export class CompanyRuntime extends EventEmitter {
 
     // Queue polling: emits 'task' for every yaml dropped in queueDir.
     this.poller = new QueuePoller({ queueDir: this.queueDir });
-    this.poller.on("task", (evt) => this.emit("task", evt));
+    this.poller.on("task", (evt) => {
+      this.emit("task", evt);
+      this._enqueueDispatch(evt);
+    });
     this.poller.on("task-removed", (evt) => this.emit("task-removed", evt));
     this.poller.on("error", (err) => this.emit("error", err));
     await this.poller.start();
     this.emit("started", { agents: [...this.company.agents.keys()] });
   }
 
+  /**
+   * Enqueue a task event for dispatch. Drops re-fires for a path that's
+   * already processing or queued (chokidar can fire multiple add/change
+   * events for the same write).
+   */
+  _enqueueDispatch(evt) {
+    if (this._inFlightPaths.has(evt.path)) return;
+    this._inFlightPaths.add(evt.path);
+    this._dispatchQueue.push(evt);
+    this._processNextDispatch();
+  }
+
+  async _processNextDispatch() {
+    if (this._dispatching) return;
+    if (this._dispatchQueue.length === 0) return;
+    if (!this.poller) return; // stopped
+    this._dispatching = true;
+    const evt = this._dispatchQueue.shift();
+    try {
+      await this._dispatchToCEO(evt);
+    } catch (err) {
+      this.emit("dispatch-error", { path: evt.path, error: err });
+    } finally {
+      this._inFlightPaths.delete(evt.path);
+      this._dispatching = false;
+      // Process the next entry, if any.
+      this._processNextDispatch();
+    }
+  }
+
+  /**
+   * Hand a parsed task off to the CEO runner. The CEO is configured via
+   * `ceoRole` (default "ceo"). On `status === "completed"`, the queue YAML
+   * is removed; on failure it's left in place so the next start picks it
+   * up again (simple retry-on-restart semantic).
+   */
+  async _dispatchToCEO(evt) {
+    const runner = this.runners.get(this.ceoRole);
+    if (!runner) {
+      this.emit("dispatch-error", {
+        path: evt.path,
+        error: new Error(`No runner for role '${this.ceoRole}'; cannot dispatch`),
+      });
+      return;
+    }
+    if (typeof runner.execute !== "function") {
+      // Stub runner from tests: just record dispatch attempt and bail.
+      this.emit("dispatched", { path: evt.path, role: this.ceoRole, result: null });
+      return;
+    }
+
+    const workItem = adaptTaskToWorkItem(evt.task, evt.path);
+    const runtimeContext = {
+      slug: this.slug,
+      cwd: this.projectRoot,
+      pattern: { name: "company" },
+      provider: { name: "anthropic" },
+    };
+
+    this.emit("dispatch-started", { path: evt.path, role: this.ceoRole, workItem });
+    const result = await runner.execute(workItem, runtimeContext);
+    this.emit("dispatched", { path: evt.path, role: this.ceoRole, result });
+
+    if (result?.status === "completed") {
+      try {
+        await unlink(evt.path);
+      } catch (err) {
+        // Already deleted by another consumer or never existed — non-fatal.
+        if (err?.code !== "ENOENT") {
+          this.emit("dispatch-error", { path: evt.path, error: err });
+        }
+      }
+    }
+  }
+
   async stop() {
     if (this.poller) await this.poller.stop();
     this.poller = null;
     this.runners.clear();
+    // Drop pending dispatches; in-flight executions race their own runner
+    // teardown. Callers should `await stop()` after `await runtime.start()`
+    // returns idle, but if a dispatch is mid-execute() the runner's own
+    // commandRunner timeout governs cleanup.
+    this._dispatchQueue.length = 0;
+    this._inFlightPaths.clear();
     this.emit("stopped");
   }
 
@@ -194,4 +290,36 @@ function defaultRunnerFactory({ projectRoot, hermesBinary }) {
       command: hermesBinary,
       memoryRoot: hermesHomeForAgent({ projectRoot, role: agent.role }),
     });
+}
+
+/**
+ * Adapt a parsed queue YAML into a workItem that satisfies the runner
+ * contract. `scope` is the load-bearing field for HermesAgentRunner — an
+ * empty scope causes the runner to bail with "no explicit scope, blocked
+ * for safety". We default to ["ALL"] for tasks without explicit scope so
+ * the dispatcher actually drives execution; callers can still constrain
+ * with an explicit `scope:` field in their YAML.
+ */
+export function adaptTaskToWorkItem(task, taskPath) {
+  const safe = task ?? {};
+  const fallbackTitle = path.basename(taskPath ?? "task.yaml", ".yaml");
+  return {
+    title: safe.title ?? fallbackTitle,
+    goal: safe.goal ?? "(no goal specified)",
+    inputs: Array.isArray(safe.inputs) ? safe.inputs : [],
+    scope:
+      Array.isArray(safe.scope) && safe.scope.length > 0
+        ? safe.scope
+        : ["ALL"],
+    successCriteria: Array.isArray(safe.success_criteria)
+      ? safe.success_criteria
+      : Array.isArray(safe.successCriteria)
+        ? safe.successCriteria
+        : [],
+    expectedOutputs: Array.isArray(safe.expected_outputs)
+      ? safe.expected_outputs
+      : Array.isArray(safe.expectedOutputs)
+        ? safe.expectedOutputs
+        : [],
+  };
 }

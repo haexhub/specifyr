@@ -11,15 +11,9 @@
  *   - RUN_E2E_TESTS=1                         opt-in (this test costs LLM tokens)
  *   - ANTHROPIC_API_KEY                       CEO needs an LLM to reason
  *   - docker reachable + hermes-agent:dev built
- *   - E2E_DISPATCH_READY=1                    set ONLY when the queue-to-runner
- *                                             dispatch wiring is in place.
- *                                             Without it CompanyRuntime emits
- *                                             'task' events but never calls
- *                                             runner.execute(), so the test
- *                                             would just time out.
  *
  * Run:
- *   RUN_E2E_TESTS=1 ANTHROPIC_API_KEY=... E2E_DISPATCH_READY=1 \
+ *   RUN_E2E_TESTS=1 ANTHROPIC_API_KEY=... \
  *     node --test tests/integration/company-e2e.test.js
  */
 
@@ -43,14 +37,6 @@ function gate() {
   }
   if (!process.env.ANTHROPIC_API_KEY) {
     return { skip: "ANTHROPIC_API_KEY not set; CEO cannot reason without an LLM" };
-  }
-  if (process.env.E2E_DISPATCH_READY !== "1") {
-    return {
-      skip:
-        "E2E_DISPATCH_READY!=1: CompanyRuntime currently emits 'task' events " +
-        "but does not yet call runner.execute() on them. Set E2E_DISPATCH_READY=1 " +
-        "once the queue-to-runner dispatch wiring lands (see plan 6.5/6.7).",
-    };
   }
   const info = spawnSync("docker", ["info"], { stdio: "ignore" });
   if (info.status !== 0) return { skip: "docker daemon not reachable" };
