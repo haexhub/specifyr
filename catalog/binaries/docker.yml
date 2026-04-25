@@ -1,0 +1,12 @@
+id: docker
+name: "Docker"
+type: binary
+command: "docker"
+version_check: "docker --version"
+description: "Container runtime. Sensitive — grants effective root to anyone who can call it."
+required_capabilities:
+  - shell:execute
+  - network:http_post
+tags:
+  - container
+  - sensitive

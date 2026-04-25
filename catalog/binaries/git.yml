@@ -1,0 +1,12 @@
+id: git
+name: "Git"
+type: binary
+command: "git"
+version_check: "git --version"
+description: "Distributed version control. Required for worktree-based task isolation."
+required_capabilities:
+  - shell:execute
+  - filesystem:write
+tags:
+  - vcs
+  - core

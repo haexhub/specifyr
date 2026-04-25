@@ -29,9 +29,23 @@ import { WorktreeManager } from "./worktree-manager.js";
 import { HermesCliRunner } from "../runners/hermes-cli.js";
 import { hermesHomeForAgent } from "../runners/hermes-paths.js";
 import { checkCapability } from "./capability-gate.js";
+import {
+  loadCatalog,
+  resolveToolsForAgent,
+  resolveSkillsForAgent,
+  resolveBinariesForAgent,
+  validateCatalogReferences,
+} from "./catalog-loader.js";
 
 export class CompanyRuntime extends EventEmitter {
-  constructor({ projectRoot, orgDir, queueDir, runnerFactory, hermesBinary = "hermes" } = {}) {
+  constructor({
+    projectRoot,
+    orgDir,
+    queueDir,
+    runnerFactory,
+    hermesBinary = "hermes",
+    catalogDir,
+  } = {}) {
     super();
     if (!projectRoot) throw new Error("CompanyRuntime: projectRoot required");
     if (!orgDir) throw new Error("CompanyRuntime: orgDir required");
@@ -39,6 +53,7 @@ export class CompanyRuntime extends EventEmitter {
     this.projectRoot = projectRoot;
     this.orgDir = orgDir;
     this.queueDir = queueDir;
+    this.catalogDir = catalogDir; // optional; if set, references are resolved & validated
     this.hermesBinary = hermesBinary;
     this.runnerFactory =
       runnerFactory ?? defaultRunnerFactory({ projectRoot, hermesBinary });
@@ -46,6 +61,7 @@ export class CompanyRuntime extends EventEmitter {
     this.poller = null;
     this.worktrees = new WorktreeManager({ repoRoot: projectRoot });
     this.company = null;
+    this.catalog = null;
   }
 
   async start() {
@@ -55,6 +71,21 @@ export class CompanyRuntime extends EventEmitter {
     }
     if (this.company.agents.size === 0) {
       throw new Error("CompanyRuntime: no agents loaded");
+    }
+
+    // Load central tool/skill catalog if configured. Errors here block startup
+    // because dangling references would crash the runtime later anyway.
+    if (this.catalogDir) {
+      this.catalog = await loadCatalog(this.catalogDir);
+      const findings = validateCatalogReferences([...this.company.agents.values()], this.catalog);
+      const errors = findings.filter((f) => f.severity === "error");
+      if (errors.length > 0) {
+        throw new Error(
+          `CompanyRuntime: catalog reference errors:\n${errors
+            .map((f) => `  ${f.code}: ${f.message}`)
+            .join("\n")}`
+        );
+      }
     }
 
     // Provision per-agent Hermes profile dirs (lazy-create; Hermes initializes on first use).
@@ -101,6 +132,39 @@ export class CompanyRuntime extends EventEmitter {
 
   listAgents() {
     return this.company ? [...this.company.agents.values()] : [];
+  }
+
+  /**
+   * Resolve an agent's `tools.mcp` references against the loaded catalog.
+   * @returns {ToolSpec[]} hydrated specs
+   */
+  getResolvedTools(role) {
+    const agent = this.getAgent(role);
+    if (!agent) return [];
+    if (!this.catalog) return []; // no catalog → no resolution
+    return resolveToolsForAgent(agent, this.catalog);
+  }
+
+  /**
+   * Resolve an agent's `skills` references against the loaded catalog.
+   * @returns {SkillSpec[]} hydrated specs (each has a markdown body)
+   */
+  getResolvedSkills(role) {
+    const agent = this.getAgent(role);
+    if (!agent) return [];
+    if (!this.catalog) return [];
+    return resolveSkillsForAgent(agent, this.catalog);
+  }
+
+  /**
+   * Resolve an agent's `tools.binaries` references against the loaded catalog.
+   * @returns {BinarySpec[]} hydrated specs
+   */
+  getResolvedBinaries(role) {
+    const agent = this.getAgent(role);
+    if (!agent) return [];
+    if (!this.catalog) return [];
+    return resolveBinariesForAgent(agent, this.catalog);
   }
 }
 

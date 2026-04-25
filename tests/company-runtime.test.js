@@ -105,3 +105,71 @@ test("rejects start() when constitution.md is missing", async () => {
     await assert.rejects(() => runtime.start(), /missing constitution/);
   });
 });
+
+test("with a catalogDir, getResolvedTools/Skills hydrate references", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    const catalogDir = path.join(proj, "catalog");
+    await fs.mkdir(path.join(catalogDir, "tools"), { recursive: true });
+    await fs.mkdir(path.join(catalogDir, "skills"), { recursive: true });
+    await fs.writeFile(
+      path.join(catalogDir, "tools", "firma-ops.yml"),
+      `id: firma-ops
+name: "Firma-Ops"
+type: mcp
+transport: stdio
+command: "node"
+args: ["server.mjs"]
+description: "test"
+required_capabilities: [filesystem:read]
+`
+    );
+    await fs.writeFile(
+      path.join(catalogDir, "skills", "tdd.md"),
+      `---
+id: tdd
+name: "TDD"
+description: "Test-driven development"
+---
+
+Red green refactor.
+`
+    );
+
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDir: queue,
+      catalogDir,
+      runnerFactory: () => ({ stub: true }),
+    });
+    await runtime.start();
+
+    const ceoTools = runtime.getResolvedTools("ceo");
+    assert.equal(ceoTools.length, 1);
+    assert.equal(ceoTools[0].id, "firma-ops");
+
+    const devSkills = runtime.getResolvedSkills("dev");
+    assert.equal(devSkills.length, 1);
+    assert.equal(devSkills[0].id, "tdd");
+    assert.match(devSkills[0].body, /Red green refactor/);
+
+    await runtime.stop();
+  });
+});
+
+test("with a catalogDir, dangling references abort start()", async () => {
+  await withTempProject(async ({ proj, queue }) => {
+    const catalogDir = path.join(proj, "catalog");
+    await fs.mkdir(path.join(catalogDir, "tools"), { recursive: true });
+    await fs.mkdir(path.join(catalogDir, "skills"), { recursive: true });
+    // Empty catalog → fixture references 'firma-ops' which won't exist
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDir: queue,
+      catalogDir,
+      runnerFactory: () => ({ stub: true }),
+    });
+    await assert.rejects(() => runtime.start(), /catalog reference errors|E_UNKNOWN_TOOL_REFERENCE/);
+  });
+});

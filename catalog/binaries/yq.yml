@@ -1,0 +1,11 @@
+id: yq
+name: "yq"
+type: binary
+command: "yq"
+version_check: "yq --version"
+description: "Command-line YAML processor (Mike Farah's Go implementation). Useful for reading/writing spec files."
+required_capabilities:
+  - shell:execute
+tags:
+  - yaml
+  - parsing

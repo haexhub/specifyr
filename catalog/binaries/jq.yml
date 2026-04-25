@@ -1,0 +1,11 @@
+id: jq
+name: "jq"
+type: binary
+command: "jq"
+version_check: "jq --version"
+description: "Command-line JSON processor. Pairs well with curl for HTTP API workflows."
+required_capabilities:
+  - shell:execute
+tags:
+  - json
+  - parsing

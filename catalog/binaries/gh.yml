@@ -1,0 +1,14 @@
+id: gh
+name: "GitHub CLI"
+type: binary
+command: "gh"
+version_check: "gh --version"
+description: "Official GitHub command-line tool. Use this instead of HTTP for GitHub operations when possible."
+required_capabilities:
+  - shell:execute
+  - network:http_post
+  - secrets:read_env
+  - account:github
+tags:
+  - vcs
+  - github

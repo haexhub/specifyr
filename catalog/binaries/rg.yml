@@ -1,0 +1,12 @@
+id: rg
+name: "ripgrep"
+type: binary
+command: "rg"
+version_check: "rg --version"
+description: "Recursive grep replacement, very fast. Default search tool."
+required_capabilities:
+  - shell:execute
+  - filesystem:read
+tags:
+  - search
+  - core

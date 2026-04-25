@@ -1,0 +1,12 @@
+id: pnpm
+name: "pnpm"
+type: binary
+command: "pnpm"
+version_check: "pnpm --version"
+description: "Fast, disk-space-efficient package manager for Node.js."
+required_capabilities:
+  - shell:execute
+  - network:http_get
+tags:
+  - package-manager
+  - nodejs

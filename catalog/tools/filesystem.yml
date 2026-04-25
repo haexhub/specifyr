@@ -1,0 +1,15 @@
+id: filesystem
+name: "Filesystem MCP"
+type: mcp
+transport: stdio
+command: "uvx"
+args: ["mcp-server-filesystem", "${PROJECT_ROOT}"]
+env_keys:
+  - PROJECT_ROOT
+description: "Sandboxed read/write/list under PROJECT_ROOT. Safer alternative to giving an agent shell-execute."
+required_capabilities:
+  - filesystem:read
+  - filesystem:write
+tags:
+  - sandbox
+  - safe-default

@@ -1,0 +1,11 @@
+id: node
+name: "Node.js"
+type: binary
+command: "node"
+version_check: "node --version"
+description: "Node.js JavaScript runtime, version 22+."
+required_capabilities:
+  - shell:execute
+tags:
+  - language
+  - runtime
