@@ -36,6 +36,38 @@ function buildHermesPrompt(workItem, runtimeContext) {
   ].join("\n");
 }
 
+/**
+ * Build the `hermes chat` CLI argv for a single-shot run inside the
+ * container. The prompt is passed as the `-q QUERY` value (NOT via stdin
+ * — hermes 0.11 doesn't read stdin in single-query mode).
+ *
+ * Defaults applied:
+ *   --provider anthropic        only ANTHROPIC_API_KEY is forwarded today
+ *   -m anthropic/<agent.model>  unless agent.model already namespaced
+ *   --max-turns 20              safety cap; runner_type:persistent doesn't
+ *                               (yet) translate to unbounded turns
+ *   --yolo                      skip hermes' own permission prompts; our
+ *                               CapabilityApprovalService is the single
+ *                               approval seam, double-prompting would be
+ *                               surprising
+ *   --ignore-user-config        the per-agent profile dir is the only
+ *                               config source we trust
+ */
+function buildHermesChatArgs(prompt, agent) {
+  const model = agent?.model ?? "claude-opus-4-5";
+  const namespacedModel = model.includes("/") ? model : `anthropic/${model}`;
+  return [
+    "hermes",
+    "chat",
+    "--provider", "anthropic",
+    "-m", namespacedModel,
+    "--max-turns", "20",
+    "--yolo",
+    "--ignore-user-config",
+    "-q", prompt,
+  ];
+}
+
 const CONTAINER_NAME_SAFE = /[^a-zA-Z0-9_.-]/g;
 
 export class HermesDockerRunner extends HermesAgentRunner {
@@ -92,13 +124,15 @@ export class HermesDockerRunner extends HermesAgentRunner {
     });
 
     const prompt = buildHermesPrompt(workItem, runtimeContext);
+    const cmdArgs = buildHermesChatArgs(prompt, this.agent);
+    // capabilityFlags(...) places the image as its last entry; everything
+    // after that is the container's CMD, which overrides the image's
+    // default CMD. We drop `-i` (no stdin piping any more) and rely on
+    // single-shot `-q QUERY` semantics.
     const result = await this.commandRunner(
       this.dockerCommand,
-      ["run", "-i", ...flags],
-      {
-        cwd: runtimeContext.cwd,
-        input: `${prompt}\n`,
-      }
+      ["run", ...flags, ...cmdArgs],
+      { cwd: runtimeContext.cwd }
     );
 
     if (!result.ok || !result.stdout) {

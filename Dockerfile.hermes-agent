@@ -125,4 +125,8 @@ ENV HERMES_HOME=/profile \
 WORKDIR /workspace
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/hermes-agent-entrypoint"]
-CMD ["hermes", "chat", "-q"]
+# Hermes 0.11 reads `-q QUERY` as a single-shot query and requires a value
+# argument. The runner ALWAYS overrides this CMD with the actual prompt,
+# so the default is purely a sane no-arg fallback (`hermes --help`) used
+# only by ad-hoc runs like `docker run hermes-agent:dev`.
+CMD ["hermes", "--help"]

@@ -36,7 +36,15 @@ function makeFakeRunner(returns = { ok: true, stdout: "result line one", stderr:
   return { fakeCommandRunner, calls };
 }
 
-test("invokes 'docker run -i ...' with capability-derived flags", async () => {
+// Helper: docker argv layout is `run, ...flags, IMAGE, ...cmdArgs`. The
+// image is immediately followed by `hermes` (the CMD override). This
+// finds the image position so individual tests don't have to count flags.
+function imageIndex(args) {
+  const i = args.indexOf("hermes");
+  return i > 0 ? i - 1 : -1;
+}
+
+test("invokes 'docker run ...' with capability-derived flags + chat command", async () => {
   const { fakeCommandRunner, calls } = makeFakeRunner();
   const runner = new HermesDockerRunner({
     ...baseRunnerOptions(),
@@ -48,9 +56,12 @@ test("invokes 'docker run -i ...' with capability-derived flags", async () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].cmd, "docker");
   assert.equal(calls[0].args[0], "run");
-  assert.equal(calls[0].args[1], "-i");
-  // image must be the very last positional argument
-  assert.equal(calls[0].args[calls[0].args.length - 1], "hermes-agent:dev");
+  // image sits between docker flags and the CMD-override (hermes ...).
+  const idx = imageIndex(calls[0].args);
+  assert.ok(idx >= 1, `expected image position, got ${idx}`);
+  assert.equal(calls[0].args[idx], "hermes-agent:dev");
+  // chat command immediately follows the image.
+  assert.deepEqual(calls[0].args.slice(idx + 1, idx + 4), ["hermes", "chat", "--provider"]);
 });
 
 test("filesystem:read maps to read-only project bind mount", async () => {
@@ -149,7 +160,7 @@ test("container name derives from slug + role, sanitised", async () => {
   assert.equal(calls[0].args[i + 1], "hermes-agent_weird_slug_with_chars_ceo");
 });
 
-test("prompt is piped via stdin to docker run", async () => {
+test("prompt is passed as `hermes chat -q <prompt>` arg, not stdin", async () => {
   const { fakeCommandRunner, calls } = makeFakeRunner();
   const runner = new HermesDockerRunner({
     ...baseRunnerOptions(),
@@ -157,10 +168,56 @@ test("prompt is piped via stdin to docker run", async () => {
   });
   await runner.execute(fakeWorkItem({ goal: "summarize the readme" }), fakeContext());
 
-  const input = calls[0].opts.input;
-  assert.ok(typeof input === "string");
-  assert.match(input, /summarize the readme/);
-  assert.match(input, /Pattern: test-pattern/);
+  // No stdin piping any more — hermes 0.11 reads -q QUERY from argv.
+  assert.equal(calls[0].opts.input, undefined, "stdin must not be piped");
+
+  const args = calls[0].args;
+  const qIdx = args.lastIndexOf("-q");
+  assert.ok(qIdx >= 0, "expected -q QUERY in argv");
+  const prompt = args[qIdx + 1];
+  assert.match(prompt, /summarize the readme/);
+  assert.match(prompt, /Pattern: test-pattern/);
+});
+
+test("hermes chat invocation uses --yolo, --ignore-user-config, --max-turns", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+  const runner = new HermesDockerRunner({
+    ...baseRunnerOptions(),
+    commandRunner: fakeCommandRunner,
+  });
+  await runner.execute(fakeWorkItem(), fakeContext());
+
+  const args = calls[0].args;
+  assert.ok(args.includes("--yolo"));
+  assert.ok(args.includes("--ignore-user-config"));
+  const maxIdx = args.indexOf("--max-turns");
+  assert.ok(maxIdx >= 0);
+  assert.match(args[maxIdx + 1], /^\d+$/);
+});
+
+test("agent.model determines `-m anthropic/<model>`; namespaced models pass through", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+
+  const a = new HermesDockerRunner({
+    ...baseRunnerOptions({
+      agent: { role: "ceo", capabilities: ["shell:execute"], model: "claude-opus-4-7" },
+    }),
+    commandRunner: fakeCommandRunner,
+  });
+  await a.execute(fakeWorkItem(), fakeContext());
+  let mIdx = calls[0].args.indexOf("-m");
+  assert.equal(calls[0].args[mIdx + 1], "anthropic/claude-opus-4-7");
+
+  calls.length = 0;
+  const b = new HermesDockerRunner({
+    ...baseRunnerOptions({
+      agent: { role: "ceo", capabilities: ["shell:execute"], model: "openai/gpt-4o" },
+    }),
+    commandRunner: fakeCommandRunner,
+  });
+  await b.execute(fakeWorkItem(), fakeContext());
+  mIdx = calls[0].args.indexOf("-m");
+  assert.equal(calls[0].args[mIdx + 1], "openai/gpt-4o", "already-namespaced model passes through");
 });
 
 test("returns completed result with metadata on successful invocation", async () => {
@@ -280,7 +337,8 @@ test("custom image tag is honoured", async () => {
   });
   await runner.execute(fakeWorkItem(), fakeContext());
 
-  assert.equal(calls[0].args[calls[0].args.length - 1], "hermes-agent:0.2.1");
+  const idx = imageIndex(calls[0].args);
+  assert.equal(calls[0].args[idx], "hermes-agent:0.2.1");
 });
 
 test("custom dockerCommand (e.g. podman) is honoured", async () => {
