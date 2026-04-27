@@ -72,6 +72,7 @@ export async function loadAgents(orgDir, { includeRetired = false } = {}) {
     fm.tools.mcp = fm.tools.mcp ?? [];
     fm.capabilities = fm.capabilities ?? [];
     fm.skills = fm.skills ?? [];
+    fm.delivers_to = Array.isArray(fm.delivers_to) ? fm.delivers_to : [];
     agents.set(fm.role, fm);
   }
   return agents;
@@ -86,6 +87,26 @@ export async function loadCompany(orgDir, options) {
     loadAgents(orgDir, options),
   ]);
   return { constitution, agents };
+}
+
+/**
+ * Validate the reporting + delivery graph.
+ *
+ *   - reports_to: hierarchy edges. Must form a DAG (cycles → error).
+ *   - delivers_to: workflow-handoff metadata. Cycles ARE allowed
+ *     (refinement loops, e.g. analyst ⇄ pipeline_builder).
+ *
+ * Both fields must reference known roles (typo guard).
+ *
+ * Throws:
+ *   E_UNKNOWN_REPORTS_TO   — reports_to references unknown role
+ *   E_UNKNOWN_DELIVERS_TO  — delivers_to[i] references unknown role
+ *   E_REPORTS_TO_CYCLE     — reports_to chain has a cycle
+ *
+ * @param {Map<string, AgentSpec>} agents
+ */
+export function validateReportingDag(agents) {
+  // Filled in by following tasks.
 }
 
 function parseFrontmatter(raw) {
