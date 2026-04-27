@@ -162,6 +162,93 @@ test("pendingDispatches: lists started events without matching completion", asyn
   });
 });
 
+test("rebuildFromDisk: replays JSONL files into a fresh db; result equals direct-append", async () => {
+  await withTempDir(async (root) => {
+    const eventsDir = path.join(root, "events");
+    await fs.mkdir(eventsDir, { recursive: true });
+    // Two files, two days, three events total
+    await fs.writeFile(path.join(eventsDir, "2026-04-27.jsonl"),
+      JSON.stringify({ id: "a", at: "2026-04-27T10:00:00.000Z", type: "dispatch-started", role: "ceo", task_path: "/q/a.yaml" }) + "\n");
+    await fs.writeFile(path.join(eventsDir, "2026-04-28.jsonl"),
+      JSON.stringify({ id: "b", at: "2026-04-28T09:00:00.000Z", type: "dispatch-completed", role: "ceo", task_path: "/q/a.yaml" }) + "\n" +
+      JSON.stringify({ id: "c", at: "2026-04-28T10:00:00.000Z", type: "dispatch-started",  role: "dev", task_path: "/q/b.yaml" }) + "\n");
+
+    const idx = new CompanyEventIndex({ dbPath: path.join(root, "state.db") });
+    idx.open();
+    idx.rebuildFromDisk(root);
+
+    // Same events should now be queryable
+    const all = idx.recent({ limit: 100 });
+    assert.equal(all.length, 3);
+    assert.equal(all[0].id, "c"); // newest first
+    assert.equal(all[2].id, "a");
+
+    // pendingDispatches reflects the unmatched start
+    const pending = idx.pendingDispatches();
+    assert.equal(pending.length, 1);
+    assert.equal(pending[0].task_path, "/q/b.yaml");
+    idx.close();
+  });
+});
+
+test("rebuildFromDisk: drop+rebuild produces identical row count to direct append", async () => {
+  await withTempDir(async (root) => {
+    // Build via JSONL replay, then via direct append; assert same row count.
+    const eventsDir = path.join(root, "events");
+    await fs.mkdir(eventsDir, { recursive: true });
+    const events = [
+      { id: "x1", at: "2026-04-28T10:00:00.000Z", type: "dispatch-started", role: "ceo", task_path: "/q/x.yaml" },
+      { id: "x2", at: "2026-04-28T10:00:01.000Z", type: "dispatch-completed", role: "ceo", task_path: "/q/x.yaml", status: "completed" },
+    ];
+    await fs.writeFile(path.join(eventsDir, "2026-04-28.jsonl"),
+      events.map((e) => JSON.stringify(e)).join("\n") + "\n");
+
+    const replayed = new CompanyEventIndex({ dbPath: path.join(root, "replay.db") });
+    replayed.open();
+    replayed.rebuildFromDisk(root);
+    const replayCount = replayed.db.prepare("SELECT COUNT(*) AS n FROM events").get().n;
+
+    const direct = new CompanyEventIndex({ dbPath: path.join(root, "direct.db") });
+    direct.open();
+    for (const e of events) direct.append(e);
+    const directCount = direct.db.prepare("SELECT COUNT(*) AS n FROM events").get().n;
+
+    assert.equal(replayCount, directCount, "rebuild + direct append must produce same row count");
+    replayed.close();
+    direct.close();
+  });
+});
+
+test("rebuildFromDisk: idempotent — running twice doesn't duplicate rows", async () => {
+  await withTempDir(async (root) => {
+    const eventsDir = path.join(root, "events");
+    await fs.mkdir(eventsDir, { recursive: true });
+    await fs.writeFile(path.join(eventsDir, "2026-04-28.jsonl"),
+      JSON.stringify({ id: "z", at: "2026-04-28T10:00:00.000Z", type: "x", slug: "demo" }) + "\n");
+
+    const idx = new CompanyEventIndex({ dbPath: path.join(root, "state.db") });
+    idx.open();
+    idx.rebuildFromDisk(root);
+    idx.rebuildFromDisk(root);
+    idx.rebuildFromDisk(root);
+    const count = idx.db.prepare("SELECT COUNT(*) AS n FROM events").get().n;
+    assert.equal(count, 1, "rebuild must be idempotent (INSERT OR IGNORE on id)");
+    idx.close();
+  });
+});
+
+test("rebuildFromDisk: tolerates missing events/ dir (fresh project)", async () => {
+  await withTempDir(async (root) => {
+    const idx = new CompanyEventIndex({ dbPath: path.join(root, "state.db") });
+    idx.open();
+    // No events/ dir created → must not throw
+    idx.rebuildFromDisk(root);
+    const count = idx.db.prepare("SELECT COUNT(*) AS n FROM events").get().n;
+    assert.equal(count, 0);
+    idx.close();
+  });
+});
+
 test("pendingDispatches: dispatch-failed and dispatch-error also count as terminal", async () => {
   await withTempDir(async (root) => {
     const idx = makeIdx(path.join(root, "state.db"));

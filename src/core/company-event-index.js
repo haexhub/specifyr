@@ -31,7 +31,7 @@
  */
 
 import { DatabaseSync } from "node:sqlite";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, existsSync } from "node:fs";
 import path from "node:path";
 
 const SCHEMA_VERSION = 1;
@@ -173,6 +173,47 @@ export class CompanyEventIndex {
    * after a runtime has been running, it can seed its in-memory state from
    * here instead of starting blind).
    */
+  /**
+   * Replay every JSONL line in `<baseDir>/events/*.jsonl` into the index.
+   * Idempotent (INSERT OR IGNORE on id) — safe to re-run after partial replay.
+   *
+   * This is the **correctness contract** of the architecture: drop the db,
+   * rebuild from disk, and the result is identical (same rows, same columns).
+   * If you ever add a column whose value can't be derived from the JSONL,
+   * you've broken files-as-truth; back out and reconsider.
+   *
+   * Synchronous because we use sync sqlite + sync fs APIs throughout — keeps
+   * the contract simple ("rebuild() returned" = "index is consistent").
+   *
+   * @param {string} baseDir   the company's `.specops/<slug>/` dir; we read
+   *                           `<baseDir>/events/*.jsonl`.
+   */
+  rebuildFromDisk(baseDir) {
+    if (!this.db) throw new Error("CompanyEventIndex: open() before rebuildFromDisk()");
+    const eventsDir = path.join(baseDir, "events");
+    if (!existsSync(eventsDir)) return; // fresh project, nothing to replay
+    const files = readdirSync(eventsDir)
+      .filter((f) => f.endsWith(".jsonl"))
+      .sort(); // YYYY-MM-DD lex-sort = chronological
+    for (const file of files) {
+      const content = readFileSync(path.join(eventsDir, file), "utf8");
+      for (const line of content.split("\n")) {
+        if (!line) continue;
+        let evt;
+        try {
+          evt = JSON.parse(line);
+        } catch {
+          // Skip torn/malformed lines silently; JSONL append-atomicity
+          // protects whole-line atomicity, but we're defensive about
+          // operator-edited or partially-written files.
+          continue;
+        }
+        if (!evt?.id || !evt?.at || !evt?.type) continue;
+        this.append(evt);
+      }
+    }
+  }
+
   pendingDispatches() {
     if (!this.db) throw new Error("CompanyEventIndex: open() before pendingDispatches()");
     const sql = `
