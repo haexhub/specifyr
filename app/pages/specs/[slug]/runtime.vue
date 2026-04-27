@@ -13,8 +13,7 @@
 import { Activity, Network, History, Circle } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
-import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
-import ProjectViewTabs from "~/components/ProjectViewTabs.vue";
+import ProjectShell from "~/components/ProjectShell.vue";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 
 const route = useRoute();
@@ -163,13 +162,13 @@ function relativeTime(iso: string): string {
 </script>
 
 <template>
-  <div class="flex h-screen">
-    <ProjectStepSidebar
-      :slug="slug"
-      :project-title="project?.title"
-      :workflow="workflow"
-      :show-steps="false"
-    >
+  <ProjectShell
+    :slug="slug"
+    :project-title="project?.title"
+    :workflow="workflow"
+    :show-steps="false"
+  >
+    <template #sidebar>
       <div class="space-y-3 px-3 py-3 text-xs text-muted-foreground">
         <p class="font-medium text-foreground">Runtime</p>
         <div class="flex items-center gap-2">
@@ -191,21 +190,17 @@ function relativeTime(iso: string): string {
           </p>
         </div>
       </div>
-    </ProjectStepSidebar>
+    </template>
 
-    <div class="min-h-screen flex-1 overflow-y-auto p-6 lg:p-10">
-      <div class="mx-auto max-w-5xl space-y-6">
-        <!-- Header with view tabs + status badge -->
-        <header class="flex flex-wrap items-center justify-between gap-3">
-          <ProjectViewTabs :slug="slug" />
-          <Badge :variant="isRunning ? 'default' : 'secondary'">
-            <Circle
-              class="mr-1 size-2 fill-current"
-              :class="isRunning ? 'text-green-500' : 'text-muted-foreground'"
-            />
-            {{ companyStatus?.status ?? "idle" }}
-          </Badge>
-        </header>
+    <header class="flex flex-wrap items-center justify-end gap-3">
+      <Badge :variant="isRunning ? 'default' : 'secondary'">
+        <Circle
+          class="mr-1 size-2 fill-current"
+          :class="isRunning ? 'text-green-500' : 'text-muted-foreground'"
+        />
+        {{ companyStatus?.status ?? "idle" }}
+      </Badge>
+    </header>
 
         <!-- Idle state -->
         <Card v-if="!isRunning">
@@ -314,7 +309,5 @@ function relativeTime(iso: string): string {
             </CardContent>
           </Card>
         </template>
-      </div>
-    </div>
-  </div>
+  </ProjectShell>
 </template>
