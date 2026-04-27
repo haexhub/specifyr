@@ -858,6 +858,35 @@ test("event log: non-ceo dispatch → recipients includes ceo + delivers_to peer
   });
 });
 
+test("event log: failed status produces dispatch-failed event with recipients", async () => {
+  await withTempProject(async ({ proj, queueDev, queueDirs }) => {
+    const log = stubEventLog();
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: () => ({ async execute() { return { status: "failed", outputs: [] }; } }),
+      eventLog: log,
+    });
+    await runtime.start();
+
+    const dispatched = new Promise((resolve) => runtime.once("dispatched", resolve));
+    await fs.writeFile(path.join(queueDev, "doomed.yaml"), 'goal: "fail"\n');
+    await dispatched;
+    await new Promise((r) => setTimeout(r, 50));
+
+    const failed = log.captured.find((e) => e.type === "dispatch-failed");
+    assert.ok(failed, "expected a dispatch-failed event");
+    assert.equal(failed.role, "dev");
+    assert.equal(failed.status, "failed");
+    // dev reporter → recipients [ceo] (dev's delivers_to is [] in the valid fixture)
+    assert.deepEqual(failed.recipients, ["ceo"]);
+
+    await runtime.stop();
+  });
+});
+
 test("event log: parent_task_id from task YAML appears in events", async () => {
   await withTempProject(async ({ proj, queue, queueDirs }) => {
     const log = stubEventLog();
