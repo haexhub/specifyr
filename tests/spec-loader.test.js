@@ -103,3 +103,11 @@ test("validateReportingDag: rejects unknown reports_to with E_UNKNOWN_REPORTS_TO
   ]);
   assert.throws(() => validateReportingDag(agents), /E_UNKNOWN_REPORTS_TO.*dev.*ghost/);
 });
+
+test("validateReportingDag: rejects unknown delivers_to with E_UNKNOWN_DELIVERS_TO", () => {
+  const agents = new Map([
+    ["ceo", { role: "ceo", reports_to: null, delivers_to: [] }],
+    ["dev", { role: "dev", reports_to: "ceo", delivers_to: ["ghost"] }],
+  ]);
+  assert.throws(() => validateReportingDag(agents), /E_UNKNOWN_DELIVERS_TO.*dev.*ghost/);
+});

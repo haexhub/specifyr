@@ -112,6 +112,13 @@ export function validateReportingDag(agents) {
         `E_UNKNOWN_REPORTS_TO: agent '${role}' reports_to '${agent.reports_to}' which is not a known role`,
       );
     }
+    for (const peer of agent.delivers_to ?? []) {
+      if (!agents.has(peer)) {
+        throw new Error(
+          `E_UNKNOWN_DELIVERS_TO: agent '${role}' delivers_to '${peer}' which is not a known role`,
+        );
+      }
+    }
   }
 }
 
