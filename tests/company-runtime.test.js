@@ -887,6 +887,35 @@ test("event log: failed status produces dispatch-failed event with recipients", 
   });
 });
 
+test("event log: thrown runner error produces dispatch-error event", async () => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
+    const log = stubEventLog();
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: () => ({ async execute() { throw new Error("boom"); } }),
+      eventLog: log,
+    });
+    await runtime.start();
+
+    // Both `dispatch-error` (runtime EventEmitter) and the dispatcher's own
+    // teardown fire when execute() throws. We just need the runtime to settle.
+    const errorEmitted = new Promise((resolve) => runtime.once("dispatch-error", resolve));
+    await fs.writeFile(path.join(queue, "boom.yaml"), 'goal: "kaboom"\n');
+    await errorEmitted;
+    await new Promise((r) => setTimeout(r, 50));
+
+    const errEvt = log.captured.find((e) => e.type === "dispatch-error");
+    assert.ok(errEvt, "expected a dispatch-error event in the log");
+    assert.equal(errEvt.role, "ceo");
+    assert.match(errEvt.error, /boom/);
+
+    await runtime.stop();
+  });
+});
+
 test("event log: parent_task_id from task YAML appears in events", async () => {
   await withTempProject(async ({ proj, queue, queueDirs }) => {
     const log = stubEventLog();
