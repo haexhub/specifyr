@@ -50,6 +50,50 @@ test("CompanyEventLog: multiple events on same day go to one file in order", asy
   });
 });
 
+test("CompanyEventLog: write-through to index on append (architecture decision §3)", async () => {
+  await withTempDir(async (root) => {
+    const captured = [];
+    const stubIndex = { append(evt) { captured.push(evt); } };
+    const log = new CompanyEventLog({
+      baseDir: root,
+      clock: () => new Date("2026-04-28T10:30:00.000Z"),
+      index: stubIndex,
+    });
+    await log.append({ type: "dispatch-started", role: "ceo" });
+    assert.equal(captured.length, 1);
+    assert.equal(captured[0].type, "dispatch-started");
+    assert.equal(captured[0].role, "ceo");
+    assert.match(captured[0].id, /^[0-9a-f-]{36}$/);
+    assert.equal(captured[0].at, "2026-04-28T10:30:00.000Z");
+  });
+});
+
+test("CompanyEventLog: index error does NOT bubble — JSONL is the canonical source, index is best-effort", async () => {
+  await withTempDir(async (root) => {
+    const log = new CompanyEventLog({
+      baseDir: root,
+      clock: () => new Date("2026-04-28T10:30:00.000Z"),
+      index: { append() { throw new Error("db locked"); } },
+    });
+    // Append must succeed even if index write fails — JSONL is durable, index can be rebuilt.
+    await log.append({ type: "dispatch-started", role: "ceo" });
+    const content = await fs.readFile(path.join(root, "events", "2026-04-28.jsonl"), "utf8");
+    assert.match(content, /dispatch-started/);
+  });
+});
+
+test("CompanyEventLog: passing index: null disables write-through", async () => {
+  await withTempDir(async (root) => {
+    const log = new CompanyEventLog({
+      baseDir: root,
+      clock: () => new Date("2026-04-28T10:30:00.000Z"),
+      index: null,
+    });
+    // Should not crash, no index to write to.
+    await log.append({ type: "x" });
+  });
+});
+
 test("CompanyEventLog: rolls to a new file when UTC date changes", async () => {
   await withTempDir(async (root) => {
     let now = new Date("2026-04-28T23:59:00.000Z");

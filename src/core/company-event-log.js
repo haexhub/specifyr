@@ -26,12 +26,25 @@ export class CompanyEventLog {
    * @param {string} opts.baseDir
    * @param {() => Date} [opts.clock]    injectable for tests
    * @param {() => string} [opts.idFn]   injectable for tests
+   * @param {{append: (evt: object) => void} | null} [opts.index]
+   *        SQLite-backed read index. If provided, every JSONL append is
+   *        followed by `index.append()` in the same code path (write-through
+   *        per architecture_decisions.md §3). Pass `null` to disable.
    */
-  constructor({ baseDir, clock = () => new Date(), idFn = randomUUID } = {}) {
+  constructor({
+    baseDir,
+    clock = () => new Date(),
+    idFn = randomUUID,
+    index,
+  } = {}) {
     if (!baseDir) throw new Error("CompanyEventLog: baseDir required");
     this.baseDir = baseDir;
     this.clock = clock;
     this.idFn = idFn;
+    // index is opt-in via constructor. Default `undefined` means
+    // "no index" — caller (CompanyRuntime) wires one in. `null` is the
+    // explicit "disabled" sentinel for tests.
+    this.index = index ?? null;
   }
 
   /**
@@ -46,6 +59,16 @@ export class CompanyEventLog {
     const file = path.join(this.baseDir, "events", `${day}.jsonl`);
     await mkdir(path.dirname(file), { recursive: true });
     await appendFile(file, `${JSON.stringify(enriched)}\n`, "utf8");
+    // Write-through to index. JSONL is committed at this point; index is
+    // best-effort. If the SQLite write fails, the index has at most a missing
+    // row, and rebuildFromDisk() reconstructs it from the canonical JSONL.
+    if (this.index) {
+      try {
+        this.index.append(enriched);
+      } catch {
+        // Swallow: see contract above. A logger could surface this later.
+      }
+    }
     return { id, at, file };
   }
 }
