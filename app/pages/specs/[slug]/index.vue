@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ChevronRight, Trash2, Check, Lock, AlertTriangle, Loader2, Activity } from "lucide-vue-next";
+import { ChevronRight, Trash2, Check, Lock, AlertTriangle, Loader2 } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import ConfirmDialog from "~/components/ConfirmDialog.vue";
 import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
+import ProjectViewTabs from "~/components/ProjectViewTabs.vue";
 import NotificationLogWidget from "~/components/NotificationLogWidget.vue";
 import NotificationDrawer from "~/components/NotificationDrawer.vue";
 import InstalledExtensionsWidget from "~/components/InstalledExtensionsWidget.vue";
@@ -152,31 +153,26 @@ async function deleteProject() {
 
     <div class="min-h-screen flex-1 overflow-y-auto p-6 lg:p-10">
       <div class="mx-auto max-w-4xl space-y-6">
-        <header class="space-y-2">
-          <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">{{ project.slug }}</p>
+        <header class="space-y-3">
           <div class="flex flex-wrap items-center justify-between gap-3">
-            <h1 class="text-2xl font-semibold tracking-tight">{{ project.title }}</h1>
-            <div class="flex items-center gap-2">
-              <NuxtLink :to="`/specs/${slug}/runtime`">
-                <Button variant="outline" size="sm">
-                  <Activity class="mr-1.5 size-3.5" />
-                  Runtime-View
-                </Button>
-              </NuxtLink>
-              <Button
-                variant="ghost"
-                size="sm"
-                class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                @click="deleteDialogOpen = true"
-              >
-                <Trash2 class="mr-1.5 size-3.5" />
-                Projekt löschen
-              </Button>
-            </div>
+            <ProjectViewTabs :slug="slug" />
+            <Button
+              variant="ghost"
+              size="sm"
+              class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+              @click="deleteDialogOpen = true"
+            >
+              <Trash2 class="mr-1.5 size-3.5" />
+              Projekt löschen
+            </Button>
           </div>
-          <p v-if="project.description" class="text-sm leading-6 text-muted-foreground">
-            {{ project.description }}
-          </p>
+          <div class="space-y-1">
+            <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">{{ project.slug }}</p>
+            <h1 class="text-2xl font-semibold tracking-tight">{{ project.title }}</h1>
+            <p v-if="project.description" class="text-sm leading-6 text-muted-foreground">
+              {{ project.description }}
+            </p>
+          </div>
         </header>
 
         <Card>

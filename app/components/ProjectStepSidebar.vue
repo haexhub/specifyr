@@ -4,14 +4,20 @@ import { isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import type { StepState } from "~/lib/types";
 
-const props = defineProps<{
-  slug: string;
-  projectTitle?: string;
-  activeStepId?: StepId;
-  // Parent passes the full workflow definition (from the project snapshot's workflowDefinition).
-  // Falls back to spec-kit if missing so the sidebar stays usable before the snapshot lands.
-  workflow?: Workflow | null;
-}>();
+const props = withDefaults(
+  defineProps<{
+    slug: string;
+    projectTitle?: string;
+    activeStepId?: StepId;
+    // Parent passes the full workflow definition (from the project snapshot's workflowDefinition).
+    // Falls back to spec-kit if missing so the sidebar stays usable before the snapshot lands.
+    workflow?: Workflow | null;
+    // Show the Steps list at the bottom. Speckit views want this; Runtime view
+    // doesn't (the bottom section there is empty or filled via the slot).
+    showSteps?: boolean;
+  }>(),
+  { showSteps: true },
+);
 
 const workflow = computed(() => resolveWorkflow(props.workflow?.id, props.workflow ?? null));
 const steps = computed(() => workflow.value.steps);
@@ -67,7 +73,7 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
       <slot />
     </div>
 
-    <div class="border-t border-border/60 p-2">
+    <div v-if="showSteps" class="border-t border-border/60 p-2">
       <p class="px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
         Steps
       </p>
