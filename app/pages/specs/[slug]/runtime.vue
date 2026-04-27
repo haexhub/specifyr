@@ -14,10 +14,29 @@ import { Activity, Network, History, Circle } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
 import ProjectShell from "~/components/ProjectShell.vue";
+import AgentDetailDrawer from "~/components/AgentDetailDrawer.vue";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 
 const route = useRoute();
+const router = useRouter();
 const slug = computed(() => route.params.slug as string);
+
+// Selected agent role lives in the URL (?agent=<role>) so the selection is
+// deep-linkable and survives page reloads. Browser back closes the panel.
+const selectedRole = computed(() => {
+  const v = route.query.agent;
+  return typeof v === "string" && v.length > 0 ? v : null;
+});
+
+function selectAgent(role: string) {
+  router.replace({ query: { ...route.query, agent: role } });
+}
+
+function closeDetail() {
+  const next = { ...route.query };
+  delete next.agent;
+  router.replace({ query: next });
+}
 
 interface AgentStatus {
   role: string;
@@ -133,6 +152,12 @@ function childrenOf(parentRole: string): AgentStatus[] {
   const agents = companyStatus.value?.agents ?? [];
   return agents.filter((a) => a.reports_to === parentRole);
 }
+
+const selectedAgent = computed<AgentStatus | null>(() => {
+  if (!selectedRole.value) return null;
+  const agents = companyStatus.value?.agents ?? [];
+  return agents.find((a) => a.role === selectedRole.value) ?? null;
+});
 
 function eventDotColor(type: string): string {
   if (type === "dispatch-started") return "text-blue-500";
@@ -253,26 +278,34 @@ function relativeTime(iso: string): string {
             </CardHeader>
             <CardContent class="space-y-3">
               <div v-for="root in orgRoots" :key="root.role" class="space-y-2">
-                <div class="rounded-md bg-primary/10 px-3 py-2">
+                <button
+                  type="button"
+                  class="block w-full rounded-md bg-primary/10 px-3 py-2 text-left transition hover:bg-primary/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  :class="{ 'ring-2 ring-primary': selectedRole === root.role }"
+                  @click="selectAgent(root.role)"
+                >
                   <div class="font-medium">{{ root.role }}</div>
                   <div v-if="root.delivers_to.length" class="mt-1 text-xs text-muted-foreground">
                     liefert an: {{ root.delivers_to.join(", ") }}
                   </div>
-                </div>
+                </button>
                 <div
                   v-if="childrenOf(root.role).length"
                   class="ml-6 space-y-2 border-l border-muted pl-4"
                 >
-                  <div
+                  <button
                     v-for="child in childrenOf(root.role)"
                     :key="child.role"
-                    class="rounded-md border bg-muted/30 px-3 py-2"
+                    type="button"
+                    class="block w-full rounded-md border bg-muted/30 px-3 py-2 text-left transition hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    :class="{ 'ring-2 ring-primary': selectedRole === child.role }"
+                    @click="selectAgent(child.role)"
                   >
                     <div class="font-medium">{{ child.role }}</div>
                     <div v-if="child.delivers_to.length" class="mt-1 text-xs text-muted-foreground">
                       liefert an: {{ child.delivers_to.join(", ") }}
                     </div>
-                  </div>
+                  </button>
                 </div>
               </div>
             </CardContent>
@@ -309,5 +342,12 @@ function relativeTime(iso: string): string {
             </CardContent>
           </Card>
         </template>
+
+    <AgentDetailDrawer
+      :agent="selectedAgent"
+      :events="events"
+      :pending-dispatches="pendingDispatches"
+      @close="closeDetail"
+    />
   </ProjectShell>
 </template>
