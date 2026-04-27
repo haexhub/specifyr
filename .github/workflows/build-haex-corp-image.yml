@@ -30,6 +30,9 @@ on:
   push:
     branches:
       - main
+      # Default branch today is feature/speckit-company-extension. Listed
+      # explicitly so the workflow runs before that work merges into main.
+      - feature/speckit-company-extension
     tags:
       - "haex-corp-v*"
     paths:
