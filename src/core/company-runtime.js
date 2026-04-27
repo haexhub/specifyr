@@ -43,7 +43,7 @@ export class CompanyRuntime extends EventEmitter {
   constructor({
     projectRoot,
     orgDir,
-    queueDir,
+    queueDirs,
     runnerFactory,
     hermesBinary = "hermes",
     catalogDir,
@@ -55,20 +55,28 @@ export class CompanyRuntime extends EventEmitter {
     super();
     if (!projectRoot) throw new Error("CompanyRuntime: projectRoot required");
     if (!orgDir) throw new Error("CompanyRuntime: orgDir required");
-    if (!queueDir) throw new Error("CompanyRuntime: queueDir required");
+    if (!queueDirs || typeof queueDirs !== "object" || Array.isArray(queueDirs)) {
+      throw new Error("CompanyRuntime: queueDirs map required ({ [role]: dir })");
+    }
+    if (Object.keys(queueDirs).length === 0) {
+      throw new Error("CompanyRuntime: queueDirs must contain at least one entry");
+    }
+    if (!queueDirs[ceoRole]) {
+      throw new Error(`CompanyRuntime: queueDirs missing entry for ceoRole '${ceoRole}'`);
+    }
     this.projectRoot = projectRoot;
     this.orgDir = orgDir;
-    this.queueDir = queueDir;
+    this.queueDirs = { ...queueDirs };
     this.catalogDir = catalogDir; // optional; if set, references are resolved & validated
     this.hermesBinary = hermesBinary;
-    // slug for runtimeContext; defaults to <queueDir parent>'s name —
-    // queueDir convention is `<root>/.specops/<slug>/queue/`.
-    this.slug = slug ?? path.basename(path.dirname(queueDir));
+    // slug for runtimeContext; defaults to CEO queue's grandparent dir —
+    // convention is `<root>/.specops/<slug>/queue-<role>/`.
+    this.slug = slug ?? path.basename(path.dirname(queueDirs[ceoRole]));
     this.ceoRole = ceoRole;
     this.runnerFactory =
       runnerFactory ?? defaultRunnerFactory({ projectRoot, hermesBinary });
     this.runners = new Map(); // role -> runner
-    this.poller = null;
+    this.pollers = new Map(); // role -> QueuePoller
     this.worktrees = new WorktreeManager({ repoRoot: projectRoot });
     this.company = null;
     this.catalog = null;
@@ -84,12 +92,17 @@ export class CompanyRuntime extends EventEmitter {
     // single-host service. Override-able via constructor for deterministic
     // tests.
     this.opsToken = opsToken ?? randomBytes(32).toString("hex");
-    // Dispatch state (queue → runner). Serial FIFO: one task at a time
-    // because the CEO is `runner_type: persistent` and we don't want
-    // concurrent containers stepping on each other for the same project.
-    this._dispatchQueue = [];
-    this._dispatching = false;
-    this._inFlightPaths = new Set(); // dedup re-fires while a path is processing
+    // Dispatch state — per-role serial FIFO, but roles run concurrently.
+    // Each agent container is isolated (own profile dir, own Docker
+    // container), so two roles can be mid-execute without stepping on
+    // each other. Within a role we stay serial because (a) `runner_type:
+    // persistent` agents must not have two concurrent containers for the
+    // same project, and (b) ordering inside a single role's queue is a
+    // useful default — we want "fix bug A, then fix bug B" to actually
+    // happen in that order.
+    this._dispatchQueues = new Map(); // role -> [{path, task, role}]
+    this._dispatching = new Map(); // role -> boolean
+    this._inFlightPaths = new Set(); // dedup re-fires across all roles (paths are unique)
   }
 
   async start() {
@@ -116,6 +129,16 @@ export class CompanyRuntime extends EventEmitter {
       }
     }
 
+    // Validate: every agent role must have a queueDir entry, otherwise tasks
+    // dropped for that role would be silently lost (no poller, no dispatch).
+    // Extra queueDirs entries that don't map to an active agent are tolerated
+    // and simply skipped — harmless leftover config.
+    for (const role of this.company.agents.keys()) {
+      if (!this.queueDirs[role]) {
+        throw new Error(`CompanyRuntime: agent role '${role}' has no queueDirs entry`);
+      }
+    }
+
     // Provision per-agent Hermes profile dirs (lazy-create; Hermes initializes on first use).
     // The runnerFactory receives runtime-loaded context as its second arg —
     // currently the catalog, so docker runners can resolve binary wildcards.
@@ -126,66 +149,88 @@ export class CompanyRuntime extends EventEmitter {
       this.runners.set(agent.role, this.runnerFactory(agent, { catalog: this.catalog }));
     }
 
-    // Queue polling: emits 'task' for every yaml dropped in queueDir.
-    this.poller = new QueuePoller({ queueDir: this.queueDir });
-    this.poller.on("task", (evt) => {
-      this.emit("task", evt);
-      this._enqueueDispatch(evt);
-    });
-    this.poller.on("task-removed", (evt) => this.emit("task-removed", evt));
-    this.poller.on("error", (err) => this.emit("error", err));
-    await this.poller.start();
+    // One QueuePoller per active agent role. Each poller emits 'task'
+    // independently; we tag the event with `role` before re-emitting /
+    // enqueueing, so the dispatcher knows which runner to invoke.
+    for (const role of this.company.agents.keys()) {
+      const dir = this.queueDirs[role];
+      const poller = new QueuePoller({ queueDir: dir });
+      poller.on("task", (evt) => {
+        const tagged = { ...evt, role };
+        this.emit("task", tagged);
+        this._enqueueDispatch(tagged);
+      });
+      poller.on("task-removed", (evt) => this.emit("task-removed", { ...evt, role }));
+      poller.on("error", (err) => this.emit("error", err));
+      await poller.start();
+      this.pollers.set(role, poller);
+    }
     this.emit("started", { agents: [...this.company.agents.keys()] });
   }
 
   /**
    * Enqueue a task event for dispatch. Drops re-fires for a path that's
    * already processing or queued (chokidar can fire multiple add/change
-   * events for the same write).
+   * events for the same write). Routes into the per-role queue; the
+   * dispatcher for that role drains independently of other roles.
    */
   _enqueueDispatch(evt) {
     if (this._inFlightPaths.has(evt.path)) return;
     this._inFlightPaths.add(evt.path);
-    this._dispatchQueue.push(evt);
-    this._processNextDispatch();
+    if (!this._dispatchQueues.has(evt.role)) {
+      this._dispatchQueues.set(evt.role, []);
+    }
+    this._dispatchQueues.get(evt.role).push(evt);
+    this._processNextDispatch(evt.role);
   }
 
-  async _processNextDispatch() {
-    if (this._dispatching) return;
-    if (this._dispatchQueue.length === 0) return;
-    if (!this.poller) return; // stopped
-    this._dispatching = true;
-    const evt = this._dispatchQueue.shift();
+  /**
+   * Drain the next task from one role's queue. Concurrent calls for the
+   * SAME role are no-ops (the in-flight call will recurse on completion);
+   * concurrent calls for DIFFERENT roles run in parallel — that's the
+   * whole point of 8.2.
+   */
+  async _processNextDispatch(role) {
+    if (this._dispatching.get(role)) return;
+    const queue = this._dispatchQueues.get(role);
+    if (!queue || queue.length === 0) return;
+    if (this.pollers.size === 0) return; // stopped
+    this._dispatching.set(role, true);
+    const evt = queue.shift();
     try {
-      await this._dispatchToCEO(evt);
+      await this._dispatchToRole(role, evt);
     } catch (err) {
-      this.emit("dispatch-error", { path: evt.path, error: err });
+      this.emit("dispatch-error", { path: evt.path, role, error: err });
     } finally {
       this._inFlightPaths.delete(evt.path);
-      this._dispatching = false;
-      // Process the next entry, if any.
-      this._processNextDispatch();
+      this._dispatching.set(role, false);
+      // Drain the same role's queue further. Different roles' loops are
+      // unaffected — they're each running their own _processNextDispatch.
+      this._processNextDispatch(role);
     }
   }
 
   /**
-   * Hand a parsed task off to the CEO runner. The CEO is configured via
-   * `ceoRole` (default "ceo"). On `status === "completed"`, the queue YAML
-   * is removed; on failure it's left in place so the next start picks it
-   * up again (simple retry-on-restart semantic).
+   * Hand a parsed task off to the runner for `role`. On `status === "completed"`,
+   * the queue YAML is removed; on failure it's left in place so the next start
+   * picks it up again (simple retry-on-restart semantic).
+   *
+   * 8.1 keeps the existing single-flight serial loop. 8.2 will split serial
+   * state per-role so workers can run concurrently across roles.
    */
-  async _dispatchToCEO(evt) {
-    const runner = this.runners.get(this.ceoRole);
+  async _dispatchToRole(role, evt) {
+    const runner = this.runners.get(role);
     if (!runner) {
       this.emit("dispatch-error", {
         path: evt.path,
-        error: new Error(`No runner for role '${this.ceoRole}'; cannot dispatch`),
+        role,
+        error: new Error(`No runner for role '${role}'; cannot dispatch`),
       });
       return;
     }
     if (typeof runner.execute !== "function") {
       // Stub runner from tests: just record dispatch attempt and bail.
-      this.emit("dispatched", { path: evt.path, role: this.ceoRole, result: null });
+      this.emit("dispatched", { path: evt.path, role, result: null });
       return;
     }
 
@@ -197,9 +242,9 @@ export class CompanyRuntime extends EventEmitter {
       provider: { name: "anthropic" },
     };
 
-    this.emit("dispatch-started", { path: evt.path, role: this.ceoRole, workItem });
+    this.emit("dispatch-started", { path: evt.path, role, workItem });
     const result = await runner.execute(workItem, runtimeContext);
-    this.emit("dispatched", { path: evt.path, role: this.ceoRole, result });
+    this.emit("dispatched", { path: evt.path, role, result });
 
     if (result?.status === "completed") {
       try {
@@ -207,21 +252,24 @@ export class CompanyRuntime extends EventEmitter {
       } catch (err) {
         // Already deleted by another consumer or never existed — non-fatal.
         if (err?.code !== "ENOENT") {
-          this.emit("dispatch-error", { path: evt.path, error: err });
+          this.emit("dispatch-error", { path: evt.path, role, error: err });
         }
       }
     }
   }
 
   async stop() {
-    if (this.poller) await this.poller.stop();
-    this.poller = null;
+    for (const poller of this.pollers.values()) {
+      await poller.stop();
+    }
+    this.pollers.clear();
     this.runners.clear();
     // Drop pending dispatches; in-flight executions race their own runner
     // teardown. Callers should `await stop()` after `await runtime.start()`
     // returns idle, but if a dispatch is mid-execute() the runner's own
     // commandRunner timeout governs cleanup.
-    this._dispatchQueue.length = 0;
+    this._dispatchQueues.clear();
+    this._dispatching.clear();
     this._inFlightPaths.clear();
     this.emit("stopped");
   }
@@ -291,20 +339,35 @@ export class CompanyRuntime extends EventEmitter {
   }
 
   /**
-   * Snapshot for status endpoints. Returns "running" only when the poller
-   * is live; once stop() runs it flips to "stopped". `queueDepth` is the
-   * number of task YAMLs sitting in the queue dir at call time.
+   * Snapshot for status endpoints. Returns "running" only when at least one
+   * poller is live; once stop() runs it flips to "stopped". `queueDepth` is
+   * the sum across all role queues.
    */
   getStatus() {
+    const running = this.pollers.size > 0;
+    let queueDepth = 0;
+    for (const poller of this.pollers.values()) {
+      queueDepth += poller.getPendingCount();
+    }
     return {
-      status: this.poller ? "running" : "stopped",
+      status: running ? "running" : "stopped",
       agents: this.listAgents().map((a) => ({
         role: a.role,
         capabilities: a.capabilities,
         resources: a.resources ?? null,
       })),
-      queueDepth: this.poller ? this.poller.getPendingCount() : 0,
+      queueDepth,
     };
+  }
+
+  /**
+   * Resolve the on-disk queue directory for a given role. Used by the
+   * dispatch endpoint (8.3) to write a sub-task YAML where the per-role
+   * poller will pick it up.
+   * @returns {string|null} absolute path, or null for unknown role
+   */
+  getRoleQueueDir(role) {
+    return this.queueDirs[role] ?? null;
   }
 
   /**

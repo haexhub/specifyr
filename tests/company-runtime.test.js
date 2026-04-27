@@ -12,27 +12,35 @@ const validFixture = path.join(__dirname, "fixtures", "spec-loader", "valid");
 
 async function withTempProject(fn) {
   const proj = await fs.mkdtemp(path.join(os.tmpdir(), "cr-"));
-  const queue = path.join(proj, "queue");
-  await fs.mkdir(queue, { recursive: true });
+  // The valid fixture has two active roles (ceo + dev). Provision a
+  // queue-<role>/ for each so the runtime's start-time validation passes.
+  const queueCeo = path.join(proj, ".specops", "demo", "queue-ceo");
+  const queueDev = path.join(proj, ".specops", "demo", "queue-dev");
+  await fs.mkdir(queueCeo, { recursive: true });
+  await fs.mkdir(queueDev, { recursive: true });
+  const queueDirs = { ceo: queueCeo, dev: queueDev };
   try {
-    await fn({ proj, queue });
+    // Keep the legacy `queue` shorthand pointing at the CEO queue so
+    // existing test bodies that drop YAML files into "queue" continue to
+    // work without per-test changes.
+    await fn({ proj, queue: queueCeo, queueDev, queueDirs });
   } finally {
     await fs.rm(proj, { recursive: true, force: true });
   }
 }
 
 test("opsToken is auto-generated as a 64-char hex string", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const a = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       runnerFactory: () => ({ stub: true }),
     });
     const b = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       runnerFactory: () => ({ stub: true }),
     });
     assert.match(a.opsToken, /^[0-9a-f]{64}$/);
@@ -41,11 +49,11 @@ test("opsToken is auto-generated as a 64-char hex string", async () => {
 });
 
 test("opsToken is overridable for deterministic tests", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       runnerFactory: () => ({ stub: true }),
       opsToken: "fixed-token-for-tests",
     });
@@ -54,11 +62,11 @@ test("opsToken is overridable for deterministic tests", async () => {
 });
 
 test("start() loads agents and provisions per-agent .hermes dirs", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       runnerFactory: () => ({ stub: true }),
     });
     await runtime.start();
@@ -76,11 +84,11 @@ test("start() loads agents and provisions per-agent .hermes dirs", async () => {
 });
 
 test("authorize() delegates to capability-gate for the given role", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       runnerFactory: () => ({ stub: true }),
     });
     await runtime.start();
@@ -100,11 +108,11 @@ test("authorize() delegates to capability-gate for the given role", async () => 
 });
 
 test("emits 'task' when a yaml file is dropped into the queue", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       runnerFactory: () => ({ stub: true }),
     });
     await runtime.start();
@@ -125,13 +133,13 @@ test("emits 'task' when a yaml file is dropped into the queue", async () => {
 });
 
 test("rejects start() when constitution.md is missing", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const orgDir = path.join(proj, "empty-org");
     await fs.mkdir(path.join(orgDir, "agents"), { recursive: true });
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir,
-      queueDir: queue,
+      queueDirs,
       runnerFactory: () => ({ stub: true }),
     });
     await assert.rejects(() => runtime.start(), /missing constitution/);
@@ -139,7 +147,7 @@ test("rejects start() when constitution.md is missing", async () => {
 });
 
 test("with a catalogDir, getResolvedTools/Skills hydrate references", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const catalogDir = path.join(proj, "catalog");
     await fs.mkdir(path.join(catalogDir, "tools"), { recursive: true });
     await fs.mkdir(path.join(catalogDir, "skills"), { recursive: true });
@@ -170,7 +178,7 @@ Red green refactor.
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       catalogDir,
       runnerFactory: () => ({ stub: true }),
     });
@@ -190,7 +198,7 @@ Red green refactor.
 });
 
 test("with a catalogDir, dangling references abort start()", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const catalogDir = path.join(proj, "catalog");
     await fs.mkdir(path.join(catalogDir, "tools"), { recursive: true });
     await fs.mkdir(path.join(catalogDir, "skills"), { recursive: true });
@@ -198,7 +206,7 @@ test("with a catalogDir, dangling references abort start()", async () => {
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       catalogDir,
       runnerFactory: () => ({ stub: true }),
     });
@@ -270,12 +278,12 @@ function recordingRunnerFactory(record) {
 }
 
 test("dispatch: drops a task in queue → CEO runner receives execute() call → file is unlinked", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const calls = [];
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       slug: "demo",
       runnerFactory: recordingRunnerFactory(calls),
     });
@@ -309,7 +317,7 @@ test("dispatch: drops a task in queue → CEO runner receives execute() call →
 });
 
 test("dispatch: tasks process serially even if dropped concurrently", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     let inFlight = 0;
     let maxInFlight = 0;
     const order = [];
@@ -328,7 +336,7 @@ test("dispatch: tasks process serially even if dropped concurrently", async () =
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       slug: "demo",
       runnerFactory,
     });
@@ -359,12 +367,173 @@ test("dispatch: tasks process serially even if dropped concurrently", async () =
   });
 });
 
-test("dispatch: failed status leaves the file in place (retry on restart)", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+test("dispatch: tasks for different roles run concurrently (one in-flight per role)", async () => {
+  await withTempProject(async ({ proj, queue, queueDev, queueDirs }) => {
+    // Per-role in-flight counters — we expect each role to peak at 1
+    // (serial within role) but BOTH roles in-flight at once (parallel
+    // across roles). That's the 8.2 invariant.
+    const inFlight = new Map();
+    let observedBothInFlight = false;
+    const release = new Map(); // role -> resolver fn
+
+    const runnerFactory = (agent) => ({
+      async execute() {
+        inFlight.set(agent.role, (inFlight.get(agent.role) ?? 0) + 1);
+        if ((inFlight.get("ceo") ?? 0) > 0 && (inFlight.get("dev") ?? 0) > 0) {
+          observedBothInFlight = true;
+        }
+        // Park the executor until the test releases it. This keeps both
+        // roles' tasks "in flight" simultaneously so the assertion is
+        // observed before either completes.
+        await new Promise((resolve) => release.set(agent.role, resolve));
+        inFlight.set(agent.role, inFlight.get(agent.role) - 1);
+        return { status: "completed", outputs: [] };
+      },
+    });
+
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
+      slug: "demo",
+      runnerFactory,
+    });
+    await runtime.start();
+
+    // Drop one task for each role.
+    await Promise.all([
+      fs.writeFile(path.join(queue, "ceo-task.yaml"), 'goal: "ceo work"\n'),
+      fs.writeFile(path.join(queueDev, "dev-task.yaml"), 'goal: "dev work"\n'),
+    ]);
+
+    // Wait until both runners are parked (both have registered their
+    // resolver). Bounded by a 2s timeout to fail loudly if dispatch is
+    // accidentally serial across roles.
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline) {
+      if (release.has("ceo") && release.has("dev")) break;
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    assert.ok(release.has("ceo"), "CEO runner did not start within 2s");
+    assert.ok(release.has("dev"), "Dev runner did not start within 2s");
+    assert.equal(observedBothInFlight, true, "expected both roles in-flight at once");
+
+    // Now release both so the runtime can clean up.
+    release.get("ceo")();
+    release.get("dev")();
+
+    // Wait for both completions to drain.
+    let dispatched = 0;
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("only got " + dispatched + " dispatches")), 2000);
+      runtime.on("dispatched", () => {
+        if (++dispatched === 2) {
+          clearTimeout(t);
+          resolve();
+        }
+      });
+    });
+
+    await runtime.stop();
+  });
+});
+
+test("dispatch: task dropped in queue-dev/ routes to the dev runner (not CEO)", async () => {
+  await withTempProject(async ({ proj, queueDev, queueDirs }) => {
+    const calls = [];
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: recordingRunnerFactory(calls),
+    });
+    await runtime.start();
+
+    const dispatched = new Promise((resolve, reject) => {
+      const t = setTimeout(() => reject(new Error("dispatch timeout")), 2000);
+      runtime.once("dispatched", (p) => {
+        clearTimeout(t);
+        resolve(p);
+      });
+    });
+
+    const taskPath = path.join(queueDev, "code.yaml");
+    await fs.writeFile(taskPath, 'goal: "write code"\n');
+
+    const evt = await dispatched;
+    assert.equal(evt.role, "dev", "dispatch event must be tagged with the source role");
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].role, "dev", "dev runner.execute() should have been called, not CEO");
+
+    await runtime.stop();
+  });
+});
+
+test("getRoleQueueDir(role) returns the configured dir, null for unknown roles", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+    });
+    assert.equal(runtime.getRoleQueueDir("ceo"), queueDirs.ceo);
+    assert.equal(runtime.getRoleQueueDir("dev"), queueDirs.dev);
+    assert.equal(runtime.getRoleQueueDir("ghost"), null);
+  });
+});
+
+test("start(): throws if an agent role has no queueDirs entry", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    // Drop the dev queue → fixture has dev as an active agent → should throw
+    const incomplete = { ceo: queueDirs.ceo };
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs: incomplete,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+    });
+    await assert.rejects(
+      () => runtime.start(),
+      /agent role 'dev' has no queueDirs entry/,
+    );
+  });
+});
+
+test("constructor: rejects missing queueDirs / missing CEO entry", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    assert.throws(
+      () =>
+        new CompanyRuntime({
+          projectRoot: proj,
+          orgDir: validFixture,
+          // no queueDirs at all
+          runnerFactory: () => ({ stub: true }),
+        }),
+      /queueDirs map required/,
+    );
+    assert.throws(
+      () =>
+        new CompanyRuntime({
+          projectRoot: proj,
+          orgDir: validFixture,
+          queueDirs: { dev: queueDirs.dev }, // CEO missing
+          runnerFactory: () => ({ stub: true }),
+        }),
+      /missing entry for ceoRole/,
+    );
+  });
+});
+
+test("dispatch: failed status leaves the file in place (retry on restart)", async () => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
       slug: "demo",
       runnerFactory: () => ({
         async execute() {
@@ -403,12 +572,12 @@ function recordingApprovalService(decision = "approved") {
 const sensitiveOrgFixture = path.join(__dirname, "fixtures", "spec-loader", "valid");
 
 test("authorizeWithApproval: short-circuits when capability is denied", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const approvals = recordingApprovalService();
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: sensitiveOrgFixture,
-      queueDir: queue,
+      queueDirs,
       slug: "demo",
       runnerFactory: () => ({ stub: true }),
       approvalService: approvals,
@@ -428,12 +597,12 @@ test("authorizeWithApproval: short-circuits when capability is denied", async ()
 });
 
 test("authorizeWithApproval: returns immediately when no approval is required", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const approvals = recordingApprovalService();
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: sensitiveOrgFixture,
-      queueDir: queue,
+      queueDirs,
       slug: "demo",
       runnerFactory: () => ({ stub: true }),
       approvalService: approvals,
@@ -452,7 +621,7 @@ test("authorizeWithApproval: returns immediately when no approval is required", 
 });
 
 test("authorizeWithApproval: sensitive cap → calls approvalService and forwards decision", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     // Custom org with a CEO that has a sensitive capability granted
     const orgDir = path.join(proj, "org");
     await fs.mkdir(path.join(orgDir, "agents"), { recursive: true });
@@ -482,7 +651,7 @@ test("authorizeWithApproval: sensitive cap → calls approvalService and forward
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir,
-      queueDir: queue,
+      queueDirs,
       slug: "demo",
       runnerFactory: () => ({ stub: true }),
       approvalService: approvals,
@@ -507,7 +676,7 @@ test("authorizeWithApproval: sensitive cap → calls approvalService and forward
 });
 
 test("authorizeWithApproval: denied/escalated decision → allowed=false with approval shape", async () => {
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const orgDir = path.join(proj, "org");
     await fs.mkdir(path.join(orgDir, "agents"), { recursive: true });
     await fs.writeFile(
@@ -534,7 +703,7 @@ test("authorizeWithApproval: denied/escalated decision → allowed=false with ap
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir,
-      queueDir: queue,
+      queueDirs,
       slug: "demo",
       runnerFactory: () => ({ stub: true }),
       approvalService: approvals,
@@ -556,11 +725,11 @@ test("authorizeWithApproval: denied/escalated decision → allowed=false with ap
 test("dispatch: stub runner without execute() emits 'dispatched' with null result and does not throw", async () => {
   // This is the existing test-fixture pattern — confirm we did not break
   // tests that pass `() => ({ stub: true })` runnerFactories.
-  await withTempProject(async ({ proj, queue }) => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
     const runtime = new CompanyRuntime({
       projectRoot: proj,
       orgDir: validFixture,
-      queueDir: queue,
+      queueDirs,
       slug: "demo",
       runnerFactory: () => ({ stub: true }),
     });

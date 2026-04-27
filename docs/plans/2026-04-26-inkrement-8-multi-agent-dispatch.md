@@ -1,4 +1,50 @@
-# Inkrement 8 — Multi-Agent Dispatch (next session)
+# Inkrement 8 — Multi-Agent Dispatch
+
+## Status
+
+- **8.1 — Generalize QueuePoller registration: ✅ landed (2026-04-27)**
+  - `queueDir` → `queueDirs: { [role]: dir }` (hard rename, no shim)
+  - One QueuePoller per role; events tagged with role; `_dispatchToCEO` → `_dispatchToRole`
+  - Per-role queue dir convention: `<root>/.specops/<slug>/queue-<role>/`
+  - 6 new tests added; 180/180 baseline green
+- **8.2 — Per-role serial dispatch state: ✅ landed (2026-04-27)**
+  - `_dispatchQueue`/`_dispatching` → `Map<role, ...>`; `_inFlightPaths` stays global
+  - `_processNextDispatch(role)` is re-entrant per role; same-role guard prevents double-drain, different roles run in parallel
+  - New test verifies 2 roles' tasks are simultaneously in-flight (parked-promise pattern)
+  - 181/181 baseline green
+- **8.3 — `POST /mcp/<slug>/dispatch` endpoint: ✅ landed (2026-04-27)**
+  - Pure helpers in `src/core/mcp-dispatch.js`: `validateDispatchBody`,
+    `buildTaskId`, `buildDispatchYaml`
+  - HTTP handler at `server/api/mcp/[slug]/dispatch.post.ts`
+  - `source: "agent:<ceoRole>"` injected authoritatively (caller cannot
+    override) — aligns with 10a audit trail
+  - 14 helper unit tests; HTTP handler thin per project convention
+  - No idempotency in v1 (retries → duplicate tickets, accepted)
+- **8.4 — Multi-agent E2E test: ✅ landed (2026-04-27)**
+  - **8.4a smoketest** (always runs): stub-runner factory; CEO uses
+    `buildDispatchYaml`+`buildTaskId` to drop into dev queue; dev writes
+    artefact. Validates the multi-agent flow mechanics in <200ms, no
+    LLM/Docker dependency. CI-runnable.
+  - **8.4b LLM E2E** (gated by `RUN_E2E_TESTS=1`): real Docker
+    containers + real Anthropic. Test spawns a Node http server that
+    mounts the dispatch endpoint logic; CEO container reaches it via
+    Linux Docker bridge gateway (172.17.0.1, configurable). CEO prompt
+    contains literal curl invocation; CEO calls dispatch endpoint;
+    dev container picks up sub-task; dev writes artefact.
+    Local-only (CI cannot pay for tokens).
+  - 202 tests total (200 pass + 2 E2E skipped without env gates)
+- **8.5 — Tests for the dispatch endpoint logic: ✅ landed with 8.3** (helpers fully covered;
+  HTTP handler stays manually-tested per project convention)
+
+## Open Questions — resolved
+
+1. **Queue dir rename**: queue/ → queue-ceo/. ✅ done in 8.1.
+2. **Concurrent dispatches per role / `runner_type: parallel`**:
+   defer; today no agent uses parallel. TODO in dispatch loop.
+3. **Task ID format**: `<UTC-ISO-no-colons>-<8hex>.yaml`,
+   e.g. `2026-04-27T10-30-45-123Z-a1b2c3d4.yaml`. Sortable + collision-safe.
+4. **CEO-knows-the-token**: ACK; token is callback credential, not
+   privacy secret. No code change.
 
 ## Context
 

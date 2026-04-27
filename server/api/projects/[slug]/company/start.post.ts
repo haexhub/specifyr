@@ -16,7 +16,7 @@
  *
  * Path layout convention (matches existing endpoints):
  *   <projectCwd>/.specify/org/                  org dir (constitution + agents)
- *   <projectCwd>/.specops/<slug>/queue/         task queue
+ *   <projectCwd>/.specops/<slug>/queue-<role>/  per-role task queues
  *   <repo-root>/catalog/                        global catalog (shared)
  */
 
@@ -32,7 +32,25 @@ import {
   registerCompany,
 } from "../../../../utils/company-manager";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
+
+// Pre-load the company spec so we know which agent roles exist. The
+// runtime needs an explicit `queueDirs: { [role]: dir }` map at
+// construction time, and the only source of truth for "which roles" is
+// the org spec on disk. Re-loading inside runtime.start() is idempotent
+// (pure fs reads), so the duplicate cost is negligible.
+async function loadAgentRoles(orgDir: string): Promise<string[]> {
+  const url = pathToFileURL(path.join(process.cwd(), "src/agents/spec-loader.js")).href;
+  const mod = (await import(url)) as {
+    loadAgents: (
+      dir: string,
+      opts?: { includeRetired?: boolean }
+    ) => Promise<Map<string, { role: string }>>;
+  };
+  const agents = await mod.loadAgents(orgDir);
+  return [...agents.keys()];
+}
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -54,7 +72,7 @@ export default defineEventHandler(async (event) => {
   // host paths.
   const pCwd = projectCwd(slug);
   const orgDir = path.join(pCwd, ".specify", "org");
-  const queueDir = path.join(process.cwd(), ".specops", slug, "queue");
+  const specopsBase = path.join(process.cwd(), ".specops", slug);
   const catalogDir = path.join(process.cwd(), "catalog");
 
   // Host-side path: passed to dockerRunnerFactory because the Docker daemon
@@ -64,6 +82,23 @@ export default defineEventHandler(async (event) => {
 
   const { CompanyRuntime } = await getCompanyRuntimeModule();
   const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
+
+  // Build per-role queue dirs from the active agent roster. Pre-loading
+  // agents here means a misconfigured org spec surfaces as a clean 400
+  // before we mint a token / build a runner factory.
+  let roles: string[];
+  try {
+    roles = await loadAgentRoles(orgDir);
+  } catch (err) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: err instanceof Error ? err.message : "Failed to load agent specs",
+    });
+  }
+  const queueDirs: Record<string, string> = {};
+  for (const role of roles) {
+    queueDirs[role] = path.join(specopsBase, `queue-${role}`);
+  }
 
   // Generate the per-runtime ops token here so the same value flows into
   // both the runtime (server-side validation) AND the secretsResolver
@@ -98,7 +133,7 @@ export default defineEventHandler(async (event) => {
   const runtime = new CompanyRuntime({
     projectRoot: pCwd,
     orgDir,
-    queueDir,
+    queueDirs,
     catalogDir,
     slug,
     opsToken,

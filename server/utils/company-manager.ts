@@ -24,12 +24,14 @@ interface CompanyRuntimeInstance {
   stop(): Promise<void>;
   opsToken: string;
   slug: string;
+  ceoRole: string;
   listAgents(): Array<{ role: string; capabilities: string[]; resources?: unknown }>;
   getAgent(role: string): {
     role: string;
     capabilities: string[];
     resources?: unknown;
   } | null;
+  getRoleQueueDir(role: string): string | null;
   getStatus(): {
     status: "running" | "stopped";
     agents: Array<{ role: string; capabilities: string[]; resources: unknown }>;
@@ -62,11 +64,12 @@ interface CompanyRuntimeModule {
   CompanyRuntime: new (opts: {
     projectRoot: string;
     orgDir: string;
-    queueDir: string;
+    queueDirs: Record<string, string>;
     catalogDir?: string;
     runnerFactory?: (agent: unknown, runtimeMeta?: unknown) => unknown;
     hermesBinary?: string;
     slug?: string;
+    ceoRole?: string;
     opsToken?: string;
   }) => CompanyRuntimeInstance;
 }

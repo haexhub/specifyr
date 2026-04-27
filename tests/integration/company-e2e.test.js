@@ -136,14 +136,14 @@ const { skip } = gate();
 test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, async (t) => {
   const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "haex-e2e-"));
   const slug = "e2e";
-  const queueDir = path.join(projectRoot, ".specops", slug, "queue");
-  await fs.mkdir(queueDir, { recursive: true });
+  const ceoQueueDir = path.join(projectRoot, ".specops", slug, "queue-ceo");
+  await fs.mkdir(ceoQueueDir, { recursive: true });
   await writeMinimalOrg(projectRoot);
 
   const runtime = new CompanyRuntime({
     projectRoot,
     orgDir: path.join(projectRoot, ".specify", "org"),
-    queueDir,
+    queueDirs: { ceo: ceoQueueDir },
     runnerFactory: dockerRunnerFactory({
       projectRoot,
       // CEO needs the LLM key to actually reason. capability-to-docker
@@ -195,7 +195,7 @@ test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, as
 
   // Drop the task — CEO is expected to read this and produce result.md.
   await fs.writeFile(
-    path.join(queueDir, "echo.yaml"),
+    path.join(ceoQueueDir, "echo.yaml"),
     [
       'goal: "Write the literal string \\"hello\\" into a file named result.md at the project root."',
       'expected_outputs: ["result.md"]',
