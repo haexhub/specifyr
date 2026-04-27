@@ -100,7 +100,7 @@ interface DockerRunnerFactoryModule {
     projectRoot: string;
     image?: string;
     network?: string;
-    secretsResolver?: (agent: unknown) => Record<string, string>;
+    secretsResolver?: (agent: unknown) => Record<string, string> | undefined;
   }) => (agent: unknown, runtimeMeta?: unknown) => unknown;
 }
 
