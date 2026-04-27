@@ -135,3 +135,22 @@ test("validateReportingDag: rejects self-loop reports_to", () => {
   ]);
   assert.throws(() => validateReportingDag(agents), /E_REPORTS_TO_CYCLE/);
 });
+
+test("validateReportingDag: tolerates delivers_to cycles (refinement loops)", () => {
+  // Trading-Workflow-Beispiel: pipeline_builder ⇄ analyst Refinement-Loop.
+  // Reports-Hierarchie ist dennoch ein Baum (alle reporten an ceo).
+  const agents = new Map([
+    ["ceo",              { role: "ceo",              reports_to: null,  delivers_to: [] }],
+    ["pipeline_builder", { role: "pipeline_builder", reports_to: "ceo", delivers_to: ["analyst"] }],
+    ["analyst",          { role: "analyst",          reports_to: "ceo", delivers_to: ["pipeline_builder"] }],
+  ]);
+  validateReportingDag(agents); // muss NICHT werfen
+});
+
+test("validateReportingDag: tolerates delivers_to self-loop", () => {
+  const agents = new Map([
+    ["ceo", { role: "ceo", reports_to: null,  delivers_to: [] }],
+    ["dev", { role: "dev", reports_to: "ceo", delivers_to: ["dev"] }],
+  ]);
+  validateReportingDag(agents);
+});
