@@ -38,6 +38,7 @@ import {
   resolveBinariesForAgent,
   validateCatalogReferences,
 } from "./catalog-loader.js";
+import { CompanyEventLog } from "./company-event-log.js";
 
 export class CompanyRuntime extends EventEmitter {
   constructor({
@@ -51,6 +52,7 @@ export class CompanyRuntime extends EventEmitter {
     ceoRole = "ceo",
     approvalService,
     opsToken,
+    eventLog,
   } = {}) {
     super();
     if (!projectRoot) throw new Error("CompanyRuntime: projectRoot required");
@@ -92,6 +94,14 @@ export class CompanyRuntime extends EventEmitter {
     // single-host service. Override-able via constructor for deterministic
     // tests.
     this.opsToken = opsToken ?? randomBytes(32).toString("hex");
+    // Per-runtime event log (JSONL, per-day rotation). Same composition seam
+    // pattern as approvalService. Default writes under
+    // `<projectRoot>/.specops/<slug>/events/`. Tests inject stubs.
+    this.eventLog =
+      eventLog ??
+      new CompanyEventLog({
+        baseDir: path.join(projectRoot, ".specops", this.slug),
+      });
     // Dispatch state — per-role serial FIFO, but roles run concurrently.
     // Each agent container is isolated (own profile dir, own Docker
     // container), so two roles can be mid-execute without stepping on
@@ -242,9 +252,47 @@ export class CompanyRuntime extends EventEmitter {
       provider: { name: "anthropic" },
     };
 
+    const parentTaskId = evt.task?.parent_task_id ?? null;
+    const recipients = this._recipientsFor(role);
+
     this.emit("dispatch-started", { path: evt.path, role, workItem });
-    const result = await runner.execute(workItem, runtimeContext);
+    await this.eventLog.append({
+      type: "dispatch-started",
+      slug: this.slug,
+      role,
+      task_path: evt.path,
+      task_title: workItem.title,
+      parent_task_id: parentTaskId,
+    });
+
+    let result;
+    try {
+      result = await runner.execute(workItem, runtimeContext);
+    } catch (err) {
+      await this.eventLog.append({
+        type: "dispatch-error",
+        slug: this.slug,
+        role,
+        task_path: evt.path,
+        parent_task_id: parentTaskId,
+        recipients,
+        error: err?.message ?? String(err),
+      });
+      throw err;
+    }
+
     this.emit("dispatched", { path: evt.path, role, result });
+    await this.eventLog.append({
+      type: result?.status === "completed" ? "dispatch-completed" : "dispatch-failed",
+      slug: this.slug,
+      role,
+      task_path: evt.path,
+      task_title: workItem.title,
+      parent_task_id: parentTaskId,
+      recipients,
+      status: result?.status ?? "unknown",
+      outputs: Array.isArray(result?.outputs) ? result.outputs : [],
+    });
 
     if (result?.status === "completed") {
       try {
@@ -256,6 +304,29 @@ export class CompanyRuntime extends EventEmitter {
         }
       }
     }
+  }
+
+  /**
+   * Compute the recipients list for a completion/failure/error event from
+   * `role`. CEO is always included unless the reporter IS the CEO. Then the
+   * reporter's `delivers_to` peers are appended (deduped, self skipped).
+   *
+   * Pure function over the loaded company spec — no side effects.
+   *
+   * @param {string} reporterRole
+   * @returns {string[]}
+   */
+  _recipientsFor(reporterRole) {
+    const reporter = this.company?.agents.get(reporterRole);
+    if (!reporter) return [];
+    const list = [];
+    if (reporterRole !== this.ceoRole) list.push(this.ceoRole);
+    for (const peer of reporter.delivers_to ?? []) {
+      if (peer === reporterRole) continue;
+      if (list.includes(peer)) continue;
+      list.push(peer);
+    }
+    return list;
   }
 
   async stop() {

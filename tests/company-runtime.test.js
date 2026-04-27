@@ -744,3 +744,116 @@ test("dispatch: stub runner without execute() emits 'dispatched' with null resul
     await runtime.stop();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Inkrement 10a — JSONL Event Log lifecycle events
+// ---------------------------------------------------------------------------
+
+function stubEventLog() {
+  const captured = [];
+  return {
+    captured,
+    async append(evt) {
+      captured.push(evt);
+      return { id: "x", at: "y", file: "z" };
+    },
+  };
+}
+
+test("event log: dispatch-started + dispatch-completed are appended with recipients", async () => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
+    const log = stubEventLog();
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: recordingRunnerFactory([]),
+      eventLog: log,
+    });
+    await runtime.start();
+
+    const dispatched = new Promise((resolve) => runtime.once("dispatched", resolve));
+    await fs.writeFile(path.join(queue, "ping.yaml"), 'goal: "ping"\n');
+    await dispatched;
+    await new Promise((r) => setTimeout(r, 50));
+
+    const types = log.captured.map((e) => e.type);
+    assert.ok(types.includes("dispatch-started"), `expected dispatch-started, got ${types.join(",")}`);
+    assert.ok(types.includes("dispatch-completed"), `expected dispatch-completed, got ${types.join(",")}`);
+
+    const completed = log.captured.find((e) => e.type === "dispatch-completed");
+    assert.equal(completed.role, "ceo");
+    // CEO Reporter → kein CEO-self in recipients; CEO hat delivers_to: []
+    assert.deepEqual(completed.recipients, []);
+    assert.equal(completed.status, "completed");
+
+    await runtime.stop();
+  });
+});
+
+test("event log: non-ceo dispatch → recipients includes ceo + delivers_to peers", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    // Eigene Org bauen, damit dev.delivers_to: [qa] gesetzt ist
+    const orgDir = path.join(proj, "org-with-delivers");
+    await fs.mkdir(path.join(orgDir, "agents"), { recursive: true });
+    await fs.writeFile(path.join(orgDir, "constitution.md"),
+      '---\nschema_version: "1.0"\ncompany_id: "t"\noperating_mode: "finite"\nbudget: { max_usd_per_task: 1.0 }\n---\n');
+    const ceoSpec = [
+      "---", 'schema_version: "1.0"', "role: ceo", "reports_to: null",
+      "delivers_to: []",
+      "tools: { builtin: [], mcp: [] }",
+      "capabilities: []", "status: active", "---", "# CEO",
+    ].join("\n");
+    const devSpec = [
+      "---", 'schema_version: "1.0"', "role: dev", "reports_to: ceo",
+      "delivers_to: [qa]",
+      "tools: { builtin: [], mcp: [] }",
+      "capabilities: []", "status: active", "---", "# Dev",
+    ].join("\n");
+    const qaSpec = [
+      "---", 'schema_version: "1.0"', "role: qa", "reports_to: ceo",
+      "delivers_to: []",
+      "tools: { builtin: [], mcp: [] }",
+      "capabilities: []", "status: active", "---", "# QA",
+    ].join("\n");
+    await fs.writeFile(path.join(orgDir, "agents", "ceo.md"), ceoSpec);
+    await fs.writeFile(path.join(orgDir, "agents", "dev.md"), devSpec);
+    await fs.writeFile(path.join(orgDir, "agents", "qa.md"), qaSpec);
+
+    const queueQa = path.join(proj, ".specops", "demo", "queue-qa");
+    await fs.mkdir(queueQa, { recursive: true });
+    const allQueueDirs = { ...queueDirs, qa: queueQa };
+
+    const log = stubEventLog();
+    // Generic runnerFactory — recordingRunnerFactory has hard-coded ceo/dev.
+    // For multi-agent tests we need anything-goes.
+    const genericRunnerFactory = (agent) => ({
+      role: agent.role,
+      async execute() {
+        return { status: "completed", outputs: [] };
+      },
+    });
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir,
+      queueDirs: allQueueDirs,
+      slug: "demo",
+      runnerFactory: genericRunnerFactory,
+      eventLog: log,
+    });
+    await runtime.start();
+
+    const dispatched = new Promise((resolve) => runtime.once("dispatched", resolve));
+    await fs.writeFile(path.join(queueDirs.dev, "code.yaml"), 'goal: "code"\n');
+    await dispatched;
+    await new Promise((r) => setTimeout(r, 50));
+
+    const completed = log.captured.find((e) => e.type === "dispatch-completed");
+    assert.ok(completed, "expected a dispatch-completed event");
+    assert.equal(completed.role, "dev");
+    assert.deepEqual(completed.recipients, ["ceo", "qa"]);
+
+    await runtime.stop();
+  });
+});
