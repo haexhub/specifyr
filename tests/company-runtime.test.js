@@ -907,6 +907,32 @@ test("supervisor: runtime auto-starts a Supervisor that exposes a tick() method"
   });
 });
 
+test("getStatus: agent entries include reports_to + delivers_to (for org-chart rendering)", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+      supervisor: null,
+    });
+    await runtime.start();
+    const status = runtime.getStatus();
+
+    const ceo = status.agents.find((a) => a.role === "ceo");
+    const dev = status.agents.find((a) => a.role === "dev");
+    assert.ok(ceo);
+    assert.ok(dev);
+    assert.equal(ceo.reports_to, null);
+    assert.equal(dev.reports_to, "ceo");
+    assert.deepEqual(ceo.delivers_to, []);
+    assert.deepEqual(dev.delivers_to, []);
+
+    await runtime.stop();
+  });
+});
+
 test("supervisor: opt-out via { supervisor: null } disables auto-instantiation", async () => {
   await withTempProject(async ({ proj, queueDirs }) => {
     const runtime = new CompanyRuntime({

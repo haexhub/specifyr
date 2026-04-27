@@ -444,6 +444,8 @@ export class CompanyRuntime extends EventEmitter {
         role: a.role,
         capabilities: a.capabilities,
         resources: a.resources ?? null,
+        reports_to: a.reports_to ?? null,
+        delivers_to: Array.isArray(a.delivers_to) ? a.delivers_to : [],
       })),
       queueDepth,
     };
