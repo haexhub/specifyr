@@ -29,6 +29,10 @@ services:
       # Ohne expliziten Wert nimmt die Compose-Substitution `:latest` auf der
       # Default-Branch — nur sinnvoll, wenn deployment-stabilität zweitrangig ist.
       HERMES_AGENT_IMAGE: ${HERMES_AGENT_IMAGE:-ghcr.io/haexhub/hermes-agent:latest}
+      # Approval-Notification: Telegram-Channel. Setup-Anleitung in `.env.example`.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      APPROVAL_URL_BASE: ${APPROVAL_URL_BASE:-}
     volumes:
       # Multi-Projekt-Arbeitsbereich: Host-projects/ wird eingehängt, damit Runs am echten
       # Repo arbeiten. Entferne den Mount, wenn du projects/ stattdessen im Container-Volume

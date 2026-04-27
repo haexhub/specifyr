@@ -39,6 +39,16 @@ services:
       # das Verzeichnis der compose-Datei) — passt für das Standard-Setup.
       # Wenn haex-corp nativ auf dem Host läuft, kann diese Variable leer bleiben.
       HAEX_CORP_HOST_PROJECT_ROOT: ${HAEX_CORP_HOST_PROJECT_ROOT:-${PWD}}
+      # Approval-Notification: Telegram-Channel. Falls beide Vars gesetzt sind,
+      # registriert start.post.ts einen TelegramTransport. Sonst No-op-Fallback.
+      # Werte landen in `.env` (gitignored), Setup-Anleitung steht in
+      # `.env.example`.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # Optional: Deep-Link-Base. Ohne den ist die Telegram-Nachricht rein
+      # informativ; mit Wert wird `<base>/approvals/<id>` als klickbarer Link
+      # ergänzt.
+      APPROVAL_URL_BASE: ${APPROVAL_URL_BASE:-}
     volumes:
       # Source bind mount für HMR.
       - .:/app
