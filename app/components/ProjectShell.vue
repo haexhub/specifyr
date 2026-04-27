@@ -44,16 +44,19 @@ defineProps<{
     </ProjectStepSidebar>
 
     <div class="flex min-w-0 flex-1 flex-col overflow-hidden">
-      <!-- Tabs row: fixed position at top of content area. Never scrolls. -->
+      <!-- Tabs row: fixed position at top of content area. Never scrolls.
+           No max-width — tabs sit at the same left padding as the content
+           below, so content+tabs share an alignment edge regardless of
+           viewport width. -->
       <div class="shrink-0 border-b border-border bg-background/50 px-6 py-3 lg:px-10">
-        <div class="mx-auto max-w-5xl">
-          <ProjectViewTabs :slug="slug" />
-        </div>
+        <ProjectViewTabs :slug="slug" />
       </div>
 
-      <!-- Page body: scrolls independently. -->
+      <!-- Page body: scrolls independently. Full-width within the padding;
+           page content (cards, panes, grids) decides its own line length
+           via internal layout (e.g. lg:grid-cols-2). -->
       <div class="flex-1 overflow-y-auto p-6 lg:p-10">
-        <div class="mx-auto max-w-5xl space-y-6">
+        <div class="space-y-6">
           <slot />
         </div>
       </div>
