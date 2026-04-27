@@ -160,6 +160,11 @@ export default defineEventHandler(async (event) => {
   // ANTHROPIC_API_KEY (LLM auth) plus COMPANY_OPS_TOKEN/URL (callback
   // channel). capability-to-docker.js hard-fails if secrets are passed
   // without the cap, so we only emit when the cap is granted.
+  //
+  // ANTHROPIC_BASE_URL routes Anthropic-API traffic through the
+  // haex-claude-proxy sidecar (companies network) so workers can use a
+  // Claude Pro/Max subscription via OAuth instead of paid API credits.
+  // Falls back to the default Anthropic endpoint when the env is unset.
   const runnerFactory = dockerRunnerFactory({
     projectRoot: pHostCwd,
     network: "companies",
@@ -168,8 +173,12 @@ export default defineEventHandler(async (event) => {
       const env: Record<string, string> = {
         COMPANY_OPS_TOKEN: opsToken,
         COMPANY_OPS_URL: `${opsUrl}/${slug}`,
+        ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? "http://haex-claude-proxy:8080",
       };
-      if (process.env.ANTHROPIC_API_KEY) env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+      // Hermes refuses to start without ANTHROPIC_API_KEY in env even when
+      // an alternate base URL handles auth itself (the proxy ignores inbound
+      // auth headers). Pass a sentinel so the SDK is happy.
+      env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "proxy-no-auth-needed";
       return env;
     },
     // image resolved via factory: explicit > HERMES_AGENT_IMAGE > hermes-agent:dev
