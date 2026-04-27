@@ -35,6 +35,51 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
 
+interface NotifyTransport {
+  notify(input: { channel: string; payload: object }): Promise<void>;
+}
+interface ApprovalServiceModule {
+  CapabilityApprovalService: new (opts?: { transport?: NotifyTransport }) => unknown;
+}
+interface TelegramTransportModule {
+  TelegramTransport: new (opts: {
+    botToken: string;
+    chatId: string;
+    approvalUrlBase?: string;
+  }) => { notify(payload: object): Promise<void> };
+}
+interface CompositeTransportModule {
+  CompositeTransport: new (
+    transports: Record<string, { notify(payload: object): Promise<void> }>,
+  ) => NotifyTransport;
+}
+
+/**
+ * Build a CompositeTransport from env-configured channels. Returns null when
+ * no channel is configured — the ApprovalService then falls back to its
+ * default NoopTransport. Keeping the env-detection in one place makes adding
+ * channels (signal, email, slack) a 4-line change here.
+ */
+async function buildApprovalTransport(): Promise<NotifyTransport | null> {
+  const transports: Record<string, { notify(payload: object): Promise<void> }> = {};
+
+  if (process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID) {
+    const url = pathToFileURL(path.join(process.cwd(), "src/transports/telegram.js")).href;
+    const mod = (await import(url)) as TelegramTransportModule;
+    transports.telegram = new mod.TelegramTransport({
+      botToken: process.env.TELEGRAM_BOT_TOKEN,
+      chatId: process.env.TELEGRAM_CHAT_ID,
+      approvalUrlBase: process.env.APPROVAL_URL_BASE,
+    });
+  }
+
+  if (Object.keys(transports).length === 0) return null;
+
+  const url = pathToFileURL(path.join(process.cwd(), "src/transports/composite.js")).href;
+  const mod = (await import(url)) as CompositeTransportModule;
+  return new mod.CompositeTransport(transports);
+}
+
 // Pre-load the company spec so we know which agent roles exist. The
 // runtime needs an explicit `queueDirs: { [role]: dir }` map at
 // construction time, and the only source of truth for "which roles" is
@@ -130,6 +175,19 @@ export default defineEventHandler(async (event) => {
     // image resolved via factory: explicit > HERMES_AGENT_IMAGE > hermes-agent:dev
   });
 
+  // Build the notification transport (optional — falls back to no-op if no
+  // channel env vars are set). The ApprovalService takes ownership; agents
+  // declare which channel they want via `approval.notify_via` in their spec.
+  const transport = await buildApprovalTransport();
+  let approvalService: unknown = undefined;
+  if (transport) {
+    const url = pathToFileURL(
+      path.join(process.cwd(), "src/core/capability-approval-service.js"),
+    ).href;
+    const mod = (await import(url)) as ApprovalServiceModule;
+    approvalService = new mod.CapabilityApprovalService({ transport });
+  }
+
   const runtime = new CompanyRuntime({
     projectRoot: pCwd,
     orgDir,
@@ -138,6 +196,7 @@ export default defineEventHandler(async (event) => {
     slug,
     opsToken,
     runnerFactory,
+    approvalService,
   });
 
   try {

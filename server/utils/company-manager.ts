@@ -92,6 +92,7 @@ interface CompanyRuntimeModule {
     slug?: string;
     ceoRole?: string;
     opsToken?: string;
+    approvalService?: unknown;
   }) => CompanyRuntimeInstance;
 }
 
