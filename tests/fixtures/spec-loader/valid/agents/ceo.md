@@ -5,6 +5,7 @@ model: claude-opus-4-7
 runner: hermes
 runner_type: persistent
 reports_to: null
+delivers_to: []
 skills: []
 tools:
   builtin: [Read]

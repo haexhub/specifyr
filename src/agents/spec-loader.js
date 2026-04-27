@@ -86,6 +86,7 @@ export async function loadCompany(orgDir, options) {
     loadConstitution(orgDir),
     loadAgents(orgDir, options),
   ]);
+  validateReportingDag(agents);
   return { constitution, agents };
 }
 

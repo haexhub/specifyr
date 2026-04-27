@@ -5,6 +5,7 @@ model: claude-sonnet-4-6
 runner: hermes
 runner_type: ephemeral
 reports_to: ceo
+delivers_to: []
 skills: [tdd]
 tools:
   builtin: [Read, Edit, Bash]

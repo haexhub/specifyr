@@ -154,3 +154,14 @@ test("validateReportingDag: tolerates delivers_to self-loop", () => {
   ]);
   validateReportingDag(agents);
 });
+
+test("loadCompany: rejects org with reports_to cycle", async () => {
+  const dir = path.join(__dirname, "fixtures", "spec-loader", "reports-cycle");
+  await assert.rejects(() => loadCompany(dir), /E_REPORTS_TO_CYCLE/);
+});
+
+test("loadCompany: ACCEPTS org with delivers_to cycle (refinement loop)", async () => {
+  const dir = path.join(__dirname, "fixtures", "spec-loader", "delivers-cycle");
+  const company = await loadCompany(dir);
+  assert.equal(company.agents.size, 3);
+});

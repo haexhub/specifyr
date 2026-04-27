@@ -5,6 +5,7 @@ model: claude-haiku-4-5
 runner: hermes
 runner_type: ephemeral
 reports_to: ceo
+delivers_to: []
 skills: []
 tools:
   builtin: [Read]
