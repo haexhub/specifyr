@@ -887,6 +887,40 @@ test("event log: failed status produces dispatch-failed event with recipients", 
   });
 });
 
+test("supervisor: runtime auto-starts a Supervisor that exposes a tick() method", async () => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
+    const log = stubEventLog();
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: recordingRunnerFactory([]),
+      eventLog: log,
+    });
+    await runtime.start();
+
+    assert.ok(runtime.supervisor, "runtime.supervisor should be auto-instantiated");
+    assert.equal(typeof runtime.supervisor.tick, "function");
+
+    await runtime.stop();
+  });
+});
+
+test("supervisor: opt-out via { supervisor: null } disables auto-instantiation", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+      supervisor: null,
+    });
+    assert.equal(runtime.supervisor, null);
+  });
+});
+
 test("event log: thrown runner error produces dispatch-error event", async () => {
   await withTempProject(async ({ proj, queue, queueDirs }) => {
     const log = stubEventLog();

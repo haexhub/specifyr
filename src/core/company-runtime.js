@@ -39,6 +39,7 @@ import {
   validateCatalogReferences,
 } from "./catalog-loader.js";
 import { CompanyEventLog } from "./company-event-log.js";
+import { Supervisor } from "./supervisor.js";
 
 export class CompanyRuntime extends EventEmitter {
   constructor({
@@ -53,6 +54,7 @@ export class CompanyRuntime extends EventEmitter {
     approvalService,
     opsToken,
     eventLog,
+    supervisor,
   } = {}) {
     super();
     if (!projectRoot) throw new Error("CompanyRuntime: projectRoot required");
@@ -102,6 +104,15 @@ export class CompanyRuntime extends EventEmitter {
       new CompanyEventLog({
         baseDir: path.join(projectRoot, ".specops", this.slug),
       });
+    // Supervisor is the deterministic watchdog that consumes the event
+    // log + runtime events to detect stuck dispatches. Pass `supervisor:
+    // null` to disable (e.g. for tests that don't want a background
+    // timer). Auto-instantiated otherwise; lifecycle is bound to start()/
+    // stop() below.
+    this.supervisor =
+      supervisor === null
+        ? null
+        : (supervisor ?? new Supervisor({ runtime: this, eventLog: this.eventLog }));
     // Dispatch state — per-role serial FIFO, but roles run concurrently.
     // Each agent container is isolated (own profile dir, own Docker
     // container), so two roles can be mid-execute without stepping on
@@ -174,6 +185,12 @@ export class CompanyRuntime extends EventEmitter {
       poller.on("error", (err) => this.emit("error", err));
       await poller.start();
       this.pollers.set(role, poller);
+    }
+    // Supervisor must subscribe AFTER pollers exist (so it can observe the
+    // dispatch-started events from the runtime) but BEFORE we declare
+    // 'started' so the watchdog is live the moment the first task arrives.
+    if (this.supervisor) {
+      this.supervisor.start();
     }
     this.emit("started", { agents: [...this.company.agents.keys()] });
   }
@@ -330,6 +347,7 @@ export class CompanyRuntime extends EventEmitter {
   }
 
   async stop() {
+    if (this.supervisor) this.supervisor.stop();
     for (const poller of this.pollers.values()) {
       await poller.stop();
     }
