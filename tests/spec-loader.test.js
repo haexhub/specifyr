@@ -111,3 +111,27 @@ test("validateReportingDag: rejects unknown delivers_to with E_UNKNOWN_DELIVERS_
   ]);
   assert.throws(() => validateReportingDag(agents), /E_UNKNOWN_DELIVERS_TO.*dev.*ghost/);
 });
+
+test("validateReportingDag: rejects 2-node reports_to cycle", () => {
+  const agents = new Map([
+    ["a", { role: "a", reports_to: "b", delivers_to: [] }],
+    ["b", { role: "b", reports_to: "a", delivers_to: [] }],
+  ]);
+  assert.throws(() => validateReportingDag(agents), /E_REPORTS_TO_CYCLE/);
+});
+
+test("validateReportingDag: rejects 3-node reports_to cycle", () => {
+  const agents = new Map([
+    ["a", { role: "a", reports_to: "b", delivers_to: [] }],
+    ["b", { role: "b", reports_to: "c", delivers_to: [] }],
+    ["c", { role: "c", reports_to: "a", delivers_to: [] }],
+  ]);
+  assert.throws(() => validateReportingDag(agents), /E_REPORTS_TO_CYCLE/);
+});
+
+test("validateReportingDag: rejects self-loop reports_to", () => {
+  const agents = new Map([
+    ["a", { role: "a", reports_to: "a", delivers_to: [] }],
+  ]);
+  assert.throws(() => validateReportingDag(agents), /E_REPORTS_TO_CYCLE/);
+});

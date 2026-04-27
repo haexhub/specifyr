@@ -120,6 +120,28 @@ export function validateReportingDag(agents) {
       }
     }
   }
+
+  // Cycle detection on reports_to chain. Each node has 0 or 1 outgoing edge,
+  // so we just walk the chain and watch for revisits. Mark proven-acyclic
+  // nodes "settled" so subsequent walks short-circuit — keeps it linear.
+  const settled = new Set();
+  for (const start of agents.keys()) {
+    if (settled.has(start)) continue;
+    const onPath = new Set();
+    const chain = [];
+    let current = start;
+    while (current != null && !settled.has(current)) {
+      if (onPath.has(current)) {
+        const idx = chain.indexOf(current);
+        const cycle = [...chain.slice(idx), current].join(" → ");
+        throw new Error(`E_REPORTS_TO_CYCLE: ${cycle}`);
+      }
+      onPath.add(current);
+      chain.push(current);
+      current = agents.get(current).reports_to;
+    }
+    for (const n of onPath) settled.add(n);
+  }
 }
 
 function parseFrontmatter(raw) {
