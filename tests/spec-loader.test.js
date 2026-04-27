@@ -96,3 +96,10 @@ test("validateReportingDag: linear hierarchy passes", () => {
   ]);
   validateReportingDag(agents);
 });
+
+test("validateReportingDag: rejects unknown reports_to with E_UNKNOWN_REPORTS_TO", () => {
+  const agents = new Map([
+    ["dev", { role: "dev", reports_to: "ghost", delivers_to: [] }],
+  ]);
+  assert.throws(() => validateReportingDag(agents), /E_UNKNOWN_REPORTS_TO.*dev.*ghost/);
+});

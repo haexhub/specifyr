@@ -106,7 +106,13 @@ export async function loadCompany(orgDir, options) {
  * @param {Map<string, AgentSpec>} agents
  */
 export function validateReportingDag(agents) {
-  // Filled in by following tasks.
+  for (const [role, agent] of agents) {
+    if (agent.reports_to != null && !agents.has(agent.reports_to)) {
+      throw new Error(
+        `E_UNKNOWN_REPORTS_TO: agent '${role}' reports_to '${agent.reports_to}' which is not a known role`,
+      );
+    }
+  }
 }
 
 function parseFrontmatter(raw) {
