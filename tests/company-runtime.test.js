@@ -857,3 +857,29 @@ test("event log: non-ceo dispatch → recipients includes ceo + delivers_to peer
     await runtime.stop();
   });
 });
+
+test("event log: parent_task_id from task YAML appears in events", async () => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
+    const log = stubEventLog();
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: recordingRunnerFactory([]),
+      eventLog: log,
+    });
+    await runtime.start();
+
+    const dispatched = new Promise((resolve) => runtime.once("dispatched", resolve));
+    await fs.writeFile(path.join(queue, "child.yaml"), 'goal: "iter"\nparent_task_id: "t-root"\n');
+    await dispatched;
+    await new Promise((r) => setTimeout(r, 50));
+
+    for (const evt of log.captured) {
+      assert.equal(evt.parent_task_id, "t-root", `event ${evt.type} should carry parent_task_id`);
+    }
+
+    await runtime.stop();
+  });
+});
