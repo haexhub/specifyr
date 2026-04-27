@@ -148,6 +148,18 @@ test("buildDispatchYaml injects source, preserves task fields", () => {
   assert.deepEqual(parsed.expected_outputs, ["hi.md"]);
 });
 
+test("buildDispatchYaml passes parent_task_id through when provided", () => {
+  // Iterations-Ketten brauchen parent_task_id, damit Supervisor und UI
+  // den Verlauf rekonstruieren können (Inkrement 10a/10c).
+  const yaml = buildDispatchYaml(
+    { goal: "iterate", parent_task_id: "t-root" },
+    "agent:ceo",
+  );
+  const parsed = parseYaml(yaml);
+  assert.equal(parsed.parent_task_id, "t-root");
+  assert.equal(parsed.source, "agent:ceo");
+});
+
 test("buildDispatchYaml: caller-supplied 'source' is overridden by the authoritative one", () => {
   // The audit trail relies on `source` being trustworthy. If a
   // misbehaving (or careless) caller passes their own `source`, we
