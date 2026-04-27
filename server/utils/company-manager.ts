@@ -79,6 +79,18 @@ interface CompanyRuntimeInstance {
       payload: Record<string, unknown>;
     }>;
   };
+  approvalService: {
+    listPending(): Array<{
+      requestId: string;
+      slug: string;
+      agent: string;
+      capability: string;
+    }>;
+    resolve(
+      requestId: string,
+      input: { decision: "approved" | "denied" | "escalated"; by?: string },
+    ): boolean;
+  };
 }
 
 interface CompanyRuntimeModule {
@@ -126,6 +138,32 @@ export function getActiveCompany(slug: string): CompanyRuntimeInstance | undefin
 
 export function registerCompany(slug: string, runtime: CompanyRuntimeInstance) {
   registry.set(slug, runtime);
+}
+
+/**
+ * Iterate every active runtime as `[slug, runtime]` pairs. Used by approval
+ * endpoints that need to find a request without knowing its owning company —
+ * the deep-link in the Telegram notification is intentionally slug-free.
+ */
+export function listActiveCompanies(): Array<[string, CompanyRuntimeInstance]> {
+  return [...registry.entries()];
+}
+
+/**
+ * Find the runtime that owns a given approval request-id, by scanning each
+ * runtime's pending list. Returns null if no active runtime has it (approval
+ * already resolved, timed out, or never existed).
+ */
+export function findRuntimeByApprovalId(
+  requestId: string,
+): { slug: string; runtime: CompanyRuntimeInstance } | null {
+  for (const [slug, runtime] of registry) {
+    const pending = runtime.approvalService.listPending();
+    if (pending.some((p) => p.requestId === requestId)) {
+      return { slug, runtime };
+    }
+  }
+  return null;
 }
 
 export function deregisterCompany(slug: string) {
