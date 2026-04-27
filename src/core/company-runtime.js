@@ -39,6 +39,7 @@ import {
   validateCatalogReferences,
 } from "./catalog-loader.js";
 import { CompanyEventLog } from "./company-event-log.js";
+import { CompanyEventIndex } from "./company-event-index.js";
 import { Supervisor } from "./supervisor.js";
 
 export class CompanyRuntime extends EventEmitter {
@@ -96,13 +97,22 @@ export class CompanyRuntime extends EventEmitter {
     // single-host service. Override-able via constructor for deterministic
     // tests.
     this.opsToken = opsToken ?? randomBytes(32).toString("hex");
-    // Per-runtime event log (JSONL, per-day rotation). Same composition seam
-    // pattern as approvalService. Default writes under
-    // `<projectRoot>/.specops/<slug>/events/`. Tests inject stubs.
+    // Per-runtime SQLite read-index for the event log. Lives at
+    // `<projectRoot>/.specops/<slug>/state.db`. JSONL is the canonical
+    // source of truth; this index is rebuildable from it (see
+    // architecture_decisions.md §3). Opened in start(), closed in stop().
+    const specopsDir = path.join(projectRoot, ".specops", this.slug);
+    this.eventIndex = new CompanyEventIndex({
+      dbPath: path.join(specopsDir, "state.db"),
+    });
+    // Per-runtime event log (JSONL, per-day rotation). Default writes under
+    // `<projectRoot>/.specops/<slug>/events/`. Write-through into eventIndex
+    // for fast queries; tests can inject a stub log.
     this.eventLog =
       eventLog ??
       new CompanyEventLog({
-        baseDir: path.join(projectRoot, ".specops", this.slug),
+        baseDir: specopsDir,
+        index: this.eventIndex,
       });
     // Supervisor is the deterministic watchdog that consumes the event
     // log + runtime events to detect stuck dispatches. Pass `supervisor:
@@ -127,6 +137,13 @@ export class CompanyRuntime extends EventEmitter {
   }
 
   async start() {
+    // Open the SQLite index up-front. If the file is missing or the schema
+    // is empty, open() creates it; if the JSONL log already has events from
+    // a prior run, replay them so the index is consistent before any new
+    // event lands. rebuildFromDisk is idempotent (INSERT OR IGNORE on id).
+    this.eventIndex.open();
+    this.eventIndex.rebuildFromDisk(path.join(this.projectRoot, ".specops", this.slug));
+
     this.company = await loadCompany(this.orgDir);
     if (!this.company.constitution) {
       throw new Error("CompanyRuntime: missing constitution.md in orgDir");
@@ -353,6 +370,10 @@ export class CompanyRuntime extends EventEmitter {
     }
     this.pollers.clear();
     this.runners.clear();
+    // Close the SQLite handle so temp dirs / fs.rm in tests don't see EBUSY,
+    // and so a subsequent start() reopens cleanly with a fresh prepared
+    // statement cache.
+    this.eventIndex.close();
     // Drop pending dispatches; in-flight executions race their own runner
     // teardown. Callers should `await stop()` after `await runtime.start()`
     // returns idle, but if a dispatch is mid-execute() the runner's own

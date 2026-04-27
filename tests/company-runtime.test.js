@@ -907,6 +907,50 @@ test("supervisor: runtime auto-starts a Supervisor that exposes a tick() method"
   });
 });
 
+test("eventIndex: runtime auto-instantiates an index that mirrors the JSONL log", async () => {
+  await withTempProject(async ({ proj, queue, queueDirs }) => {
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: recordingRunnerFactory([]),
+    });
+    await runtime.start();
+    assert.ok(runtime.eventIndex, "eventIndex should be auto-instantiated");
+
+    const dispatched = new Promise((resolve) => runtime.once("dispatched", resolve));
+    await fs.writeFile(path.join(queue, "ping.yaml"), 'goal: "ping"\n');
+    await dispatched;
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Index should have at least dispatch-started + dispatch-completed
+    const recent = runtime.eventIndex.recent({ limit: 50 });
+    const types = recent.map((r) => r.type);
+    assert.ok(types.includes("dispatch-started"));
+    assert.ok(types.includes("dispatch-completed"));
+
+    await runtime.stop();
+  });
+});
+
+test("eventIndex: stop() closes the db so subsequent fs.rm of the project doesn't get EBUSY", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir: validFixture,
+      queueDirs,
+      slug: "demo",
+      runnerFactory: () => ({ stub: true }),
+    });
+    await runtime.start();
+    await runtime.stop();
+    // After stop, the index db handle must be closed; the temp dir cleanup
+    // (in withTempProject's finally) must succeed.
+    assert.equal(runtime.eventIndex.db, null, "db should be null after close()");
+  });
+});
+
 test("getStatus: agent entries include reports_to + delivers_to (for org-chart rendering)", async () => {
   await withTempProject(async ({ proj, queueDirs }) => {
     const runtime = new CompanyRuntime({
