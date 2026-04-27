@@ -58,6 +58,27 @@ interface CompanyRuntimeInstance {
   getResolvedSkills(role: string): unknown[];
   getResolvedBinaries(role: string): unknown[];
   on(event: string, listener: (...args: unknown[]) => void): void;
+  eventIndex: {
+    recent(opts?: { limit?: number; since?: string; role?: string }): Array<{
+      id: string;
+      at: string;
+      type: string;
+      slug: string | null;
+      role: string | null;
+      task_path: string | null;
+      parent_task_id: string | null;
+      status: string | null;
+      payload: Record<string, unknown>;
+    }>;
+    pendingDispatches(): Array<{
+      id: string;
+      at: string;
+      role: string | null;
+      task_path: string | null;
+      parent_task_id: string | null;
+      payload: Record<string, unknown>;
+    }>;
+  };
 }
 
 interface CompanyRuntimeModule {

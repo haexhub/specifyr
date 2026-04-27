@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, Trash2, Check, Lock, AlertTriangle, Loader2 } from "lucide-vue-next";
+import { ChevronRight, Trash2, Check, Lock, AlertTriangle, Loader2, Activity } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -156,15 +156,23 @@ async function deleteProject() {
           <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">{{ project.slug }}</p>
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h1 class="text-2xl font-semibold tracking-tight">{{ project.title }}</h1>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              @click="deleteDialogOpen = true"
-            >
-              <Trash2 class="mr-1.5 size-3.5" />
-              Projekt löschen
-            </Button>
+            <div class="flex items-center gap-2">
+              <NuxtLink :to="`/specs/${slug}/runtime`">
+                <Button variant="outline" size="sm">
+                  <Activity class="mr-1.5 size-3.5" />
+                  Runtime-View
+                </Button>
+              </NuxtLink>
+              <Button
+                variant="ghost"
+                size="sm"
+                class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                @click="deleteDialogOpen = true"
+              >
+                <Trash2 class="mr-1.5 size-3.5" />
+                Projekt löschen
+              </Button>
+            </div>
           </div>
           <p v-if="project.description" class="text-sm leading-6 text-muted-foreground">
             {{ project.description }}
