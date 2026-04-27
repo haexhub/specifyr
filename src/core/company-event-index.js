@@ -94,4 +94,107 @@ export class CompanyEventIndex {
     this.db.close();
     this.db = null;
   }
+
+  /**
+   * Insert an event row. Idempotent on duplicate `id` (INSERT OR IGNORE) — that
+   * makes rebuild-from-disk safe to re-run without dropping the table first.
+   *
+   * Promoted columns are extracted from `event`; everything else is preserved
+   * verbatim in payload_json (including the promoted keys, so a JSON.parse on
+   * payload reproduces the original event exactly).
+   *
+   * @param {object} event
+   */
+  append(event) {
+    if (!this.db) throw new Error("CompanyEventIndex: open() before append()");
+    if (!event?.id || !event?.at || !event?.type) {
+      throw new Error("CompanyEventIndex.append: event requires id, at, type");
+    }
+    const stmt = this.db.prepare(
+      `INSERT OR IGNORE INTO events
+       (id, at, type, slug, role, task_path, parent_task_id, status, payload_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    stmt.run(
+      event.id,
+      event.at,
+      event.type,
+      event.slug ?? null,
+      event.role ?? null,
+      event.task_path ?? null,
+      event.parent_task_id ?? null,
+      event.status ?? null,
+      JSON.stringify(event),
+    );
+  }
+
+  /**
+   * Read recent events, newest first.
+   *
+   * @param {object} [opts]
+   * @param {number} [opts.limit=100]   max rows
+   * @param {string} [opts.since]       ISO timestamp; only events with at > since
+   * @param {string} [opts.role]        filter to one role
+   * @returns {object[]}                event rows with payload merged back in
+   */
+  recent({ limit = 100, since = null, role = null } = {}) {
+    if (!this.db) throw new Error("CompanyEventIndex: open() before recent()");
+    const where = [];
+    const params = [];
+    if (since) { where.push("at > ?"); params.push(since); }
+    if (role)  { where.push("role = ?"); params.push(role); }
+    const sql =
+      `SELECT id, at, type, slug, role, task_path, parent_task_id, status, payload_json
+       FROM events
+       ${where.length ? "WHERE " + where.join(" AND ") : ""}
+       ORDER BY at DESC, id DESC
+       LIMIT ?`;
+    params.push(limit);
+    const rows = this.db.prepare(sql).all(...params);
+    return rows.map((r) => ({
+      id: r.id,
+      at: r.at,
+      type: r.type,
+      slug: r.slug,
+      role: r.role,
+      task_path: r.task_path,
+      parent_task_id: r.parent_task_id,
+      status: r.status,
+      payload: JSON.parse(r.payload_json),
+    }));
+  }
+
+  /**
+   * List dispatches that started but have no terminal event (-completed,
+   * -failed, -error). Correlation key is `task_path` — same convention as
+   * Supervisor.
+   *
+   * Used by future API endpoints + Supervisor warmup (when supervisor starts
+   * after a runtime has been running, it can seed its in-memory state from
+   * here instead of starting blind).
+   */
+  pendingDispatches() {
+    if (!this.db) throw new Error("CompanyEventIndex: open() before pendingDispatches()");
+    const sql = `
+      SELECT s.id, s.at, s.role, s.task_path, s.parent_task_id, s.payload_json
+      FROM events s
+      WHERE s.type = 'dispatch-started'
+        AND NOT EXISTS (
+          SELECT 1 FROM events t
+          WHERE t.task_path = s.task_path
+            AND t.type IN ('dispatch-completed', 'dispatch-failed', 'dispatch-error')
+            AND t.at >= s.at
+        )
+      ORDER BY s.at ASC
+    `;
+    const rows = this.db.prepare(sql).all();
+    return rows.map((r) => ({
+      id: r.id,
+      at: r.at,
+      role: r.role,
+      task_path: r.task_path,
+      parent_task_id: r.parent_task_id,
+      payload: JSON.parse(r.payload_json),
+    }));
+  }
 }
