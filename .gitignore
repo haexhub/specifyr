@@ -27,5 +27,8 @@ node_modules/
 # Local Docker Compose overrides (per-machine port/volume tweaks)
 docker-compose.override.yml
 
+# Runtime: installed extensions and their repos/node_modules
+.specify/
+
 # Temporary scratch directory
 tmp/
