@@ -23,3 +23,9 @@ projects/
 
 # Per-machine Claude settings (user-local overrides)
 .claude/settings.local.json
+
+# Runtime: installed extensions and their repos/node_modules
+.specify/
+
+# Temporary working directory
+tmp/
