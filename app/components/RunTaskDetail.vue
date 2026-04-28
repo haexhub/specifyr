@@ -84,7 +84,7 @@ const canSkip = computed(() => {
             @click="emit('retry', task.id)"
           >
             <RotateCcw class="mr-1.5 size-3.5" />
-            Retry
+            {{ $t('runTask.retryLabel') }}
           </Button>
           <Button
             v-if="canSkip"
@@ -95,7 +95,7 @@ const canSkip = computed(() => {
             @click="emit('skip', task.id)"
           >
             <SkipForward class="mr-1.5 size-3.5" />
-            Skip
+            {{ $t('runTask.skipLabel') }}
           </Button>
         </div>
       </div>

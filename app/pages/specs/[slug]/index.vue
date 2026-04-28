@@ -96,7 +96,8 @@ async function switchWorkflow(event: Event) {
     });
     await reloadNuxtApp({ path: route.fullPath });
   } catch (err) {
-    alert(err instanceof Error ? err.message : t("specIndex.workflowChangeFailed"));
+    console.error(err);
+    alert(t("specIndex.workflowChangeFailed"));
     target.value = (project.value?.workflow as string) ?? "spec-kit";
   } finally {
     switchingWorkflow.value = false;
@@ -112,7 +113,8 @@ async function deleteProject() {
     await refreshProjects();
     await router.push("/");
   } catch (err) {
-    alert(err instanceof Error ? err.message : t("specIndex.deleteFailed"));
+    console.error(err);
+    alert(t("specIndex.deleteFailed"));
   } finally {
     deleting.value = false;
   }

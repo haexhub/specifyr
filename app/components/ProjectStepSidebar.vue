@@ -120,7 +120,7 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
           <div
             v-else
             class="flex cursor-not-allowed items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/60"
-            :title="$t('stepSidebar.locked', { n: index })"
+            :title="$t('stepSidebar.locked', { n: index + 1 })"
           >
             <span class="flex min-w-0 items-center gap-2">
               <span

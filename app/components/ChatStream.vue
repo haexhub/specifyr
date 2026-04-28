@@ -187,7 +187,7 @@ function openStream(sid: string, since: number) {
 
   es.addEventListener("turn_failed", (ev: MessageEvent) => {
     const data = updateSeq(ev.data) as { message?: string } | undefined;
-    streamError.value = data?.message ?? t("chat.sessionLoadError");
+    streamError.value = data?.message ?? t("chat.turnFailed");
     closeStream();
     void loadSession(sid);
   });

@@ -183,7 +183,7 @@ async function createSession() {
       query: { ...route.query, session: created.id }
     });
   } catch (err) {
-    alert(err instanceof Error ? err.message : t("sessions.sessionLoadError"));
+    alert(err instanceof Error ? err.message : t("sessions.sessionCreateError"));
   } finally {
     creatingSession.value = false;
   }

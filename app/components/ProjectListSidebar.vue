@@ -30,7 +30,7 @@ function formatRelative(iso?: string): string {
   const then = new Date(iso).getTime();
   const diff = now - then;
   const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "eben";
+  if (minutes < 1) return t("time.justNow");
   if (minutes < 60) return `${minutes}m`;
   const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours}h`;
@@ -80,19 +80,19 @@ async function confirmDelete() {
     <div class="flex items-center justify-between gap-1 px-2 pb-3 pt-5" :class="!compact && 'px-4'">
       <NuxtLink
         to="/"
-        class="truncate text-sm font-semibold tracking-tight"
+        class="min-w-0"
         :class="compact ? 'sr-only' : ''"
       >
-        SpecOps
+        <SpeculossLogo />
       </NuxtLink>
       <NuxtLink
         v-if="compact"
         to="/"
-        class="mx-auto inline-flex size-8 items-center justify-center rounded-md text-[11px] font-bold tracking-tight text-primary"
+        class="mx-auto inline-flex size-8 items-center justify-center rounded-md text-primary"
         :class="route.path === '/' ? 'bg-primary/15' : 'hover:bg-accent'"
         :title="$t('sidebar.homepage')"
       >
-        SO
+        <SpeculossLogo compact :show-text="false" />
       </NuxtLink>
       <button
         v-if="!compact"
@@ -127,7 +127,7 @@ async function confirmDelete() {
         <button
           type="button"
           class="absolute -right-1 -top-1 hidden size-4 items-center justify-center rounded-full border border-border bg-background text-destructive opacity-0 transition group-hover:flex group-hover:opacity-100 hover:bg-destructive hover:text-destructive-foreground"
-          :title="`'${project.title}' löschen`"
+          :title="t('sidebar.deleteProjectTitle', { title: project.title })"
           @click="openDeleteDialog(project, $event)"
         >
           <Trash2 class="size-2.5" />

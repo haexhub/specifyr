@@ -123,7 +123,7 @@ async function confirmRemove() {
           <NuxtLink
             :to="`/extensions/${ext.slug}`"
             class="absolute inset-0 focus:outline-none"
-            :aria-label="`Details zu ${ext.slug}`"
+            :aria-label="t('extensions.installed.detailsLabel', { slug: ext.slug })"
           />
           <span class="mt-0.5 shrink-0">
             <CheckCircle2 v-if="ext.status === 'installed'" class="size-4 text-emerald-600" />
@@ -132,8 +132,8 @@ async function confirmRemove() {
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-baseline gap-2">
               <code class="truncate font-mono text-sm">{{ ext.slug }}</code>
-              <Badge v-if="ext.source === 'auto'" variant="secondary" class="text-[10px]">auto</Badge>
-              <Badge v-if="ext.status === 'failed'" variant="outline" class="text-[10px] text-destructive">fehlgeschlagen</Badge>
+              <Badge v-if="ext.source === 'auto'" variant="secondary" class="text-[10px]">{{ t('extensions.installed.sourceAuto') }}</Badge>
+              <Badge v-if="ext.status === 'failed'" variant="outline" class="text-[10px] text-destructive">{{ t('extensions.installed.statusFailed') }}</Badge>
             </div>
             <p v-if="ext.message" class="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{{ ext.message }}</p>
           </div>

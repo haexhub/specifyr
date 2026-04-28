@@ -71,7 +71,7 @@ function close() {
             class="h-7 text-xs capitalize"
             @click="levelFilter = lvl"
           >
-            {{ lvl === 'all' ? $t('notifications.filterAll') : lvl }}
+            {{ $t('notifications.filters.' + lvl) }}
           </Button>
         </div>
 

@@ -405,7 +405,7 @@ onUnmounted(() => {
       <div class="flex flex-1 overflow-hidden">
         <aside class="flex w-[340px] shrink-0 flex-col border-r border-border/60">
           <div class="border-b border-border/60 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Tasks
+            {{ $t("run.tasksHeader") }}
             <span v-if="rows.length" class="normal-case"> · {{ rows.length }} {{ $t("common.total") }}</span>
           </div>
           <div class="flex-1 overflow-y-auto">

@@ -628,7 +628,7 @@ async function unregisterLocalExtension(slug: string) {
                   </template>
                 </div>
                 <div class="relative z-10 mt-auto flex items-center justify-between gap-2 pt-3 text-[11px] text-muted-foreground">
-                  <span class="truncate">{{ ext.author ?? "Community" }}</span>
+                  <span class="truncate">{{ ext.author ?? t('extensions.index.community') }}</span>
                   <Button
                     v-if="!standardList.includes(ext.id)"
                     variant="ghost"

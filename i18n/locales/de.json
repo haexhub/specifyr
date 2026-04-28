@@ -99,7 +99,8 @@
       "clearFilters": "Filter zurücksetzen",
       "favoriteLabel": "Favorit",
       "toFavorites": "Zu Favoriten",
-      "details": "Details zu {name}"
+      "details": "Details zu {name}",
+      "community": "Community"
     },
     "installed": {
       "title": "Installierte Extensions",
@@ -107,7 +108,10 @@
       "none": "Keine Extensions in diesem Projekt installiert.",
       "removeTitle": "Extension '{slug}' entfernen?",
       "removeMessage": "Entfernt die Extension aus diesem Projekt. Läuft `specify extension remove` und passt den lokalen Manifest an.",
-      "removeLabel": "Entfernen"
+      "removeLabel": "Entfernen",
+      "detailsLabel": "Details zu {slug}",
+      "sourceAuto": "auto",
+      "statusFailed": "fehlgeschlagen"
     },
     "detail": {
       "backToCatalog": "Zurück zum Katalog",
@@ -170,6 +174,7 @@
     "restart": "Erneut starten",
     "errorPrefix": "Fehler: {message}",
     "sessionLoadError": "Session konnte nicht geladen werden.",
+    "turnFailed": "Turn fehlgeschlagen.",
     "turnError409": "Für diese Session läuft bereits ein Turn.",
     "turnStartError": "Turn konnte nicht gestartet werden.",
     "retryNoMessage": "Keine User-Nachricht zum Wiederholen gefunden.",
@@ -198,6 +203,13 @@
     "title": "Aktivitätslog",
     "entries": "{count} Einträge",
     "filterAll": "Alle",
+    "filters": {
+      "all": "Alle",
+      "info": "Info",
+      "success": "Erfolg",
+      "warning": "Warnung",
+      "error": "Fehler"
+    },
     "noEntries": "Keine Einträge für dieses Filter.",
     "widgetTitle": "Aktivität",
     "showAll": "Alle anzeigen",
@@ -208,7 +220,8 @@
     "label": "Sessions",
     "newTitle": "Neue Session",
     "noSessions": "Noch keine Session.",
-    "sessionLoadError": "Session konnte nicht angelegt werden."
+    "sessionLoadError": "Session konnte nicht geladen werden.",
+    "sessionCreateError": "Session konnte nicht angelegt werden."
   },
 
   "stepSidebar": {
@@ -236,6 +249,8 @@
     "running": "läuft…",
     "retryTitle": "Task neu ausführen",
     "retryResetTitle": "Task für nächsten Run zurücksetzen",
+    "retryLabel": "Wiederholen",
+    "skipLabel": "Überspringen",
     "dependsOn": "nach:"
   },
 
@@ -282,6 +297,14 @@
     "reopenFailed": "Reopen fehlgeschlagen."
   },
 
+  "time": {
+    "justNow": "eben",
+    "minutesAgo": "vor {n}m",
+    "hoursAgo": "vor {n}h",
+    "daysAgo": "vor {n}d",
+    "ago": "vor {t}"
+  },
+
   "run": {
     "runStatus": "Run-Status",
     "notStarted": "Noch nicht gestartet.",
@@ -300,7 +323,8 @@
     "cancelFailed": "Abbruch fehlgeschlagen.",
     "retryFailed": "Retry fehlgeschlagen.",
     "skipFailed": "Skip fehlgeschlagen.",
-    "unknownError": "Unbekannter Fehler"
+    "unknownError": "Unbekannter Fehler",
+    "tasksHeader": "Tasks"
   },
 
   "runtime": {
@@ -344,7 +368,13 @@
     "saveErrorGeneric": "Unbekannter Fehler beim Speichern.",
     "approve": "Approve",
     "deny": "Deny",
-    "escalate": "Escalate to {role}'s reports_to"
+    "escalate": "Escalate to {role}'s reports_to",
+    "for": "für",
+    "decided": {
+      "approved": "genehmigt",
+      "denied": "abgelehnt",
+      "escalated": "eskaliert"
+    }
   },
 
   "hookGate": {

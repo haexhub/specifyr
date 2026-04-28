@@ -189,7 +189,7 @@ onBeforeUnmount(() => window.removeEventListener("keydown", onKeydown));
                     <span class="font-mono text-muted-foreground">{{ shortPath(evt.task_path) }}</span>
                   </div>
                   <div class="mt-0.5 text-[10px] text-muted-foreground">
-                    {{ evt.role }} · vor {{ relativeTime(evt.at) }}
+                    {{ evt.role }} · {{ $t('time.ago', { t: relativeTime(evt.at) }) }}
                   </div>
                 </div>
               </div>

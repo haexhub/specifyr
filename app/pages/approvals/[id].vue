@@ -85,8 +85,8 @@ async function decide(decision: Decision) {
         </CardHeader>
         <CardContent class="space-y-3 text-sm">
           <p>
-            <Badge :variant="decided === 'approved' ? 'default' : 'secondary'">{{ decided }}</Badge>
-            für <code>{{ approval.agent }}</code> · <code>{{ approval.capability }}</code>
+            <Badge :variant="decided === 'approved' ? 'default' : 'secondary'">{{ t('approvals.decided.' + decided) }}</Badge>
+            {{ t('approvals.for') }} <code>{{ approval.agent }}</code> · <code>{{ approval.capability }}</code>
           </p>
           <NuxtLink
             :to="`/specs/${approval.slug}/runtime`"
