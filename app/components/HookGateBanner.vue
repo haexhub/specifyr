@@ -31,7 +31,7 @@ const emit = defineEmits<{
           <p class="mt-1 text-muted-foreground">{{ gate.description }}</p>
           <div class="mt-2 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="outline" class="h-7 text-xs" @click="emit('useCommand', gate.requiredCommand)">
-              <code class="font-mono">{{ gate.requiredCommand }}</code> einfügen
+              <code class="font-mono">{{ gate.requiredCommand }}</code> {{ $t("hookGate.insert") }}
             </Button>
             <a
               :href="gate.docsUrl"
@@ -39,7 +39,7 @@ const emit = defineEmits<{
               rel="noopener"
               class="inline-flex items-center gap-1 text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
             >
-              Docs
+              {{ $t("hookGate.docs") }}
               <ExternalLink class="size-3" />
             </a>
           </div>

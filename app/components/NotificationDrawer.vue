@@ -50,8 +50,8 @@ function close() {
       <aside class="flex h-full w-full max-w-xl flex-col bg-background shadow-2xl">
         <header class="flex items-center justify-between border-b border-border px-5 py-4">
           <div>
-            <h2 class="text-base font-semibold">Aktivitätslog</h2>
-            <p class="text-xs text-muted-foreground">{{ filtered.length }} Einträge</p>
+            <h2 class="text-base font-semibold">{{ $t("notifications.title") }}</h2>
+            <p class="text-xs text-muted-foreground">{{ $t("notifications.entries", { count: filtered.length }) }}</p>
           </div>
           <button
             type="button"
@@ -71,13 +71,13 @@ function close() {
             class="h-7 text-xs capitalize"
             @click="levelFilter = lvl"
           >
-            {{ lvl === 'all' ? 'Alle' : lvl }}
+            {{ lvl === 'all' ? $t('notifications.filterAll') : lvl }}
           </Button>
         </div>
 
         <div class="flex-1 overflow-y-auto px-5 py-3">
           <p v-if="!filtered.length" class="py-8 text-center text-sm text-muted-foreground">
-            Keine Einträge für dieses Filter.
+            {{ $t("notifications.noEntries") }}
           </p>
           <ul v-else class="space-y-2">
             <li

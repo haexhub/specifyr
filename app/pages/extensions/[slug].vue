@@ -99,7 +99,6 @@ const saving = ref(false);
 const standardList = computed(() => standardData.value?.extensions ?? []);
 const isStandard = computed(() => standardList.value.includes(slug.value));
 
-// README -> sanitized HTML (memoized by content)
 const readmeHtml = computed(() => {
   const source = data.value?.readmeContent ?? "";
   if (!source) return "";
@@ -107,7 +106,6 @@ const readmeHtml = computed(() => {
   return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
 });
 
-// Per-project installation state: fetched lazily for each project so we know where the extension already lives.
 const installedIn = ref<Set<string>>(new Set());
 const installedLoaded = ref(false);
 
@@ -128,11 +126,9 @@ async function refreshInstalledMap() {
   installedLoaded.value = true;
 }
 
-// Load installation state whenever the projects list or the current extension changes.
 watch([projects, slug], () => refreshInstalledMap(), { immediate: true });
 
 const pickerOpen = ref(false);
-// Slugs the user has checked in the picker (excludes already-installed projects)
 const selectedProjectSlugs = ref<Set<string>>(new Set());
 
 function toggleProject(projectSlug: string) {
@@ -184,12 +180,12 @@ async function installIntoSelectedProjects() {
     <div class="mx-auto w-full max-w-4xl space-y-4">
       <NuxtLink to="/extensions" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft class="size-4" />
-        Zurück zum Katalog
+        {{ $t("extensions.detail.backToCatalog") }}
       </NuxtLink>
 
-      <div v-if="pending" class="text-sm text-muted-foreground">Lade Detail…</div>
+      <div v-if="pending" class="text-sm text-muted-foreground">{{ $t("extensions.detail.loading") }}</div>
       <div v-else-if="error" class="text-sm text-destructive">
-        Detail konnte nicht geladen werden: {{ error.message }}
+        {{ $t("extensions.detail.loadError") }} {{ error.message }}
       </div>
       <template v-else-if="data">
         <header class="space-y-3 border-b border-border/60 pb-4">
@@ -199,7 +195,7 @@ async function installIntoSelectedProjects() {
             <Badge v-if="data.extension.version" variant="outline">v{{ data.extension.version }}</Badge>
             <Badge v-if="data.source === 'local'" variant="secondary" class="gap-1">
               <FolderGit2 class="size-3" />
-              Lokal
+              {{ $t("extensions.detail.local") }}
             </Badge>
             <Badge v-if="data.extension.verified" variant="secondary">verified</Badge>
           </div>
@@ -208,7 +204,7 @@ async function installIntoSelectedProjects() {
           </p>
           <div class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <span v-if="data.extension.author">
-              von <span class="font-medium text-foreground">{{ data.extension.author }}</span>
+              {{ $t("extensions.detail.by") }} <span class="font-medium text-foreground">{{ data.extension.author }}</span>
             </span>
             <span v-if="data.extension.license">{{ data.extension.license }}</span>
             <span v-if="data.extension.requires?.speckit_version">
@@ -264,22 +260,21 @@ async function installIntoSelectedProjects() {
             </Button>
             <Button v-if="!isStandard" variant="outline" size="sm" :disabled="saving" @click="addToStandard">
               <Star class="mr-1.5 size-3.5" />
-              Zur Standard-Liste
+              {{ $t("extensions.detail.addToFavorites") }}
             </Button>
-            <Badge v-else variant="secondary">In Standard-Liste</Badge>
+            <Badge v-else variant="secondary">{{ $t("extensions.detail.inFavorites") }}</Badge>
 
-            <!-- Multiselect project picker -->
             <Popover v-model:open="pickerOpen">
               <PopoverTrigger as-child>
                 <Button size="sm" :disabled="saving || !(projects ?? []).length">
                   <FolderPlus class="mr-1.5 size-3.5" />
-                  Zu Projekten hinzufügen
+                  {{ $t("extensions.detail.addToProjects") }}
                 </Button>
               </PopoverTrigger>
               <PopoverContent class="w-80 p-0" align="start">
                 <Command>
-                  <CommandInput placeholder="Projekt suchen…" />
-                  <CommandEmpty>Keine Projekte gefunden.</CommandEmpty>
+                  <CommandInput :placeholder="$t('extensions.detail.searchProject')" />
+                  <CommandEmpty>{{ $t("extensions.detail.noProjectsFound") }}</CommandEmpty>
                   <CommandList class="max-h-72">
                     <CommandGroup>
                       <CommandItem
@@ -308,7 +303,7 @@ async function installIntoSelectedProjects() {
                         <div class="min-w-0 flex-1">
                           <div class="truncate text-sm">{{ p.title || p.slug }}</div>
                           <div class="truncate text-[11px] text-muted-foreground">
-                            {{ installedIn.has(p.slug) ? "bereits installiert" : p.slug }}
+                            {{ installedIn.has(p.slug) ? $t("extensions.detail.alreadyInstalled") : p.slug }}
                           </div>
                         </div>
                       </CommandItem>
@@ -316,14 +311,14 @@ async function installIntoSelectedProjects() {
                   </CommandList>
                   <div class="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-2">
                     <span class="text-xs text-muted-foreground">
-                      {{ selectedProjectSlugs.size }} ausgewählt
+                      {{ $t("extensions.detail.selectedCount", { count: selectedProjectSlugs.size }) }}
                     </span>
                     <Button
                       size="sm"
                       :disabled="saving || selectedProjectSlugs.size === 0"
                       @click="installIntoSelectedProjects"
                     >
-                      Installieren
+                      {{ $t("extensions.detail.install") }}
                     </Button>
                   </div>
                 </Command>
@@ -331,7 +326,7 @@ async function installIntoSelectedProjects() {
             </Popover>
           </div>
           <div v-if="installedLoaded && installedIn.size" class="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
-            <span>Aktuell installiert in:</span>
+            <span>{{ $t("extensions.detail.installedIn") }}</span>
             <Badge v-for="s in Array.from(installedIn)" :key="s" variant="secondary">{{ s }}</Badge>
           </div>
           <div v-if="data.extension.tags?.length" class="flex flex-wrap gap-1">
@@ -347,7 +342,7 @@ async function installIntoSelectedProjects() {
 
         <section v-if="data.commands?.length" class="rounded-md border border-border/60 bg-card">
           <h3 class="border-b border-border/60 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Commands ({{ data.commands.length }})
+            {{ $t("extensions.detail.commandsTitle", { count: data.commands.length }) }}
           </h3>
           <ul class="divide-y divide-border/60">
             <li v-for="cmd in data.commands" :key="cmd.name" class="px-4 py-2.5">
@@ -356,7 +351,7 @@ async function installIntoSelectedProjects() {
                 {{ cmd.description }}
               </p>
               <p v-if="cmd.aliases?.length" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
-                <span>Aliase:</span>
+                <span>{{ $t("extensions.detail.aliases") }}</span>
                 <code v-for="alias in cmd.aliases" :key="alias" class="font-mono">/{{ alias }}</code>
               </p>
             </li>
@@ -365,11 +360,10 @@ async function installIntoSelectedProjects() {
 
         <section v-if="data.hooks?.length" class="rounded-md border border-border/60 bg-card">
           <h3 class="border-b border-border/60 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Hooks ({{ data.hooks.length }})
+            {{ $t("extensions.detail.hooksTitle", { count: data.hooks.length }) }}
           </h3>
           <p class="border-b border-border/60 bg-muted/20 px-4 py-1.5 text-[11px] text-muted-foreground">
-            Hooks feuern automatisch, wenn das entsprechende spec-kit-Kommando ausgeführt wird. Markierte
-            Hooks (<Badge variant="outline" class="text-[10px]">optional</Badge>) fragen vorher nach Bestätigung.
+            {{ $t("extensions.detail.hooksDescPre") }}<Badge variant="outline" class="text-[10px]">optional</Badge>{{ $t("extensions.detail.hooksDescPost") }}
           </p>
           <ul class="divide-y divide-border/60">
             <li v-for="hook in data.hooks" :key="`${hook.event}::${hook.command}`" class="px-4 py-2.5">
@@ -383,7 +377,7 @@ async function installIntoSelectedProjects() {
                 {{ hook.description }}
               </p>
               <p v-if="hook.optional && hook.prompt" class="mt-1 text-[11px] italic text-muted-foreground">
-                Prompt: „{{ hook.prompt }}"
+                {{ $t("extensions.detail.prompt", { prompt: hook.prompt }) }}
               </p>
             </li>
           </ul>
@@ -391,18 +385,18 @@ async function installIntoSelectedProjects() {
 
         <section class="rounded-md border border-border/60 bg-card">
           <h3 class="border-b border-border/60 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            README
+            {{ $t("extensions.detail.readmeTitle") }}
           </h3>
           <article
             v-if="readmeHtml"
             class="prose prose-sm max-w-none px-4 py-4 prose-headings:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground"
             v-html="readmeHtml"
           />
-          <p v-else class="px-4 py-4 text-sm text-muted-foreground">Kein README verfügbar.</p>
+          <p v-else class="px-4 py-4 text-sm text-muted-foreground">{{ $t("extensions.detail.noReadme") }}</p>
         </section>
 
         <div v-if="data.dependents?.length" class="text-xs text-muted-foreground">
-          Abhängige Extensions:
+          {{ $t("extensions.detail.dependents") }}
           <span v-for="(dep, idx) in data.dependents" :key="dep.id">
             <code class="font-mono">{{ dep.id }}</code><span v-if="idx < data.dependents.length - 1">, </span>
           </span>

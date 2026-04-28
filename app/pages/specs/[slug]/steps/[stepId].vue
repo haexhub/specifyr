@@ -13,6 +13,7 @@ import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import { gatesForStep } from "~/lib/hooks";
 import type { SessionMetadata, StepState } from "~/lib/types";
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
@@ -29,8 +30,6 @@ const { data: project } = await useFetch<{
   title?: string;
 }>(() => `/api/projects/${slug.value}`, { key: () => `project-${slug.value}` });
 
-// Server enriches the snapshot with workflowDefinition (full step list). Fall back to spec-kit
-// if the field is missing (e.g., pre-workflow project meta).
 const workflow = computed(() =>
   resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null)
 );
@@ -54,7 +53,6 @@ const artifactReloadToken = ref(0);
 const artifactOpen = ref(true);
 const chatStreamRef = ref<{ insertIntoDraft: (text: string) => void } | null>(null);
 
-// --- Artifact sidebar: drag-to-resize ---------------------------------------------
 const ARTIFACT_WIDTH_KEY = "specops:artifact-sidebar-width";
 const ARTIFACT_WIDTH_MIN = 320;
 const ARTIFACT_WIDTH_MAX = 960;
@@ -76,7 +74,6 @@ function startArtifactResize(event: MouseEvent) {
   const startX = event.clientX;
   const startWidth = artifactWidth.value;
   function onMove(e: MouseEvent) {
-    // Dragging left side of a right-anchored panel: leftward drag = wider panel.
     const next = startWidth - (e.clientX - startX);
     artifactWidth.value = Math.min(Math.max(next, ARTIFACT_WIDTH_MIN), ARTIFACT_WIDTH_MAX);
   }
@@ -119,7 +116,6 @@ const hookGates = computed(() => {
   return gatesForStep(step.value.id, installedSlugs.value);
 });
 
-// Step states across all steps so we can compute lock status
 const stepStates = ref<StepState[]>([]);
 const statusMap = computed(() => {
   const map: Record<StepId, StepStatus | undefined> = {};
@@ -147,9 +143,6 @@ const activeSession = computed(() =>
 
 async function loadStepStates() {
   stepStates.value = await $fetch<StepState[]>(`/api/projects/${slug.value}/steps`);
-  // ProjectStepSidebar uses useFetch with key `steps-<slug>`. Our own $fetch above
-  // doesn't invalidate that cache, so without this refresh the sidebar would keep
-  // showing the pre-complete lock icons until a page reload.
   await refreshNuxtData(`steps-${slug.value}`);
 }
 
@@ -190,7 +183,7 @@ async function createSession() {
       query: { ...route.query, session: created.id }
     });
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Session konnte nicht angelegt werden.");
+    alert(err instanceof Error ? err.message : t("sessions.sessionLoadError"));
   } finally {
     creatingSession.value = false;
   }
@@ -219,7 +212,7 @@ async function markComplete() {
     });
     await loadStepStates();
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Markieren fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("stepDetail.markFailed"));
   } finally {
     togglingComplete.value = false;
   }
@@ -232,7 +225,7 @@ async function reopen() {
     await $fetch(`/api/projects/${slug.value}/steps/${stepIdParam.value}/reopen`, { method: "POST" });
     await loadStepStates();
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Reopen fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("stepDetail.reopenFailed"));
   } finally {
     togglingComplete.value = false;
   }
@@ -242,7 +235,7 @@ watch(
   [slug, stepIdParam],
   async () => {
     await loadStepStates();
-    if (!unlocked.value) return; // locked — skip session loading
+    if (!unlocked.value) return;
     await loadSessions();
     await ensureActiveSession();
   },
@@ -259,7 +252,7 @@ const nextStep = computed(() => {
 
 <template>
   <div v-if="!step" class="p-8 text-sm text-muted-foreground">
-    Unbekannter Step: {{ stepIdParam }}
+    {{ $t("stepDetail.unknownStep", { id: stepIdParam }) }}
   </div>
 
   <div v-else class="flex h-screen">
@@ -269,8 +262,6 @@ const nextStep = computed(() => {
       :active-step-id="step.id"
       :workflow="workflow"
     >
-      <!-- SessionList depends on `unlocked` which derives from client-fetched stepStates.
-           Server render has empty state → would drift from hydrated value. -->
       <ClientOnly>
         <SessionList
           v-if="unlocked"
@@ -286,42 +277,37 @@ const nextStep = computed(() => {
       </ClientOnly>
     </ProjectStepSidebar>
 
-    <!-- Main workspace & artifact panel: all dependent on `unlocked` (client-only state).
-         Wrapping in one ClientOnly avoids a flicker between server skeleton and client content. -->
     <ClientOnly>
       <template #fallback>
         <section class="flex h-screen flex-1 items-center justify-center text-xs text-muted-foreground">
-          Lade Workspace…
+          {{ $t("stepDetail.loadingWorkspace") }}
         </section>
       </template>
 
-    <!-- Locked step screen -->
     <section v-if="!unlocked" class="flex h-screen flex-1 items-center justify-center p-8">
       <div class="max-w-md text-center">
         <div class="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
           <Lock class="size-6" />
         </div>
-        <h1 class="text-xl font-semibold">{{ step.label }} ist gesperrt</h1>
+        <h1 class="text-xl font-semibold">{{ $t("stepDetail.lockedTitle", { label: step.label }) }}</h1>
         <p class="mt-2 text-sm text-muted-foreground">
-          Schließe zuerst <span class="font-medium text-foreground">Step {{ stepIndex }}: {{ previousStep?.label }}</span> ab,
-          bevor du hier weiterarbeiten kannst.
+          {{ $t("stepDetail.lockedDesc", { n: stepIndex, label: previousStep?.label }) }}
         </p>
         <Button
           v-if="previousStep"
           class="mt-5"
           @click="router.push(`/specs/${slug}/steps/${previousStep.id}`)"
         >
-          Zu {{ previousStep.label }} wechseln
+          {{ $t("stepDetail.switchTo", { label: previousStep.label }) }}
         </Button>
       </div>
     </section>
 
-    <!-- Normal step workspace -->
     <section v-else class="flex h-screen flex-1 flex-col">
       <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-3">
         <div>
           <p class="text-[11px] uppercase tracking-wider text-muted-foreground">
-            Step {{ stepIndex + 1 }} von {{ workflowSteps.length }}
+            {{ $t("stepDetail.step", { n: stepIndex + 1, total: workflowSteps.length }) }}
           </p>
           <h1 class="text-lg font-semibold">{{ step.label }}</h1>
         </div>
@@ -334,7 +320,7 @@ const nextStep = computed(() => {
             @click="markComplete"
           >
             <Check class="mr-1.5 size-3.5" />
-            Als erledigt markieren
+            {{ $t("stepDetail.markComplete") }}
           </Button>
           <Button
             v-else
@@ -344,7 +330,7 @@ const nextStep = computed(() => {
             @click="reopen"
           >
             <RotateCcw class="mr-1.5 size-3.5" />
-            Wieder öffnen
+            {{ $t("stepDetail.reopen") }}
           </Button>
         </div>
       </header>
@@ -357,7 +343,7 @@ const nextStep = computed(() => {
         v-if="currentStepStatus === 'stale'"
         class="border-b border-amber-500/30 bg-amber-500/10 px-6 py-2 text-xs text-amber-900 dark:text-amber-200"
       >
-        ⚠ Dieser Step ist als veraltet markiert — ein Upstream-Step wurde geändert. Re-run oder wieder als erledigt markieren, sobald die Änderungen eingearbeitet sind.
+        {{ $t("stepDetail.staleWarning") }}
       </div>
 
       <div class="flex flex-1 flex-col overflow-hidden">
@@ -381,13 +367,13 @@ const nextStep = computed(() => {
       <button
         type="button"
         class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-        title="Artefakt einblenden"
+        :title="$t('stepDetail.showArtifact')"
         @click="artifactOpen = true"
       >
         <PanelRightOpen class="size-4" />
       </button>
       <p class="mt-4 rotate-180 text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground [writing-mode:vertical-rl]">
-        Artefakt
+        {{ $t("artifact.label") }}
       </p>
     </aside>
 
@@ -397,8 +383,6 @@ const nextStep = computed(() => {
       :class="artifactResizing && 'select-none'"
       :style="{ width: `${artifactWidth}px` }"
     >
-      <!-- Drag handle on the left edge: a 6px-wide invisible strip, visible only on hover/drag.
-           cursor-col-resize gives a clear affordance; the inner 1px line shows the hot zone. -->
       <div
         class="group absolute inset-y-0 -left-1 z-20 w-2 cursor-col-resize"
         :class="artifactResizing && 'bg-primary/10'"

@@ -14,8 +14,8 @@ const props = withDefaults(
     busy?: boolean;
   }>(),
   {
-    confirmLabel: "Bestätigen",
-    cancelLabel: "Abbrechen",
+    confirmLabel: undefined,
+    cancelLabel: undefined,
     destructive: false,
     busy: false
   }
@@ -26,6 +26,11 @@ const emit = defineEmits<{
   confirm: [];
   cancel: [];
 }>();
+
+const { t } = useI18n();
+
+const resolvedConfirmLabel = computed(() => props.confirmLabel ?? t("confirmDialog.defaultConfirm"));
+const resolvedCancelLabel = computed(() => props.cancelLabel ?? t("confirmDialog.defaultCancel"));
 
 function close() {
   if (props.busy) return;
@@ -80,7 +85,7 @@ function confirm() {
 
         <div class="mt-6 flex justify-end gap-2">
           <Button type="button" variant="ghost" :disabled="busy" @click="close">
-            {{ cancelLabel }}
+            {{ resolvedCancelLabel }}
           </Button>
           <Button
             type="button"
@@ -88,7 +93,7 @@ function confirm() {
             :disabled="busy"
             @click="confirm"
           >
-            {{ busy ? "Arbeite…" : confirmLabel }}
+            {{ busy ? $t("common.working") : resolvedConfirmLabel }}
           </Button>
         </div>
       </div>

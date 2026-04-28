@@ -97,7 +97,7 @@ function statusClass(status: string) {
           v-if="task.dependsOn?.length"
           class="mt-0.5 flex flex-wrap gap-1 text-[10px] text-muted-foreground"
         >
-          <span>nach:</span>
+          <span>{{ $t("runTask.dependsOn") }}</span>
           <code
             v-for="d in task.dependsOn"
             :key="d"

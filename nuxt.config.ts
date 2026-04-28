@@ -10,7 +10,7 @@ export default defineNuxtConfig({
       extensions: [".vue"]
     }
   ],
-  modules: ["shadcn-nuxt"],
+  modules: ["shadcn-nuxt", "@nuxtjs/i18n"],
   vite: {
     plugins: [tailwindcss()]
   },
@@ -22,5 +22,10 @@ export default defineNuxtConfig({
     public: {
       appName: "SpecOps"
     }
+  },
+  i18n: {
+    locales: [{ code: "de", language: "de-DE", file: "de.json" }],
+    defaultLocale: "de",
+    langDir: "locales/"
   }
 });

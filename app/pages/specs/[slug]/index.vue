@@ -12,6 +12,7 @@ import { isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import type { StepState, NotificationEvent } from "~/lib/types";
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const refreshProjects = inject<() => Promise<void>>("refreshProjects", async () => {});
@@ -35,8 +36,6 @@ const workflow = computed(() =>
 );
 const workflowSteps = computed(() => workflow.value.steps);
 
-// Workflows available for this project: spec-kit + any installed workflow-extension.
-// Drives the switcher dropdown. Empty array (spec-kit only) is the common case.
 const { data: availableWorkflows } = await useFetch<Workflow[]>(
   () => `/api/projects/${slug.value}/workflows`,
   { default: () => [], key: () => `workflows-${slug.value}` }
@@ -85,8 +84,7 @@ async function switchWorkflow(event: Event) {
   const target = event.target as HTMLSelectElement;
   const nextId = target.value;
   if (!nextId || nextId === project.value?.workflow) return;
-  if (!confirm(`Workflow zu "${nextId}" wechseln?\n\nBestehende Step-States bleiben erhalten, sind aber evtl. nicht mehr auf das neue Workflow anwendbar.`)) {
-    // Revert the select value
+  if (!confirm(t("specIndex.confirmWorkflowSwitch", { id: nextId }))) {
     target.value = (project.value?.workflow as string) ?? "spec-kit";
     return;
   }
@@ -98,7 +96,7 @@ async function switchWorkflow(event: Event) {
     });
     await reloadNuxtApp({ path: route.fullPath });
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Workflow-Wechsel fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("specIndex.workflowChangeFailed"));
     target.value = (project.value?.workflow as string) ?? "spec-kit";
   } finally {
     switchingWorkflow.value = false;
@@ -114,7 +112,7 @@ async function deleteProject() {
     await refreshProjects();
     await router.push("/");
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Löschen fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("specIndex.deleteFailed"));
   } finally {
     deleting.value = false;
   }
@@ -125,10 +123,10 @@ async function deleteProject() {
   <div v-if="error" class="p-8">
     <Card class="mx-auto max-w-lg">
       <CardHeader>
-        <CardTitle>Projekt nicht gefunden</CardTitle>
+        <CardTitle>{{ $t("specIndex.notFound") }}</CardTitle>
       </CardHeader>
       <CardContent class="text-sm text-muted-foreground">
-        Das Projekt <code>{{ slug }}</code> existiert nicht mehr oder kann nicht geladen werden.
+        {{ $t("specIndex.notFoundDesc", { slug }) }}
       </CardContent>
     </Card>
   </div>
@@ -141,16 +139,17 @@ async function deleteProject() {
   >
     <template #sidebar>
       <div class="space-y-2 px-3 py-3 text-xs text-muted-foreground">
-        <p class="font-medium text-foreground">Übersicht</p>
+        <p class="font-medium text-foreground">{{ $t("specIndex.overview") }}</p>
         <p>
-          Fortschritt:
-          <span class="font-medium text-foreground">{{ completionStats.complete }}/{{ completionStats.total }}</span> abgeschlossen
+          {{ $t("specIndex.progress") }}
+          <span class="font-medium text-foreground">{{ completionStats.complete }}/{{ completionStats.total }}</span>
+          {{ $t("specIndex.completed") }}
           <span v-if="completionStats.stale" class="ml-1 text-amber-500">
-            ({{ completionStats.stale }} veraltet)
+            {{ $t("specIndex.stale", { count: completionStats.stale }) }}
           </span>
         </p>
         <p v-if="events?.length">
-          <span class="font-medium text-foreground">{{ events.length }}</span> Events gesammelt
+          <span class="font-medium text-foreground">{{ events.length }}</span> {{ $t("specIndex.eventsLabel") }}
         </p>
       </div>
     </template>
@@ -170,14 +169,14 @@ async function deleteProject() {
         @click="deleteDialogOpen = true"
       >
         <Trash2 class="mr-1.5 size-3.5" />
-        Projekt löschen
+        {{ $t("specIndex.deleteProject") }}
       </Button>
     </header>
 
         <Card>
           <CardHeader>
             <div class="flex items-center justify-between gap-3">
-              <CardTitle class="text-base">Workflow</CardTitle>
+              <CardTitle class="text-base">{{ $t("specIndex.workflowTitle") }}</CardTitle>
               <div class="flex items-center gap-2">
                 <select
                   :value="project.workflow ?? 'spec-kit'"
@@ -213,17 +212,17 @@ async function deleteProject() {
                   <Check
                     v-if="stepStatus(step.id) === 'complete'"
                     class="size-4 text-emerald-600"
-                    title="abgeschlossen"
+                    :title="$t('common.statusComplete')"
                   />
                   <Loader2
                     v-else-if="stepStatus(step.id) === 'in_progress'"
                     class="size-4 animate-spin text-primary"
-                    title="in Arbeit"
+                    :title="$t('common.statusInProgress')"
                   />
                   <AlertTriangle
                     v-else-if="stepStatus(step.id) === 'stale'"
                     class="size-4 text-amber-500"
-                    title="veraltet"
+                    :title="$t('common.statusStale')"
                   />
                   <Badge variant="outline">{{ step.command }}</Badge>
                   <ChevronRight class="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
@@ -232,7 +231,7 @@ async function deleteProject() {
               <div
                 v-else
                 class="flex cursor-not-allowed items-start gap-3 rounded-md border border-dashed border-border/60 bg-muted/10 p-3 text-muted-foreground/70"
-                :title="`Zuerst Step ${index} abschließen`"
+                :title="$t('stepSidebar.locked', { n: index })"
               >
                 <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-muted/60 text-xs font-medium">
                   {{ index + 1 }}
@@ -263,10 +262,10 @@ async function deleteProject() {
 
     <ConfirmDialog
       v-model:open="deleteDialogOpen"
-      :title="`Projekt '${project.title}' löschen?`"
-      message="Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle SpecOps-Metadaten."
-      :details="`Betroffen: projects/${project.slug}/ und .specops/${project.slug}/`"
-      confirm-label="Endgültig löschen"
+      :title="$t('specIndex.deleteTitle', { title: project.title })"
+      :message="$t('specIndex.deleteMessage')"
+      :details="$t('specIndex.deleteDetails', { slug: project.slug })"
+      :confirm-label="$t('specIndex.deleteConfirm')"
       destructive
       :busy="deleting"
       @confirm="deleteProject"

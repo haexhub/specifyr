@@ -45,18 +45,18 @@ function relative(iso: string): string {
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <Activity class="size-4 text-primary" />
-          <CardTitle class="text-base">Aktivität</CardTitle>
+          <CardTitle class="text-base">{{ $t("notifications.widgetTitle") }}</CardTitle>
         </div>
         <Button variant="ghost" size="sm" class="h-7 text-xs" @click="emit('openDrawer')">
-          Alle anzeigen
+          {{ $t("notifications.showAll") }}
           <ChevronRight class="ml-1 size-3" />
         </Button>
       </div>
     </CardHeader>
     <CardContent>
-      <p v-if="loading" class="text-xs text-muted-foreground">Lade…</p>
+      <p v-if="loading" class="text-xs text-muted-foreground">{{ $t("common.loading") }}</p>
       <p v-else-if="!events.length" class="text-xs text-muted-foreground">
-        Noch keine Aktivität. Starte eine Session in einem der Steps.
+        {{ $t("notifications.noActivity") }}
       </p>
       <ul v-else class="space-y-1.5">
         <li

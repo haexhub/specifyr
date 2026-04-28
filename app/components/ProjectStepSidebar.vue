@@ -58,7 +58,7 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
         class="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
       >
         <ArrowLeft class="size-3" />
-        Alle Projekte
+        {{ $t("common.allProjects") }}
       </NuxtLink>
       <NuxtLink
         :to="`/specs/${slug}`"
@@ -75,7 +75,7 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
 
     <div v-if="showSteps" class="border-t border-border/60 p-2">
       <p class="px-2 pb-1.5 pt-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-        Steps
+        {{ $t("stepSidebar.steps") }}
       </p>
       <p v-if="workflow.source === 'extension'" class="px-2 pb-1 text-[10px] text-muted-foreground">
         {{ workflow.label }}
@@ -103,24 +103,24 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
               <Check
                 v-if="stateFor(step.id)?.status === 'complete'"
                 class="size-3.5 text-emerald-600"
-                title="abgeschlossen"
+                :title="$t('common.statusComplete')"
               />
               <Loader2
                 v-else-if="stateFor(step.id)?.status === 'in_progress'"
                 class="size-3.5 animate-spin text-primary"
-                title="in Arbeit"
+                :title="$t('common.statusInProgress')"
               />
               <AlertTriangle
                 v-else-if="stateFor(step.id)?.status === 'stale'"
                 class="size-3.5 text-amber-500"
-                title="veraltet"
+                :title="$t('common.statusStale')"
               />
             </span>
           </NuxtLink>
           <div
             v-else
             class="flex cursor-not-allowed items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/60"
-            :title="`Bitte zuerst Step ${index} abschließen`"
+            :title="$t('stepSidebar.locked', { n: index })"
           >
             <span class="flex min-w-0 items-center gap-2">
               <span

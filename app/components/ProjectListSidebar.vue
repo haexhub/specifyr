@@ -9,6 +9,7 @@ const props = defineProps<{
   compact?: boolean;
 }>();
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const dialogOpen = ref(false);
@@ -64,7 +65,7 @@ async function confirmDelete() {
       await router.push("/");
     }
   } catch (error) {
-    alert(error instanceof Error ? error.message : "Löschen fehlgeschlagen.");
+    alert(error instanceof Error ? error.message : t("common.error"));
   } finally {
     deleting.value = false;
   }
@@ -89,7 +90,7 @@ async function confirmDelete() {
         to="/"
         class="mx-auto inline-flex size-8 items-center justify-center rounded-md text-[11px] font-bold tracking-tight text-primary"
         :class="route.path === '/' ? 'bg-primary/15' : 'hover:bg-accent'"
-        title="Startseite"
+        :title="$t('sidebar.homepage')"
       >
         SO
       </NuxtLink>
@@ -97,7 +98,7 @@ async function confirmDelete() {
         v-if="!compact"
         type="button"
         class="inline-flex size-7 items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
-        title="Neues Projekt"
+        :title="$t('sidebar.newProject')"
         @click="dialogOpen = true"
       >
         <Plus class="size-4" />
@@ -109,7 +110,7 @@ async function confirmDelete() {
       <button
         type="button"
         class="inline-flex size-10 w-full items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition hover:border-primary/50 hover:bg-accent hover:text-foreground"
-        title="Neues Projekt"
+        :title="$t('sidebar.newProject')"
         @click="dialogOpen = true"
       >
         <Plus class="size-4" />
@@ -154,7 +155,7 @@ async function confirmDelete() {
           <button
             type="button"
             class="absolute right-1.5 top-1/2 hidden size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition group-hover:flex group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-            title="Projekt löschen"
+            :title="$t('sidebar.deleteProject')"
             @click="openDeleteDialog(project, $event)"
           >
             <Trash2 class="size-3.5" />
@@ -162,7 +163,7 @@ async function confirmDelete() {
         </li>
       </ul>
       <p v-else class="px-3 py-6 text-xs text-muted-foreground">
-        Noch keine Projekte. Lege dein erstes mit "+" oben an.
+        {{ $t("sidebar.noProjects") }}
       </p>
     </nav>
 
@@ -174,10 +175,10 @@ async function confirmDelete() {
           route.path === '/extensions' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
           compact ? 'size-10 justify-center p-0' : 'px-2 py-2'
         ]"
-        :title="compact ? 'Extensions' : undefined"
+        :title="compact ? $t('sidebar.extensions') : undefined"
       >
         <Puzzle class="size-4 opacity-70" />
-        <span v-if="!compact">Extensions</span>
+        <span v-if="!compact">{{ $t("sidebar.extensions") }}</span>
       </NuxtLink>
     </div>
 
@@ -185,10 +186,10 @@ async function confirmDelete() {
 
     <ConfirmDialog
       :open="deleteTarget !== null"
-      :title="`Projekt '${deleteTarget?.title ?? ''}' löschen?`"
-      message="Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle SpecOps-Metadaten."
-      :details="deleteTarget ? `Betroffen: projects/${deleteTarget.slug}/ und .specops/${deleteTarget.slug}/` : ''"
-      confirm-label="Endgültig löschen"
+      :title="deleteTarget ? $t('sidebar.deleteProjectTitle', { title: deleteTarget.title }) : ''"
+      :message="$t('sidebar.deleteProjectMessage')"
+      :details="deleteTarget ? $t('sidebar.deleteProjectDetails', { slug: deleteTarget.slug }) : ''"
+      :confirm-label="$t('specIndex.deleteConfirm')"
       destructive
       :busy="deleting"
       @confirm="confirmDelete"

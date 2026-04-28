@@ -17,6 +17,8 @@ const props = defineProps<{
   slug: string;
 }>();
 
+const { t } = useI18n();
+
 const { data: manifest, refresh, pending } = await useFetch<{
   slug: string;
   extensions: ExtensionInstallRecord[];
@@ -53,7 +55,7 @@ async function syncStandards() {
     });
     await Promise.all([refresh(), refreshStandards()]);
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Sync fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("common.error"));
   } finally {
     syncing.value = false;
   }
@@ -70,7 +72,7 @@ async function confirmRemove() {
     removeTarget.value = null;
     await refresh();
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Entfernen fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("common.error"));
   } finally {
     removing.value = false;
   }
@@ -83,7 +85,7 @@ async function confirmRemove() {
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <Puzzle class="size-4 text-primary" />
-          <CardTitle class="text-base">Installierte Extensions</CardTitle>
+          <CardTitle class="text-base">{{ $t("extensions.installed.title") }}</CardTitle>
         </div>
         <div class="flex items-center gap-3">
           <Button
@@ -95,20 +97,20 @@ async function confirmRemove() {
             @click="syncStandards"
           >
             <RefreshCw class="mr-1 size-3" :class="syncing && 'animate-spin'" />
-            Standards synchronisieren ({{ missingStandards.length }})
+            {{ $t("extensions.installed.syncFavorites", { count: missingStandards.length }) }}
           </Button>
           <NuxtLink to="/extensions" class="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">
-            Katalog →
+            {{ $t("common.catalog") }}
           </NuxtLink>
         </div>
       </div>
     </CardHeader>
     <CardContent>
-      <p v-if="pending" class="text-xs text-muted-foreground">Lade…</p>
+      <p v-if="pending" class="text-xs text-muted-foreground">{{ $t("common.loading") }}</p>
       <p v-else-if="!manifest?.extensions.length" class="text-xs text-muted-foreground">
-        Keine Extensions in diesem Projekt installiert.
+        {{ $t("extensions.installed.none") }}
         <NuxtLink to="/extensions" class="ml-1 inline-flex items-center gap-0.5 underline underline-offset-2 hover:text-foreground">
-          <Plus class="size-3" /> Hinzufügen
+          <Plus class="size-3" /> {{ $t("common.add") }}
         </NuxtLink>
       </p>
       <ul v-else class="divide-y divide-border/60">
@@ -149,9 +151,9 @@ async function confirmRemove() {
 
     <ConfirmDialog
       :open="removeTarget !== null"
-      :title="`Extension '${removeTarget?.slug ?? ''}' entfernen?`"
-      message="Entfernt die Extension aus diesem Projekt. Läuft `specify extension remove <slug>` und passt den lokalen Manifest an."
-      confirm-label="Entfernen"
+      :title="removeTarget ? $t('extensions.installed.removeTitle', { slug: removeTarget.slug }) : ''"
+      :message="$t('extensions.installed.removeMessage')"
+      :confirm-label="$t('extensions.installed.removeLabel')"
       destructive
       :busy="removing"
       @confirm="confirmRemove"
