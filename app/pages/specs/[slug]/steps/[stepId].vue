@@ -158,9 +158,31 @@ async function loadSessions() {
   }
 }
 
+function sessionStorageKey(slugVal: string, stepIdVal: string) {
+  return `specops:last-session:${slugVal}:${stepIdVal}`;
+}
+
+function getStoredSessionId(slugVal: string, stepIdVal: string): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(sessionStorageKey(slugVal, stepIdVal));
+}
+
+function storeSessionId(slugVal: string, stepIdVal: string, sessionId: string) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(sessionStorageKey(slugVal, stepIdVal), sessionId);
+}
+
 async function ensureActiveSession() {
   if (!unlocked.value) return;
   if (activeSessionId.value) return;
+  const stored = getStoredSessionId(slug.value, stepIdParam.value);
+  if (stored) {
+    const found = sessions.value.find((s) => s.id === stored);
+    if (found) {
+      await selectSession(found.id);
+      return;
+    }
+  }
   if (sessions.value.length > 0) {
     await selectSession(sessions.value[0]!.id);
     return;
@@ -178,6 +200,7 @@ async function createSession() {
       { method: "POST", body: {} }
     );
     sessions.value = [created, ...sessions.value];
+    storeSessionId(slug.value, stepIdParam.value, created.id);
     await router.replace({
       path: route.path,
       query: { ...route.query, session: created.id }
@@ -190,6 +213,7 @@ async function createSession() {
 }
 
 async function selectSession(sessionId: string) {
+  storeSessionId(slug.value, stepIdParam.value, sessionId);
   await router.replace({
     path: route.path,
     query: { ...route.query, session: sessionId }
