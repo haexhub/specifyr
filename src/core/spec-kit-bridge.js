@@ -13,7 +13,7 @@ export class SpecKitBridge {
     await ensureDir(path.join(this.rootDir, "specs"));
     await writeText(
       path.join(this.rootDir, "memory", "constitution.md"),
-      "# SpecOps Constitution\n\n- Work from explicit specs.\n- Preserve approval gates.\n- Prefer observable state transitions over hidden agent behavior.\n"
+      "# speculoss Constitution\n\n- Work from explicit specs.\n- Preserve approval gates.\n- Prefer observable state transitions over hidden agent behavior.\n"
     );
   }
 
@@ -30,7 +30,7 @@ export class SpecKitBridge {
     });
     await writeText(
       path.join(projectDir, "README.md"),
-      `# ${artifacts.title}\n\nThis directory mirrors SpecOps artifacts for spec-kit-style workflows.\n`
+      `# ${artifacts.title}\n\nThis directory mirrors speculoss artifacts for spec-kit-style workflows.\n`
     );
   }
 

@@ -70,7 +70,7 @@ export async function getExtensionDetail(slug: string): Promise<ExtensionDetailP
   }
 
   const url = `${CATALOG_BASE}/_next/data/${meta.buildId}/${encodeURIComponent(slug)}.json`;
-  const res = await fetch(url, { headers: { "user-agent": "specops/0.1" } });
+  const res = await fetch(url, { headers: { "user-agent": "speculoss/0.1" } });
   if (res.status === 404) {
     throw new Error(`Extension '${slug}' not found in catalog.`);
   }

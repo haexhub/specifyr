@@ -10,12 +10,12 @@
 #     reingereicht. Alles andere ist in der Image-Schicht eingefroren.
 
 services:
-  haex-corp:
+  speculoss:
     build:
       context: .
       target: prod
-    image: haex-corp:prod
-    container_name: haex-corp-prod
+    image: speculoss:prod
+    container_name: speculoss-prod
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -39,7 +39,7 @@ services:
       # halten willst.
       - ./projects:/app/projects
       # Event-/Session-State soll persistieren, ohne den Host zu verschmutzen.
-      - specops_state:/app/.specops
+      - speculoss_state:/app/.specops
       # Host-Login wiederverwenden (Solo-Tool-Default). Für Multi-User später:
       #   - claude_home:/home/node/.claude
       - ${HOME}/.claude:/home/node/.claude
@@ -48,7 +48,10 @@ services:
       # Host-root für diesen Container; in Multi-User-Deployments revisiten.
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      - companies
+      companies:
+        aliases:
+          - speculoss
+          - haex-corp
     user: "${UID:-1000}:${GID:-1000}"
 
 networks:
@@ -57,6 +60,6 @@ networks:
     driver: bridge
 
 volumes:
-  specops_state:
+  speculoss_state:
   # Multi-User-Zukunft:
   # claude_home:

@@ -1,6 +1,6 @@
 # Central Tool & Skill Catalog
 
-This catalog is the **single source of truth** for tools and skills available to all companies declared on this haex-corp instance.
+This catalog is the **single source of truth** for tools and skills available to all companies declared on this speculoss instance.
 
 ```
 catalog/
@@ -60,4 +60,4 @@ Use `/speckit.company.catalog` in any spec-kit project to list, add, remove, and
 
 ## Catalog scope
 
-This is a **machine-wide** catalog (all companies on this haex-corp install share it). For per-company overrides, drop files into `<spec-kit-project>/.specify/org/catalog/{tools,skills}/` — those take precedence over the global catalog.
+This is a **machine-wide** catalog (all companies on this speculoss install share it). For per-company overrides, drop files into `<spec-kit-project>/.specify/org/catalog/{tools,skills}/` — those take precedence over the global catalog.

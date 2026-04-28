@@ -1,7 +1,7 @@
 /**
  * Bearer-token auth for the company-ops MCP endpoints.
  *
- * Workers run in isolated containers and call back to haex-corp via HTTP
+ * Workers run in isolated containers and call back to speculoss via HTTP
  * for capability authorization, agent lookup, and (later) sub-task
  * dispatch. The runtime mints a 32-byte token at construction and
  * injects it into worker containers as COMPANY_OPS_TOKEN. Endpoints

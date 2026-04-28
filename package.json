@@ -1,9 +1,10 @@
 {
-  "name": "haex-corp",
+  "name": "speculoss",
   "version": "0.1.0",
   "description": "Spec-driven multi-agent builder with a local timeline UI.",
   "type": "module",
   "bin": {
+    "speculoss": "./src/index.js",
     "specops": "./src/index.js"
   },
   "scripts": {
