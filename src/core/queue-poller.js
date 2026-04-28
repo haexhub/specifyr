@@ -2,7 +2,7 @@
  * QueuePoller — watches `.specops/<company>/queue/` for incoming task YAML
  * files and emits parsed task events.
  *
- * Built on chokidar (already a haex-corp dependency). One poller instance
+ * Built on chokidar (already a speculoss dependency). One poller instance
  * per company. The CEO process subscribes; the runtime decides what to do
  * with the events.
  *
