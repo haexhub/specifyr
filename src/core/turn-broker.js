@@ -115,6 +115,25 @@ export class TurnBroker {
           resumeSessionId: claudeSessionId ?? undefined
         });
 
+        // is_error=true means Claude Code itself reported a failure (e.g. expired --resume
+        // ID, API error). exitCode !== 0 without a result event is also a hard failure.
+        // Don't persist the orphan session ID the failed run emitted — doing so causes
+        // every subsequent turn to loop on the same broken ID forever.
+        const isError = result.result?.is_error === true || result.exitCode !== 0;
+        if (isError && !assistantText.trim()) {
+          const errors = result.result?.errors ?? [];
+          const detail =
+            (errors.length > 0 ? errors.join("; ") : null) ||
+            result.stderr?.trim().slice(0, 300) ||
+            `exit code ${result.exitCode}`;
+          // "No conversation found" = the resume target expired. Clear the stored ID so
+          // the next turn starts a fresh Claude session instead of hitting the same wall.
+          if (errors.some((e) => /no conversation found/i.test(String(e)))) {
+            await this.sessionStore.setClaudeSessionId(slug, stepId, sid, null);
+          }
+          throw new Error(detail);
+        }
+
         if (result.claudeSessionId) {
           await this.sessionStore.setClaudeSessionId(slug, stepId, sid, result.claudeSessionId);
         }
