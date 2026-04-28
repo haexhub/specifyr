@@ -20,7 +20,7 @@ export async function readJson(filePath, fallback = null) {
     if (!content.trim()) return fallback;
     return JSON.parse(content);
   } catch (error) {
-    if (error.code === "ENOENT") {
+    if (error.code === "ENOENT" || error instanceof SyntaxError) {
       return fallback;
     }
     throw error;
@@ -29,7 +29,9 @@ export async function readJson(filePath, fallback = null) {
 
 export async function writeJson(filePath, value) {
   await ensureDir(path.dirname(filePath));
-  await fs.writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  const tmp = `${filePath}.tmp`;
+  await fs.writeFile(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await fs.rename(tmp, filePath);
 }
 
 export async function readText(filePath, fallback = "") {
