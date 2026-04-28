@@ -118,10 +118,31 @@ function appendTextToStreamingMessage(text: string) {
   }
 }
 
+function appendThinkingToStreamingMessage(text: string) {
+  if (!streamingMessage.value) {
+    streamingMessage.value = {
+      id: `streaming-${Date.now()}`,
+      role: "assistant",
+      content: "",
+      thinking: text,
+      createdAt: new Date().toISOString()
+    };
+  } else {
+    streamingMessage.value = {
+      ...streamingMessage.value,
+      thinking: (streamingMessage.value.thinking ?? "") + text
+    };
+  }
+}
+
 function handleClaudeEvent(payload: any) {
   if (payload?.type === "assistant" && Array.isArray(payload.message?.content)) {
     for (const block of payload.message.content) {
-      if (block?.type === "text" && typeof block.text === "string") {
+      if (block?.type === "thinking" && typeof block.thinking === "string") {
+        waitingForFirstToken.value = false;
+        appendThinkingToStreamingMessage(block.thinking);
+      } else if (block?.type === "text" && typeof block.text === "string") {
+        waitingForFirstToken.value = false;
         const text = block.text;
         if (toolUseSinceLastText.value && streamingMessage.value?.content) {
           appendTextToStreamingMessage(`\n\n${text}`);
@@ -130,6 +151,7 @@ function handleClaudeEvent(payload: any) {
         }
         toolUseSinceLastText.value = false;
       } else if (block?.type === "tool_use" && block.name) {
+        waitingForFirstToken.value = false;
         currentToolUses.value = [...currentToolUses.value, { name: block.name, input: block.input }];
         toolUseSinceLastText.value = true;
       }
@@ -163,7 +185,6 @@ function openStream(sid: string, since: number) {
   };
 
   es.addEventListener("claude", (ev: MessageEvent) => {
-    waitingForFirstToken.value = false;
     const data = updateSeq(ev.data);
     if (data) handleClaudeEvent(data);
   });
