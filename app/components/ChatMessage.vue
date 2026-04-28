@@ -76,7 +76,7 @@ const renderedContent = computed(() => {
         ]"
       >
         <button
-          class="absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+          class="absolute right-2 top-2 rounded p-1.5 opacity-0 transition-opacity group-hover:opacity-100"
           :class="[
             message.role === 'user'
               ? 'text-primary-foreground/60 hover:bg-white/10 hover:text-primary-foreground'
@@ -85,8 +85,8 @@ const renderedContent = computed(() => {
           :title="t('chat.copy')"
           @click="copy(message.content)"
         >
-          <Check v-if="copied" class="size-3.5 text-green-500" />
-          <Copy v-else class="size-3.5" />
+          <Check v-if="copied" class="size-4 text-green-500" />
+          <Copy v-else class="size-4" />
         </button>
 
         <!-- eslint-disable-next-line vue/no-v-html -->
