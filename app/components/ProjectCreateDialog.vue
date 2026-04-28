@@ -17,6 +17,7 @@ const title = ref("");
 const description = ref("");
 const submitting = ref(false);
 const errorMessage = ref("");
+const titleError = ref("");
 const selectedWorkflow = ref<string>(DEFAULT_WORKFLOW_ID);
 const workflows = ref<WorkflowSummary[]>([]);
 const workflowsLoading = ref(false);
@@ -61,12 +62,17 @@ watch(
       title.value = "";
       description.value = "";
       errorMessage.value = "";
+      titleError.value = "";
       selectedWorkflow.value = DEFAULT_WORKFLOW_ID;
       refreshStandardExtensions();
       refreshWorkflows();
     }
   }
 );
+
+watch(title, () => {
+  titleError.value = "";
+});
 
 function toggleExtension(slug: string) {
   const next = new Set(selectedExtensions.value);
@@ -86,6 +92,7 @@ async function submit() {
 
   submitting.value = true;
   errorMessage.value = "";
+  titleError.value = "";
 
   try {
     // Workflow-extensions must be installed for the workflow to surface on the project side.
@@ -107,8 +114,12 @@ async function submit() {
     });
     emit("created", created);
     await navigateTo(`/specs/${created.slug}`);
-  } catch (error) {
-    errorMessage.value = error instanceof Error ? error.message : "Projekt konnte nicht erstellt werden.";
+  } catch (error: any) {
+    if (error?.response?.status === 409) {
+      titleError.value = `Ein Projekt mit dem Namen „${trimmed}" existiert bereits.`;
+    } else {
+      errorMessage.value = error instanceof Error ? error.message : "Projekt konnte nicht erstellt werden.";
+    }
   } finally {
     submitting.value = false;
   }
@@ -140,9 +151,15 @@ async function submit() {
               id="project-title"
               v-model="title"
               autofocus
-              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              :class="[
+                'w-full rounded-md border bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-offset-2',
+                titleError
+                  ? 'border-destructive focus:ring-destructive'
+                  : 'border-input focus:ring-ring'
+              ]"
               placeholder="z.B. Customer Portal"
             />
+            <p v-if="titleError" class="text-xs text-destructive">{{ titleError }}</p>
           </div>
 
           <div class="space-y-1.5">
@@ -219,7 +236,12 @@ async function submit() {
             </ul>
           </div>
 
-          <p v-if="errorMessage" class="text-sm text-destructive">{{ errorMessage }}</p>
+          <div
+            v-if="errorMessage"
+            class="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-sm font-medium text-destructive"
+          >
+            {{ errorMessage }}
+          </div>
 
           <div class="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" :disabled="submitting" @click="close">

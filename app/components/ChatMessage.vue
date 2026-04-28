@@ -1,11 +1,19 @@
 <script setup lang="ts">
 import { User, Bot, TriangleAlert, Wrench } from "lucide-vue-next";
+import { marked } from "marked";
+import DOMPurify from "isomorphic-dompurify";
 import type { ChatMessage } from "~/lib/types";
 
-defineProps<{
+const props = defineProps<{
   message: ChatMessage;
   streaming?: boolean;
 }>();
+
+const renderedContent = computed(() => {
+  if (props.message.role !== "assistant") return null;
+  const html = marked.parse(props.message.content ?? "", { async: false }) as string;
+  return DOMPurify.sanitize(html);
+});
 </script>
 
 <template>
@@ -36,7 +44,9 @@ defineProps<{
         message.role === 'tool' && 'border border-border bg-muted/60 font-mono text-xs'
       ]"
     >
-      <pre class="whitespace-pre-wrap break-words font-sans">{{ message.content }}</pre>
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <div v-if="renderedContent" class="chat-prose" v-html="renderedContent" />
+      <pre v-else class="whitespace-pre-wrap wrap-break-word font-sans">{{ message.content }}</pre>
       <span
         v-if="streaming"
         class="ml-1 inline-block h-4 w-1.5 animate-pulse bg-current align-middle"
