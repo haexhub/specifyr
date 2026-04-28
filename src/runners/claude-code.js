@@ -30,14 +30,15 @@ export class ClaudeCodeRunner {
         return;
       }
 
-      // `acceptEdits` auto-approves Edit/Write/NotebookEdit so that spec/vision/roadmap
-      // artefacts can be created without a TTY prompt. Shell tools still require explicit
-      // approval — we never want an unattended headless run to execute arbitrary commands.
+      // `acceptEdits` auto-approves Edit/Write/NotebookEdit. `--allowedTools Bash` adds
+      // shell access so wizards can run scripts (e.g. `node validate.mjs`) within the
+      // project directory without blocking on a TTY approval that never arrives in -p mode.
       const args = [
         "-p",
         "--output-format", "stream-json",
         "--verbose",
-        "--permission-mode", "acceptEdits"
+        "--permission-mode", "acceptEdits",
+        "--allowedTools", "Bash"
       ];
       if (resumeSessionId) {
         args.push("--resume", resumeSessionId);
