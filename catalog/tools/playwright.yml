@@ -1,0 +1,15 @@
+id: playwright
+name: "Playwright MCP"
+type: mcp
+transport: stdio
+command: "npx"
+args: ["@playwright/mcp@latest"]
+env_keys: []
+description: "Headless-browser automation: navigate, click, type, take screenshots, capture network traffic, evaluate JS."
+required_capabilities:
+  - shell:execute
+  - network:http
+tags:
+  - browser
+  - testing
+  - scraping

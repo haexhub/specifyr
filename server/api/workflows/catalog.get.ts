@@ -1,7 +1,9 @@
 import { getExtensionCatalog } from "../../utils/extension-catalog";
 import { SPEC_KIT_WORKFLOW } from "../../utils/workflow-discovery";
+import { getAppConfigModule } from "../../utils/app-config";
+import { readLocalManifest } from "../../utils/local-extension";
 
-// Entries suitable for a pre-project workflow picker: spec-kit plus any catalog extension
+// Entries suitable for a pre-project workflow picker: spec-kit plus any extension
 // that self-declares the `workflow` tag. Step lists are intentionally not populated —
 // they are only known after the extension is installed (extension.yml on disk).
 interface CatalogWorkflowSummary {
@@ -13,6 +15,9 @@ interface CatalogWorkflowSummary {
   version?: string;
 }
 
+// Mirrors the check in workflow-discovery.ts: workflow tag + no hooks + >= 3 commands.
+const WORKFLOW_MIN_COMMANDS = 3;
+
 export default defineEventHandler(async () => {
   const summaries: CatalogWorkflowSummary[] = [
     {
@@ -23,11 +28,39 @@ export default defineEventHandler(async () => {
     }
   ];
 
+  // Local extensions from .specops/config.json are checked first: they are always
+  // reachable (no network), may be private, and shadow any same-id community entry.
+  try {
+    const { loadAppConfig } = await getAppConfigModule();
+    const cfg = await loadAppConfig();
+    for (const entry of cfg.localExtensions ?? []) {
+      try {
+        const manifest = await readLocalManifest(entry.path);
+        const tags = manifest.tags?.map((t) => t.toLowerCase()) ?? [];
+        if (!tags.includes("workflow")) continue;
+        if (manifest.hookCount > 0 || manifest.commandCount < WORKFLOW_MIN_COMMANDS) continue;
+        summaries.push({
+          id: manifest.slug,
+          label: manifest.name ?? manifest.slug,
+          description: manifest.description ?? "",
+          source: "extension",
+          extensionSlug: manifest.slug,
+          version: manifest.version
+        });
+      } catch {
+        // Broken manifest — skip rather than 500 the picker.
+      }
+    }
+  } catch {
+    // Config load failed — carry on with community catalog.
+  }
+
+  const seenIds = new Set(summaries.map((s) => s.id));
+
   try {
     const catalog = await getExtensionCatalog();
     for (const ext of catalog) {
-      // Same heuristic as parseExtensionWorkflow in workflow-discovery.ts: workflow tag
-      // AND zero hooks AND >= 3 commands. See that file for the rationale.
+      if (seenIds.has(ext.id)) continue; // local copy takes precedence
       const tags = Array.isArray(ext.tags) ? ext.tags.map((t) => String(t).toLowerCase()) : [];
       if (!tags.includes("workflow")) continue;
       const hooksCount = ext.provides?.hooks ?? 0;
@@ -43,7 +76,7 @@ export default defineEventHandler(async () => {
       });
     }
   } catch {
-    // If the catalog is unavailable, fall back to just spec-kit — never 500 the picker.
+    // Community catalog unavailable — never 500 the picker.
   }
 
   return summaries;

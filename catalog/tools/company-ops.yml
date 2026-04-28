@@ -1,0 +1,14 @@
+id: company-ops
+name: "Firma-Ops"
+type: mcp
+transport: stdio
+command: "node"
+args: ["/home/haex/Projekte/speckit-company/mcp-server/company-ops/server.mjs"]
+env_keys: []
+description: "CEO routing tools: dispatch_to_agent, read_artifact, ask_user, escalate, query_org_chart. Bundled with speckit-company."
+required_capabilities:
+  - filesystem:read
+tags:
+  - bundled
+  - ceo
+  - orchestration

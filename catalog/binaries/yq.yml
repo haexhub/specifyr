@@ -1,0 +1,14 @@
+id: yq
+name: "yq"
+type: binary
+command: "yq"
+version_check: "yq --version"
+description: |
+  Command-line YAML processor (Mike Farah's Go implementation). Like jq,
+  reads stdin/files and writes stdout. In-place edits (yq -i) need
+  filesystem:write; reading from files needs filesystem:read.
+required_capabilities:
+  - shell:execute
+tags:
+  - yaml
+  - parsing

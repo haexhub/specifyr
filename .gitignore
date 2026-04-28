@@ -2,6 +2,18 @@
 .DS_Store
 node_modules/
 
+# Local env file — contains secrets (TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY, …).
+# Use .env.example as the template. Never commit the real .env.
+.env
+.env.local
+
+# Runtime user-data: spec-kit projects live under projects/<slug>/ at runtime.
+# Each project is its own user-owned sandbox (its own .specify/, .claude/, etc.)
+# and changes independently of haex-corp's code. Tracking them produced 200+
+# noise lines in `git status`. Test fixtures live under tests/fixtures/ — not
+# here.
+projects/
+
 # Build artefacts
 .nuxt/
 .output/

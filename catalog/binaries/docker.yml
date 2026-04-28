@@ -1,0 +1,16 @@
+id: docker
+name: "Docker"
+type: binary
+command: "docker"
+version_check: "docker --version"
+description: |
+  Container runtime. SENSITIVE — invoking docker grants effective root to
+  anyone who can call it. Read-only ops (ps, images, inspect) need access
+  to the docker socket. Mutating ops (build, run, push) additionally need
+  filesystem:write (build context) and network:http (registry push).
+  Treat any docker grant as a security-critical decision.
+required_capabilities:
+  - shell:execute
+tags:
+  - container
+  - sensitive

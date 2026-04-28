@@ -11,7 +11,7 @@
     "dev": "nuxt dev",
     "build": "nuxt build",
     "preview": "nuxt preview",
-    "test": "node --test",
+    "test": "node --no-warnings=ExperimentalWarning --test",
     "ui": "nuxt dev"
   },
   "engines": {

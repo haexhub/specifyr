@@ -48,3 +48,19 @@ node ./src/index.js ui
 - The default model provider and Hermes runner are deterministic local implementations so the project works without external services.
 - If `fabric` or `hermes` are installed locally, you can enable them via `config set` and SpecOps will use them opportunistically.
 - The UI runs through Nuxt. For local development use `pnpm dev` or `node ./src/index.js ui`.
+
+## Company runtime (multi-agent)
+
+The company runtime turns SpecOps into a multi-agent orchestrator. A "company" is declared via the [speckit-company](https://github.com/haex/speckit-company) extension and consists of a CEO agent (single point of contact) and worker agents in a reports-to graph. Each agent is a separate Hermes-Agent profile with its own `HERMES_HOME`, accumulating role-specific skills over time.
+
+Components (in `src/`):
+
+- `agents/spec-loader.js` — load `.specify/org/{constitution.md, agents/<role>.md}`
+- `core/capability-gate.js` — default-deny permission layer; sensitive grants always require user approval
+- `core/queue-poller.js` — chokidar watcher for `.specops/<company>/queue/<task>.yaml`
+- `core/worktree-manager.js` — per-task `git worktree` for isolated FS mutations
+- `core/company-runtime.js` — facade composing the above + per-agent `HermesCliRunner`
+- `runners/hermes-paths.js` — deterministic `<project>/.hermes/<role>` path
+- `runners/hermes-cli.js` (patched) — passes `HERMES_HOME` via env per agent
+
+See [docs/company.md](docs/company.md) for the full integration model.

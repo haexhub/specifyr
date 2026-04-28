@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Send, Loader2, MessageSquarePlus, Info, ArrowRight, FileText, RotateCcw } from "lucide-vue-next";
+import { Send, Loader2, MessageSquarePlus, Info, ArrowRight, FileText, RotateCcw, Square } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import ChatMessage from "~/components/ChatMessage.vue";
 import type { ChatMessage as ChatMessageType, SessionMetadata } from "~/lib/types";
@@ -26,6 +26,7 @@ const messages = ref<ChatMessageType[]>([]);
 const messagesLoading = ref(false);
 const draft = ref("");
 const streaming = ref(false);
+const waitingForFirstToken = ref(false);
 const streamError = ref<string | null>(null);
 const chatContainer = ref<HTMLDivElement | null>(null);
 
@@ -77,6 +78,7 @@ function closeStream() {
     eventSource = null;
   }
   streaming.value = false;
+  waitingForFirstToken.value = false;
 }
 
 function resetStreamingDisplay() {
@@ -164,6 +166,7 @@ function openStream(sid: string, since: number) {
   resetStreamingDisplay();
   lastSeenSeq.value = since;
   streaming.value = true;
+  waitingForFirstToken.value = true;
   streamError.value = null;
 
   const url = `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}/turn/stream?since=${since}`;
@@ -183,6 +186,7 @@ function openStream(sid: string, since: number) {
   };
 
   es.addEventListener("claude", (ev: MessageEvent) => {
+    waitingForFirstToken.value = false;
     const data = updateSeq(ev.data);
     if (data) handleClaudeEvent(data);
   });
@@ -247,6 +251,7 @@ async function send() {
   messages.value = [...messages.value, optimistic];
   draft.value = "";
   streamError.value = null;
+  waitingForFirstToken.value = true;
   scrollToBottom();
 
   try {
@@ -258,6 +263,7 @@ async function send() {
     messages.value = messages.value.map((m) => (m.id === optimistic.id ? resp.userMessage : m));
     openStream(sid, resp.startSeq);
   } catch (err: any) {
+    waitingForFirstToken.value = false;
     // Roll back the optimistic message on POST failure.
     messages.value = messages.value.filter((m) => m.id !== optimistic.id);
     streamError.value =
@@ -295,6 +301,22 @@ async function retryInterruptedTurn() {
   } catch (err: any) {
     streamError.value = err instanceof Error ? err.message : "Retry fehlgeschlagen.";
   }
+}
+
+async function stopTurn() {
+  if (!props.session || !streaming.value) return;
+  const sid = props.session.id;
+  closeStream();
+  try {
+    await $fetch(
+      `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}/turn`,
+      { method: "DELETE" }
+    );
+  } catch {
+    // Ignore — closeStream already dropped the EventSource; the server will
+    // emit turn_failed which the (now-closed) stream won't see anyway.
+  }
+  void loadSession(sid);
 }
 
 function handleKeydown(ev: KeyboardEvent) {
@@ -381,6 +403,20 @@ const isInterrupted = computed(() => sessionView.value?.status === "interrupted"
         />
 
         <div
+          v-if="waitingForFirstToken"
+          class="flex items-center gap-2 px-1"
+        >
+          <div class="inline-flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Loader2 class="size-4 animate-spin" />
+          </div>
+          <div class="flex gap-1">
+            <span class="size-2 rounded-full bg-primary/40 animate-bounce" style="animation-delay: 0ms" />
+            <span class="size-2 rounded-full bg-primary/40 animate-bounce" style="animation-delay: 150ms" />
+            <span class="size-2 rounded-full bg-primary/40 animate-bounce" style="animation-delay: 300ms" />
+          </div>
+        </div>
+
+        <div
           v-if="isInterrupted"
           class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/5 px-3 py-2.5 text-xs"
         >
@@ -415,13 +451,22 @@ const isInterrupted = computed(() => sessionView.value?.status === "interrupted"
               <code class="rounded bg-muted px-1 py-0.5">Cmd/Ctrl + Enter</code> senden
             </p>
             <Button
+              v-if="streaming"
               size="sm"
-              :disabled="!draft.trim() || streaming"
+              variant="outline"
+              @click="stopTurn"
+            >
+              <Square class="mr-1.5 size-3.5 fill-current" />
+              Stopp
+            </Button>
+            <Button
+              v-else
+              size="sm"
+              :disabled="!draft.trim()"
               @click="send"
             >
-              <Loader2 v-if="streaming" class="mr-1.5 size-3.5 animate-spin" />
-              <Send v-else class="mr-1.5 size-3.5" />
-              {{ streaming ? "Läuft…" : "Senden" }}
+              <Send class="mr-1.5 size-3.5" />
+              Senden
             </Button>
           </div>
         </div>

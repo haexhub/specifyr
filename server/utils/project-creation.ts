@@ -1,35 +1,10 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { installExtensionsInProject } from "./extension-install";
 
 async function importModule<T = Record<string, unknown>>(relativePath: string): Promise<T> {
   const moduleUrl = pathToFileURL(path.join(process.cwd(), relativePath)).href;
   return import(moduleUrl) as Promise<T>;
-}
-
-interface InstallResult {
-  slug: string;
-  installedAt: string;
-  source: "auto" | "manual";
-  status: "installed" | "failed";
-  message?: string;
-}
-
-async function installExtension(
-  slug: string,
-  projectRoot: string,
-  source: "auto" | "manual",
-  runCommand: typeof import("../../src/utils/process.js").runCommand
-): Promise<InstallResult> {
-  const result = await runCommand("specify", ["extension", "add", slug], { cwd: projectRoot });
-  return {
-    slug,
-    installedAt: new Date().toISOString(),
-    source,
-    status: result.ok ? "installed" : "failed",
-    message: result.ok
-      ? result.stdout?.trim() || undefined
-      : (result.stderr || result.stdout || "specify extension add failed").trim()
-  };
 }
 
 export async function createProjectRecord(options: {
@@ -38,13 +13,12 @@ export async function createProjectRecord(options: {
   extensions?: string[];
   workflow?: string;
 }) {
-  const [{ ArtifactStore }, { runCommand }, { ensureDir, slugify, writeJson }] = await Promise.all([
+  const [{ ArtifactStore }, { runCommand }, { ensureDir, slugify }] = await Promise.all([
     importModule<{ ArtifactStore: new (cwd?: string) => any }>("src/core/artifact-store.js"),
     importModule<{ runCommand: typeof import("../../src/utils/process.js").runCommand }>("src/utils/process.js"),
     importModule<{
       ensureDir: typeof import("../../src/utils/fs.js").ensureDir;
       slugify: typeof import("../../src/utils/fs.js").slugify;
-      writeJson: typeof import("../../src/utils/fs.js").writeJson;
     }>("src/utils/fs.js")
   ]);
 
@@ -119,33 +93,16 @@ export async function createProjectRecord(options: {
     updatedAt: new Date().toISOString()
   });
 
-  // Install chosen extensions (best-effort; failures are recorded but don't abort creation)
+  // Install chosen extensions (best-effort; failures are recorded but don't abort creation).
+  // installExtensionsInProject handles local extensions via --dev and writes the manifest.
   const chosenExtensions = Array.from(
     new Set((options.extensions ?? []).map((x) => String(x).trim()).filter(Boolean))
   );
-  const extensionResults: InstallResult[] = [];
+  let extensionRecords: import("./extension-install").ExtensionInstallRecord[] = [];
   if (initResult.ok && chosenExtensions.length > 0) {
-    for (const extSlug of chosenExtensions) {
-      try {
-        extensionResults.push(await installExtension(extSlug, projectRoot, "auto", runCommand));
-      } catch (err) {
-        extensionResults.push({
-          slug: extSlug,
-          installedAt: new Date().toISOString(),
-          source: "auto",
-          status: "failed",
-          message: err instanceof Error ? err.message : String(err)
-        });
-      }
-    }
+    const { manifest } = await installExtensionsInProject(slug, chosenExtensions, "auto");
+    extensionRecords = manifest.extensions;
   }
-
-  const extensionsManifestPath = path.join(cwd, ".specops", slug, "extensions.json");
-  await writeJson(extensionsManifestPath, {
-    slug,
-    extensions: extensionResults,
-    updatedAt: new Date().toISOString()
-  });
 
   return {
     slug,
@@ -153,6 +110,6 @@ export async function createProjectRecord(options: {
     description,
     projectRoot,
     specifyInit: meta.specifyInit,
-    extensions: extensionResults
+    extensions: extensionRecords
   };
 }

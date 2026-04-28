@@ -24,6 +24,15 @@ services:
       PORT: 3000
       NODE_ENV: production
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Prod-Default: pinned GHCR-Image. Vor `docker compose up` setzen, z.B.
+      #   HERMES_AGENT_IMAGE=ghcr.io/haexhub/hermes-agent:sha-abc1234 docker compose -f docker-compose.prod.yml up
+      # Ohne expliziten Wert nimmt die Compose-Substitution `:latest` auf der
+      # Default-Branch — nur sinnvoll, wenn deployment-stabilität zweitrangig ist.
+      HERMES_AGENT_IMAGE: ${HERMES_AGENT_IMAGE:-ghcr.io/haexhub/hermes-agent:latest}
+      # Approval-Notification: Telegram-Channel. Setup-Anleitung in `.env.example`.
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      APPROVAL_URL_BASE: ${APPROVAL_URL_BASE:-}
     volumes:
       # Multi-Projekt-Arbeitsbereich: Host-projects/ wird eingehängt, damit Runs am echten
       # Repo arbeiten. Entferne den Mount, wenn du projects/ stattdessen im Container-Volume
@@ -34,7 +43,18 @@ services:
       # Host-Login wiederverwenden (Solo-Tool-Default). Für Multi-User später:
       #   - claude_home:/home/node/.claude
       - ${HOME}/.claude:/home/node/.claude
+      # Docker-Socket: gleiche Begründung wie in docker-compose.yml — erlaubt
+      # `docker run` von innen, um Hermes-Agent-Container zu spawnen. Effektiv
+      # Host-root für diesen Container; in Multi-User-Deployments revisiten.
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - companies
     user: "${UID:-1000}:${GID:-1000}"
+
+networks:
+  companies:
+    name: companies
+    driver: bridge
 
 volumes:
   specops_state:

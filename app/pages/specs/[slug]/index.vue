@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import ConfirmDialog from "~/components/ConfirmDialog.vue";
-import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
+import ProjectShell from "~/components/ProjectShell.vue";
 import NotificationLogWidget from "~/components/NotificationLogWidget.vue";
 import NotificationDrawer from "~/components/NotificationDrawer.vue";
 import InstalledExtensionsWidget from "~/components/InstalledExtensionsWidget.vue";
@@ -133,8 +133,13 @@ async function deleteProject() {
     </Card>
   </div>
 
-  <div v-else-if="project" class="flex h-screen">
-    <ProjectStepSidebar :slug="slug" :project-title="project.title" :workflow="workflow">
+  <ProjectShell
+    v-else-if="project"
+    :slug="slug"
+    :project-title="project.title"
+    :workflow="workflow"
+  >
+    <template #sidebar>
       <div class="space-y-2 px-3 py-3 text-xs text-muted-foreground">
         <p class="font-medium text-foreground">Übersicht</p>
         <p>
@@ -148,28 +153,26 @@ async function deleteProject() {
           <span class="font-medium text-foreground">{{ events.length }}</span> Events gesammelt
         </p>
       </div>
-    </ProjectStepSidebar>
+    </template>
 
-    <div class="min-h-screen flex-1 overflow-y-auto p-6 lg:p-10">
-      <div class="mx-auto max-w-4xl space-y-6">
-        <header class="space-y-2">
-          <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">{{ project.slug }}</p>
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <h1 class="text-2xl font-semibold tracking-tight">{{ project.title }}</h1>
-            <Button
-              variant="ghost"
-              size="sm"
-              class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-              @click="deleteDialogOpen = true"
-            >
-              <Trash2 class="mr-1.5 size-3.5" />
-              Projekt löschen
-            </Button>
-          </div>
-          <p v-if="project.description" class="text-sm leading-6 text-muted-foreground">
-            {{ project.description }}
-          </p>
-        </header>
+    <header class="flex flex-wrap items-start justify-between gap-3">
+      <div class="space-y-1">
+        <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">{{ project.slug }}</p>
+        <h1 class="text-2xl font-semibold tracking-tight">{{ project.title }}</h1>
+        <p v-if="project.description" class="text-sm leading-6 text-muted-foreground">
+          {{ project.description }}
+        </p>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+        @click="deleteDialogOpen = true"
+      >
+        <Trash2 class="mr-1.5 size-3.5" />
+        Projekt löschen
+      </Button>
+    </header>
 
         <Card>
           <CardHeader>
@@ -244,15 +247,13 @@ async function deleteProject() {
           </CardContent>
         </Card>
 
-        <div class="grid gap-6 lg:grid-cols-2">
-          <NotificationLogWidget
-            :events="events ?? []"
-            :loading="eventsLoading"
-            @open-drawer="notificationDrawerOpen = true"
-          />
-          <InstalledExtensionsWidget :slug="slug" />
-        </div>
-      </div>
+    <div class="grid gap-6 lg:grid-cols-2">
+      <NotificationLogWidget
+        :events="events ?? []"
+        :loading="eventsLoading"
+        @open-drawer="notificationDrawerOpen = true"
+      />
+      <InstalledExtensionsWidget :slug="slug" />
     </div>
 
     <NotificationDrawer
@@ -270,5 +271,5 @@ async function deleteProject() {
       :busy="deleting"
       @confirm="deleteProject"
     />
-  </div>
+  </ProjectShell>
 </template>

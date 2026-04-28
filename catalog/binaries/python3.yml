@@ -1,0 +1,15 @@
+id: python3
+name: "Python 3"
+type: binary
+command: "python3"
+version_check: "python3 --version"
+description: |
+  Python 3 interpreter for scripting, data work, and ad-hoc computation.
+  The interpreter itself only needs shell:execute. Whatever the executed
+  Python code does (read files, write files, network calls) inherits the
+  agent's other capabilities — grant them according to the script's needs.
+required_capabilities:
+  - shell:execute
+tags:
+  - language
+  - scripting
