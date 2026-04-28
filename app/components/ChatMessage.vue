@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { User, Bot, TriangleAlert, Wrench, Copy, Check, ChevronDown, Brain } from "lucide-vue-next";
+import { useClipboard } from "@vueuse/core";
 import { marked } from "marked";
 import DOMPurify from "isomorphic-dompurify";
 import type { ChatMessage } from "~/lib/types";
@@ -12,7 +13,8 @@ const props = defineProps<{
 const { t } = useI18n();
 
 const showThinking = ref(!!props.streaming);
-const copied = ref(false);
+
+const { copy, copied } = useClipboard({ copiedDuring: 1500 });
 
 const renderedContent = computed(() => {
   if (props.message.role !== "assistant") return null;
@@ -20,12 +22,6 @@ const renderedContent = computed(() => {
   const html = marked.parse(props.message.content, { async: false }) as string;
   return DOMPurify.sanitize(html);
 });
-
-async function copyMessage() {
-  await navigator.clipboard.writeText(props.message.content);
-  copied.value = true;
-  setTimeout(() => { copied.value = false; }, 1500);
-}
 </script>
 
 <template>
@@ -71,7 +67,7 @@ async function copyMessage() {
 
       <!-- Message bubble -->
       <div
-        class="rounded-lg px-4 py-2.5 text-sm leading-6"
+        class="relative rounded-lg px-4 py-2.5 text-sm leading-6"
         :class="[
           message.role === 'user' && 'bg-primary text-primary-foreground',
           message.role === 'assistant' && 'border border-border bg-card',
@@ -79,9 +75,23 @@ async function copyMessage() {
           message.role === 'tool' && 'border border-border bg-muted/60 font-mono text-xs'
         ]"
       >
+        <button
+          class="absolute right-2 top-2 rounded p-1 opacity-0 transition-opacity group-hover:opacity-100"
+          :class="[
+            message.role === 'user'
+              ? 'text-primary-foreground/60 hover:bg-white/10 hover:text-primary-foreground'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+          ]"
+          :title="t('chat.copy')"
+          @click="copy(message.content)"
+        >
+          <Check v-if="copied" class="size-3.5 text-green-500" />
+          <Copy v-else class="size-3.5" />
+        </button>
+
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div v-if="renderedContent" class="chat-prose" v-html="renderedContent" />
-        <pre v-else class="whitespace-pre-wrap wrap-break-word font-sans">{{ message.content }}</pre>
+        <div v-if="renderedContent" class="chat-prose pr-6" v-html="renderedContent" />
+        <pre v-else class="whitespace-pre-wrap wrap-break-word pr-6 font-sans">{{ message.content }}</pre>
         <span
           v-if="streaming"
           class="ml-1 inline-block h-4 w-1.5 animate-pulse bg-current align-middle"
@@ -93,22 +103,6 @@ async function copyMessage() {
           <Wrench class="size-3" />
           <span>{{ message.toolUse.name }}</span>
         </div>
-      </div>
-
-      <!-- Copy button row, shown on hover -->
-      <div
-        class="flex opacity-0 transition-opacity group-hover:opacity-100"
-        :class="message.role === 'user' ? 'justify-end' : 'justify-start'"
-      >
-        <button
-          class="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-muted hover:text-foreground"
-          :title="t('chat.copy')"
-          @click="copyMessage"
-        >
-          <Check v-if="copied" class="size-3 text-green-500" />
-          <Copy v-else class="size-3" />
-          <span>{{ copied ? t("chat.copied") : t("chat.copy") }}</span>
-        </button>
       </div>
     </div>
 
