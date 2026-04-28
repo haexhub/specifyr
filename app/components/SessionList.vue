@@ -30,12 +30,12 @@ function relative(iso: string): string {
 <template>
   <div class="flex flex-col">
     <div class="flex items-center justify-between px-3 pb-2 pt-3">
-      <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Sessions</p>
+      <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{{ $t("sessions.label") }}</p>
       <button
         type="button"
         class="inline-flex size-6 items-center justify-center rounded-md border border-border text-muted-foreground transition hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
         :disabled="creating"
-        title="Neue Session"
+        :title="$t('sessions.newTitle')"
         @click="emit('create')"
       >
         <Loader2 v-if="creating" class="size-3.5 animate-spin" />
@@ -70,8 +70,8 @@ function relative(iso: string): string {
     </ul>
 
     <p v-if="!sessions.length && !loading" class="px-3 py-3 text-xs text-muted-foreground">
-      Noch keine Session.
+      {{ $t("sessions.noSessions") }}
     </p>
-    <p v-if="loading" class="px-3 py-3 text-xs text-muted-foreground">Lade…</p>
+    <p v-if="loading" class="px-3 py-3 text-xs text-muted-foreground">{{ $t("common.loading") }}</p>
   </div>
 </template>

@@ -13,6 +13,8 @@ const emit = defineEmits<{
   created: [project: ProjectListItem];
 }>();
 
+const { t } = useI18n();
+
 const title = ref("");
 const description = ref("");
 const submitting = ref(false);
@@ -46,7 +48,7 @@ async function refreshStandardExtensions() {
   try {
     const res = await $fetch<{ extensions: string[] }>("/api/config/standard-extensions");
     standardExtensions.value = res.extensions ?? [];
-    selectedExtensions.value = new Set(standardExtensions.value);
+    selectedExtensions.value = new Set();
   } catch {
     standardExtensions.value = [];
     selectedExtensions.value = new Set();
@@ -116,9 +118,9 @@ async function submit() {
     await navigateTo(`/specs/${created.slug}`);
   } catch (error: any) {
     if (error?.response?.status === 409) {
-      titleError.value = `Ein Projekt mit dem Namen „${trimmed}" existiert bereits.`;
+      titleError.value = t("projectCreate.alreadyExists", { name: trimmed });
     } else {
-      errorMessage.value = error instanceof Error ? error.message : "Projekt konnte nicht erstellt werden.";
+      errorMessage.value = error instanceof Error ? error.message : t("projectCreate.creationFailed");
     }
   } finally {
     submitting.value = false;
@@ -142,11 +144,11 @@ async function submit() {
           <X class="size-4" />
         </button>
 
-        <h2 class="text-lg font-semibold">Neues Projekt</h2>
+        <h2 class="text-lg font-semibold">{{ $t("projectCreate.title") }}</h2>
 
         <form class="mt-5 space-y-4" @submit.prevent="submit">
           <div class="space-y-1.5">
-            <label for="project-title" class="text-sm font-medium">Name</label>
+            <label for="project-title" class="text-sm font-medium">{{ $t("projectCreate.name") }}</label>
             <input
               id="project-title"
               v-model="title"
@@ -157,26 +159,26 @@ async function submit() {
                   ? 'border-destructive focus:ring-destructive'
                   : 'border-input focus:ring-ring'
               ]"
-              placeholder="z.B. Customer Portal"
+              :placeholder="$t('projectCreate.namePlaceholder')"
             />
             <p v-if="titleError" class="text-xs text-destructive">{{ titleError }}</p>
           </div>
 
           <div class="space-y-1.5">
             <label for="project-description" class="text-sm font-medium">
-              Beschreibung <span class="text-xs font-normal text-muted-foreground">(optional)</span>
+              {{ $t("projectCreate.description") }} <span class="text-xs font-normal text-muted-foreground">{{ $t("projectCreate.descriptionOptional") }}</span>
             </label>
             <textarea
               id="project-description"
               v-model="description"
               rows="3"
               class="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              placeholder="Worum geht es?"
+              :placeholder="$t('projectCreate.descriptionPlaceholder')"
             />
           </div>
 
           <div class="space-y-1.5">
-            <label for="project-workflow" class="text-sm font-medium">Workflow</label>
+            <label for="project-workflow" class="text-sm font-medium">{{ $t("projectCreate.workflow") }}</label>
             <select
               id="project-workflow"
               v-model="selectedWorkflow"
@@ -194,32 +196,32 @@ async function submit() {
               v-if="selectedWorkflowSummary?.extensionSlug"
               class="text-[11px] text-muted-foreground"
             >
-              Extension <code class="font-mono">{{ selectedWorkflowSummary.extensionSlug }}</code>
-              wird automatisch mitinstalliert.
+              {{ $t("projectCreate.workflowAutoInstall", { slug: selectedWorkflowSummary.extensionSlug }) }}
             </p>
           </div>
 
           <div class="space-y-2">
             <div class="flex items-center justify-between">
-              <p class="text-sm font-medium">Standard-Extensions</p>
+              <p class="text-sm font-medium">{{ $t("projectCreate.favorites") }}</p>
               <NuxtLink
                 to="/extensions"
                 class="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                 @click="close"
               >
-                Liste verwalten →
+                {{ $t("projectCreate.manageFavorites") }}
               </NuxtLink>
             </div>
 
             <div v-if="extensionsLoading" class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-              Lade Liste…
+              {{ $t("projectCreate.loadingFavorites") }}
             </div>
             <div
               v-else-if="!standardExtensions.length"
               class="rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground"
             >
-              Keine Standard-Extensions konfiguriert. Du kannst sie unter
-              <NuxtLink to="/extensions" class="underline" @click="close">/extensions</NuxtLink> hinzufügen.
+              {{ $t("projectCreate.noFavorites") }}
+              <NuxtLink to="/extensions" class="underline" @click="close">{{ $t("projectCreate.noFavoritesLink") }}</NuxtLink>
+              {{ $t("projectCreate.noFavoritesSuffix") }}
             </div>
             <ul v-else class="space-y-1">
               <li v-for="slug in standardExtensions" :key="slug">
@@ -245,10 +247,10 @@ async function submit() {
 
           <div class="flex justify-end gap-2 pt-2">
             <Button type="button" variant="ghost" :disabled="submitting" @click="close">
-              Abbrechen
+              {{ $t("common.cancel") }}
             </Button>
             <Button type="submit" :disabled="submitting || !title.trim()">
-              {{ submitting ? "Erstelle…" : "Erstellen" }}
+              {{ submitting ? $t("projectCreate.creating") : $t("projectCreate.create") }}
             </Button>
           </div>
         </form>

@@ -32,23 +32,23 @@ async function handleCreated() {
 
       <h1 class="text-3xl font-semibold tracking-tight">SpecOps</h1>
       <p class="mt-3 text-muted-foreground">
-        Spec-driven multi-agent builder. Links siehst du deine Projekte, oder starte ein neues.
+        {{ $t("index.subtitle") }}
       </p>
 
       <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
         <Button size="lg" @click="dialogOpen = true">
-          <Plus class="mr-2 size-4" /> Neues Projekt
+          <Plus class="mr-2 size-4" /> {{ $t("index.newProject") }}
         </Button>
         <NuxtLink v-if="firstProject" :to="`/specs/${firstProject.slug}`">
           <Button size="lg" variant="outline">
             <FolderOpen class="mr-2 size-4" />
-            Letztes öffnen
+            {{ $t("index.openLast") }}
           </Button>
         </NuxtLink>
       </div>
 
       <p v-if="!firstProject" class="mt-10 text-xs text-muted-foreground">
-        Noch keine Projekte vorhanden.
+        {{ $t("index.noProjects") }}
       </p>
     </div>
 

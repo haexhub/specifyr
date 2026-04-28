@@ -28,6 +28,8 @@ const open = defineModel<boolean>("open", { default: false });
 
 const emit = defineEmits<{ select: [path: string] }>();
 
+const { t } = useI18n();
+
 const currentPath = ref<string>("");
 const parentPath = ref<string | null>(null);
 const entries = ref<FilesystemEntry[]>([]);
@@ -54,20 +56,16 @@ async function loadPath(target?: string) {
       (typeof asRecord?.data?.statusMessage === "string" && asRecord.data.statusMessage) ||
       (typeof asRecord?.statusMessage === "string" && asRecord.statusMessage) ||
       (typeof asRecord?.message === "string" && asRecord.message) ||
-      "Verzeichnis konnte nicht gelesen werden.";
+      t("localExtPicker.dirLoadError");
   } finally {
     loading.value = false;
   }
 }
 
-// Load on first open. Re-use previous state on subsequent opens so the user
-// doesn't have to navigate from scratch every time.
 watch(open, async (isOpen) => {
   if (isOpen && !currentPath.value) await loadPath();
 });
 
-// Break the current path into clickable segments. POSIX-only; good enough for
-// the platforms this dev tool runs on.
 const breadcrumbs = computed(() => {
   const parts = currentPath.value.split("/").filter(Boolean);
   const segments: { label: string; path: string }[] = [{ label: "/", path: "/" }];
@@ -98,15 +96,13 @@ function confirm() {
       <DialogHeader>
         <DialogTitle class="flex items-center gap-2">
           <Folder class="size-5" />
-          Ordner mit Extension wählen
+          {{ $t("localExtPicker.title") }}
         </DialogTitle>
         <DialogDescription>
-          Navigiere zum Ordner, der die <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">extension.yml</code> enthält.
-          Unterordner mit Stern-Marker sind gültige Extensions.
+          {{ $t("localExtPicker.description") }}
         </DialogDescription>
       </DialogHeader>
 
-      <!-- Quick bookmarks -->
       <div class="flex flex-wrap gap-1.5">
         <Button
           v-for="bm in bookmarks"
@@ -123,7 +119,6 @@ function confirm() {
         </Button>
       </div>
 
-      <!-- Breadcrumb / current path -->
       <div class="flex items-center gap-1 overflow-x-auto rounded-md border border-border bg-muted/30 px-2 py-1.5 text-xs">
         <Button variant="ghost" size="sm" class="h-6 px-1.5" :disabled="loading || !parentPath" @click="goUp">
           <ArrowUp class="size-3" />
@@ -142,7 +137,6 @@ function confirm() {
         </template>
       </div>
 
-      <!-- Entries -->
       <div class="relative h-80 overflow-y-auto rounded-md border border-border">
         <div v-if="loading" class="absolute inset-0 flex items-center justify-center bg-background/60">
           <Loader2 class="size-5 animate-spin text-muted-foreground" />
@@ -166,24 +160,23 @@ function confirm() {
           </li>
         </ul>
         <p v-else-if="!loadError" class="p-4 text-center text-sm text-muted-foreground">
-          Keine Unterordner.
+          {{ $t("localExtPicker.noSubfolders") }}
         </p>
       </div>
 
-      <!-- Status line for current dir -->
       <p class="text-xs" :class="currentHasYml ? 'text-primary' : 'text-muted-foreground'">
         <template v-if="currentHasYml">
-          ✓ Dieser Ordner enthält eine <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">extension.yml</code> — kann registriert werden.
+          {{ $t("localExtPicker.hasYml") }}
         </template>
         <template v-else>
-          Dieser Ordner enthält keine <code class="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">extension.yml</code>.
+          {{ $t("localExtPicker.noYml") }}
         </template>
       </p>
 
       <DialogFooter>
-        <Button variant="ghost" @click="open = false">Abbrechen</Button>
+        <Button variant="ghost" @click="open = false">{{ $t("localExtPicker.cancel") }}</Button>
         <Button :disabled="!currentHasYml || loading" @click="confirm">
-          Diesen Ordner wählen
+          {{ $t("localExtPicker.select") }}
         </Button>
       </DialogFooter>
     </DialogContent>

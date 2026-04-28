@@ -41,6 +41,8 @@ interface LocalExtensionMetadata {
   error?: string;
 }
 
+const { t } = useI18n();
+
 const { data: extData, refresh } = await useFetch<{ extensions: string[] }>(
   "/api/config/standard-extensions",
   { default: () => ({ extensions: [] }) }
@@ -76,22 +78,17 @@ const MAX_VISIBLE_TAGS = 4;
 const standardList = computed(() => extData.value?.extensions ?? []);
 const catalog = computed<CatalogExtension[]>(() => catalogData.value?.extensions ?? []);
 
-// Extensions available for adding = catalog entries not already in the standard list.
 const addableExtensions = computed(() => {
   const set = new Set(standardList.value);
   return catalog.value.filter((ext) => !set.has(ext.id));
 });
 
-// Lookup for enriching the current standard entries with catalog data.
 const catalogBySlug = computed(() => {
   const map = new Map<string, CatalogExtension>();
   for (const ext of catalog.value) map.set(ext.id, ext);
   return map;
 });
 
-// --- Catalog search & tag filter -------------------------------------------------
-// Filter state is mirrored to URL query params (?q=…&tags=a,b) so filters survive refresh
-// and can be shared via link. One-way sync: state → URL only; no route → state watcher.
 const route = useRoute();
 const router = useRouter();
 
@@ -121,10 +118,6 @@ function syncQueryToUrl(mode: "push" | "replace") {
   nav.call(router, { path: route.path, query: next });
 }
 
-// Tag toggles are discrete user actions → push (Back-button undoes each toggle). Search typing
-// is one logical action → push only on the empty↔non-empty transition so refining keystrokes
-// don't flood history. Example: typing "speckit" produces 1 push ("" → "s"), refining produces
-// replaces; clearing the field produces 1 more push.
 watchDebounced(searchQuery, (next, prev) => {
   const hadQ = Boolean(String(prev ?? "").trim());
   const hasQ = Boolean(next.trim());
@@ -132,18 +125,14 @@ watchDebounced(searchQuery, (next, prev) => {
 }, { debounce: 250 });
 watch(selectedTags, () => syncQueryToUrl("push"));
 
-// All unique tags across the catalog, sorted alphabetically, with occurrence count for UI ordering.
 const tagCounts = computed(() => {
   const counts = new Map<string, number>();
   for (const ext of catalog.value) {
-    for (const t of ext.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    for (const tag of ext.tags ?? []) counts.set(tag, (counts.get(tag) ?? 0) + 1);
   }
   return Array.from(counts.entries()).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
 });
 
-// Extensions matching both the text query and (if any) the tag filter. Tag semantics: OR — an
-// extension matches if it carries *any* of the selected tags. Text search is case-insensitive
-// substring against id + name + description + joined tags.
 const filteredCatalog = computed(() => {
   const q = searchQuery.value.trim().toLowerCase();
   const tags = selectedTags.value;
@@ -152,8 +141,8 @@ const filteredCatalog = computed(() => {
     if (tags.size > 0) {
       const extTags = new Set(ext.tags ?? []);
       let hit = false;
-      for (const t of tags) {
-        if (extTags.has(t)) { hit = true; break; }
+      for (const tag of tags) {
+        if (extTags.has(tag)) { hit = true; break; }
       }
       if (!hit) return false;
     }
@@ -187,7 +176,7 @@ async function updateList(next: string[]) {
     });
     await refresh();
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : "Speichern fehlgeschlagen.";
+    errorMessage.value = err instanceof Error ? err.message : t("extensions.index.saveFailed");
   } finally {
     saving.value = false;
   }
@@ -198,7 +187,7 @@ async function addStandardExtension() {
   if (!slug) return;
   const current = standardList.value;
   if (current.includes(slug)) {
-    errorMessage.value = `'${slug}' ist bereits in der Standard-Liste.`;
+    errorMessage.value = t("extensions.index.alreadyInList", { slug });
     return;
   }
   await updateList([...current, slug]);
@@ -239,7 +228,7 @@ async function onPickerSelect(selectedPath: string) {
     });
     await refreshLocal();
   } catch (err) {
-    localError.value = readErrorMessage(err, "Registrierung fehlgeschlagen.");
+    localError.value = readErrorMessage(err, t("extensions.index.registerFailed"));
   } finally {
     localBusy.value = false;
   }
@@ -252,11 +241,9 @@ async function unregisterLocalExtension(slug: string) {
     await $fetch(`/api/config/local-extensions/${encodeURIComponent(slug)}`, {
       method: "DELETE"
     });
-    // Unregistering also prunes the slug from the standard list server-side,
-    // so refresh both data sources to keep the UI consistent.
     await Promise.all([refreshLocal(), refresh()]);
   } catch (err) {
-    localError.value = readErrorMessage(err, "Entfernen fehlgeschlagen.");
+    localError.value = readErrorMessage(err, t("extensions.index.removeFailed"));
   } finally {
     localBusy.value = false;
   }
@@ -274,12 +261,12 @@ async function unregisterLocalExtension(slug: string) {
         <div class="flex-1">
           <h1 class="text-2xl font-semibold tracking-tight">Extensions</h1>
           <p class="text-sm text-muted-foreground">
-            Community-Katalog und Standard-Extensions für neue Projekte.
+            {{ $t("extensions.index.subtitle") }}
           </p>
         </div>
         <Button variant="ghost" size="sm" :disabled="catalogLoading" @click="reloadCatalog">
           <RefreshCw class="mr-1.5 size-3.5" :class="catalogLoading && 'animate-spin'" />
-          Katalog neu laden
+          {{ $t("extensions.index.reloadCatalog") }}
         </Button>
       </header>
 
@@ -288,17 +275,17 @@ async function unregisterLocalExtension(slug: string) {
           <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <Star class="size-4 text-primary" />
-              <CardTitle class="text-base">Standard-Extensions</CardTitle>
+              <CardTitle class="text-base">{{ $t("extensions.index.favoritesTitle") }}</CardTitle>
             </div>
             <span class="text-xs text-muted-foreground">
-              {{ standardList.length }} aktiv
+              {{ $t("extensions.index.favoritesActive", { count: standardList.length }) }}
               <template v-if="catalogData?.meta?.count">
-                · {{ catalogData.meta.count }} im Katalog
+                · {{ $t("extensions.index.favoritesInCatalog", { count: catalogData.meta.count }) }}
               </template>
             </span>
           </div>
           <p class="text-xs text-muted-foreground">
-            Diese Extensions werden bei jedem neuen Projekt vorausgewählt. Abwählen ist beim Anlegen pro Projekt möglich.
+            {{ $t("extensions.index.favoritesDesc") }}
           </p>
         </CardHeader>
         <CardContent class="space-y-3">
@@ -308,11 +295,10 @@ async function unregisterLocalExtension(slug: string) {
               :key="slug"
               class="relative flex items-center justify-between gap-3 px-4 py-2.5 transition hover:bg-muted/20 focus-within:bg-muted/20"
             >
-              <!-- Stretched link: whole row opens the internal detail page -->
               <NuxtLink
                 :to="`/extensions/${slug}`"
                 class="absolute inset-0 focus:outline-none"
-                :aria-label="`Details zu ${slug}`"
+                :aria-label="$t('extensions.index.details', { name: slug })"
               />
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-baseline gap-2">
@@ -336,16 +322,16 @@ async function unregisterLocalExtension(slug: string) {
                 @click.stop="removeStandardExtension(slug)"
               >
                 <Trash2 class="mr-1.5 size-3.5" />
-                Entfernen
+                {{ $t("common.remove") }}
               </Button>
             </li>
           </ul>
           <p v-else class="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-            Aktuell keine Standard-Extensions. Füge unten eine hinzu.
+            {{ $t("extensions.index.noFavorites") }}
           </p>
 
           <div class="space-y-2 pt-2">
-            <label class="text-xs font-medium">Extension aus dem Katalog hinzufügen</label>
+            <label class="text-xs font-medium">{{ $t("extensions.index.addFromCatalog") }}</label>
             <form class="flex gap-2" @submit.prevent="addStandardExtension">
               <Popover v-model:open="comboboxOpen">
                 <PopoverTrigger as-child>
@@ -360,14 +346,14 @@ async function unregisterLocalExtension(slug: string) {
                       {{ catalogBySlug.get(newSlug)?.name ?? newSlug }}
                       <span class="ml-1 text-muted-foreground">{{ newSlug }}</span>
                     </span>
-                    <span v-else class="text-muted-foreground">Slug wählen oder tippen…</span>
+                    <span v-else class="text-muted-foreground">{{ $t("extensions.index.slugPlaceholder") }}</span>
                     <ChevronsUpDown class="ml-2 size-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent class="w-[--reka-popover-trigger-width] p-0" align="start">
                   <Command>
-                    <CommandInput placeholder="Suche Name, Slug oder Beschreibung…" />
-                    <CommandEmpty>Keine Extension gefunden.</CommandEmpty>
+                    <CommandInput :placeholder="$t('extensions.index.comboboxSearchPlaceholder')" />
+                    <CommandEmpty>{{ $t("extensions.index.comboboxEmpty") }}</CommandEmpty>
                     <CommandList class="max-h-72">
                       <CommandGroup>
                         <CommandItem
@@ -398,17 +384,17 @@ async function unregisterLocalExtension(slug: string) {
               </Popover>
               <Button type="submit" :disabled="saving || !newSlug.trim()">
                 <Plus class="mr-1.5 size-4" />
-                Zur Standard-Liste
+                {{ $t("extensions.index.addToFavorites") }}
               </Button>
             </form>
             <p v-if="catalogError" class="text-xs text-destructive">
-              Katalog konnte nicht geladen werden.
+              {{ $t("extensions.index.catalogLoadError") }}
             </p>
             <p v-else-if="catalogLoading" class="text-xs text-muted-foreground">
-              Lade Katalog…
+              {{ $t("extensions.index.catalogLoading") }}
             </p>
             <p v-else-if="addableExtensions.length" class="text-xs text-muted-foreground">
-              {{ addableExtensions.length }} Extensions aus dem Community-Katalog auswählbar.
+              {{ $t("extensions.index.addableCount", { count: addableExtensions.length }) }}
             </p>
           </div>
 
@@ -421,15 +407,14 @@ async function unregisterLocalExtension(slug: string) {
           <div class="flex items-center justify-between gap-3">
             <div class="flex items-center gap-2">
               <FolderGit2 class="size-4 text-primary" />
-              <CardTitle class="text-base">Lokale Extensions</CardTitle>
+              <CardTitle class="text-base">{{ $t("extensions.index.localTitle") }}</CardTitle>
             </div>
             <span class="text-xs text-muted-foreground">
-              {{ localList.length }} registriert
+              {{ $t("extensions.index.localRegistered", { count: localList.length }) }}
             </span>
           </div>
           <p class="text-xs text-muted-foreground">
-            Registriere einen Ordner mit <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">extension.yml</code>,
-            um ihn wie eine Katalog-Extension zu verwenden. Installation läuft über <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">specify extension add --dev &lt;pfad&gt;</code>.
+            {{ $t("extensions.index.localDescPre") }} <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">extension.yml</code>{{ $t("extensions.index.localDescMid") }} <code class="rounded bg-muted px-1 py-0.5 font-mono text-[10px]">specify extension add --dev &lt;pfad&gt;</code>{{ $t("extensions.index.localDescEnd") }}
           </p>
         </CardHeader>
         <CardContent class="space-y-3">
@@ -443,14 +428,14 @@ async function unregisterLocalExtension(slug: string) {
                 v-if="!ext.error"
                 :to="`/extensions/${ext.slug}`"
                 class="absolute inset-0 focus:outline-none"
-                :aria-label="`Details zu ${ext.name ?? ext.slug}`"
+                :aria-label="$t('extensions.index.details', { name: ext.name ?? ext.slug })"
               />
               <div class="min-w-0 flex-1">
                 <div class="flex flex-wrap items-baseline gap-2">
                   <span class="truncate font-medium">{{ ext.name ?? ext.slug }}</span>
                   <code class="truncate font-mono text-xs text-muted-foreground">{{ ext.slug }}</code>
                   <Badge v-if="ext.version && !ext.error" variant="outline">v{{ ext.version }}</Badge>
-                  <Badge v-if="ext.error" variant="destructive">Fehler</Badge>
+                  <Badge v-if="ext.error" variant="destructive">{{ $t("common.error") }}</Badge>
                 </div>
                 <p v-if="ext.description && !ext.error" class="mt-1 line-clamp-2 text-xs text-muted-foreground">
                   {{ ext.description }}
@@ -465,18 +450,18 @@ async function unregisterLocalExtension(slug: string) {
                 @click.stop="unregisterLocalExtension(ext.slug)"
               >
                 <Trash2 class="mr-1.5 size-3.5" />
-                Entfernen
+                {{ $t("common.remove") }}
               </Button>
             </li>
           </ul>
           <p v-else class="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-            Keine lokalen Extensions registriert.
+            {{ $t("extensions.index.noLocalExtensions") }}
           </p>
 
           <div class="pt-2">
             <Button :disabled="localBusy" @click="pickerOpen = true">
               <FolderOpen class="mr-1.5 size-4" />
-              Ordner wählen…
+              {{ $t("extensions.index.chooseFolder") }}
             </Button>
             <p v-if="localError" class="mt-2 text-xs text-destructive">{{ localError }}</p>
           </div>
@@ -487,52 +472,50 @@ async function unregisterLocalExtension(slug: string) {
 
       <Card>
         <CardHeader>
-          <CardTitle class="text-base">Community-Katalog</CardTitle>
+          <CardTitle class="text-base">{{ $t("extensions.index.communityTitle") }}</CardTitle>
           <p class="text-xs text-muted-foreground">
-            Live von <code class="rounded bg-muted px-1 py-0.5 text-xs">speckit-community.github.io/extensions</code>. Cache 24 h.
+            {{ $t("extensions.index.communityDescPre") }} <code class="rounded bg-muted px-1 py-0.5 text-xs">speckit-community.github.io/extensions</code>{{ $t("extensions.index.communityDescPost") }}
           </p>
         </CardHeader>
         <CardContent class="space-y-3">
-          <p v-if="catalogLoading" class="text-sm text-muted-foreground">Katalog wird geladen…</p>
+          <p v-if="catalogLoading" class="text-sm text-muted-foreground">{{ $t("extensions.index.communityLoading") }}</p>
           <p v-else-if="catalogError" class="text-sm text-destructive">
-            Katalog aktuell nicht erreichbar. Slugs können trotzdem manuell verwaltet werden.
+            {{ $t("extensions.index.communityError") }}
           </p>
-          <p v-else-if="!catalog.length" class="text-sm text-muted-foreground">Katalog leer.</p>
+          <p v-else-if="!catalog.length" class="text-sm text-muted-foreground">{{ $t("extensions.index.communityEmpty") }}</p>
           <template v-else>
-            <!-- Search: substring match on id/name/description/tags -->
             <div class="relative">
               <Search class="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 v-model="searchQuery"
                 type="search"
-                placeholder="Suche Name, Slug, Beschreibung oder Tag…"
+                :placeholder="$t('extensions.index.searchPlaceholder')"
                 class="w-full rounded-md border border-input bg-background py-2 pl-9 pr-9 text-sm outline-none ring-offset-background transition placeholder:text-muted-foreground focus:ring-2 focus:ring-ring focus:ring-offset-2"
               />
               <button
                 v-if="searchQuery"
                 type="button"
                 class="absolute right-2 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
-                :aria-label="'Suche löschen'"
+                :aria-label="$t('extensions.index.clearSearch')"
                 @click="searchQuery = ''"
               >
                 <X class="size-3.5" />
               </button>
             </div>
-            <!-- Tag filter: multi-select dropdown with search. Active tags shown as removable pills next to the trigger. -->
             <div v-if="tagCounts.length" class="flex flex-wrap items-center gap-2">
               <Popover v-model:open="tagPickerOpen">
                 <PopoverTrigger as-child>
                   <Button variant="outline" size="sm" class="h-auto gap-2 px-3 py-1.5 text-xs">
                     <Filter class="size-3.5" />
-                    <span v-if="selectedTags.size === 0">Tags filtern</span>
-                    <span v-else>{{ selectedTags.size }} Tag{{ selectedTags.size === 1 ? '' : 's' }} aktiv</span>
+                    <span v-if="selectedTags.size === 0">{{ $t("extensions.index.filterTags") }}</span>
+                    <span v-else>{{ $t("extensions.index.tagsActive", selectedTags.size, { count: selectedTags.size }) }}</span>
                     <ChevronsUpDown class="size-3 opacity-50" />
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent class="w-80 p-0" align="start">
                   <Command>
-                    <CommandInput placeholder="Tag suchen…" />
-                    <CommandEmpty>Keine Tags gefunden.</CommandEmpty>
+                    <CommandInput :placeholder="$t('extensions.index.tagSearch')" />
+                    <CommandEmpty>{{ $t("extensions.index.noTagsFound") }}</CommandEmpty>
                     <CommandList class="max-h-80">
                       <CommandGroup>
                         <CommandItem
@@ -558,21 +541,20 @@ async function unregisterLocalExtension(slug: string) {
                       class="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-2"
                     >
                       <span class="text-[11px] text-muted-foreground">
-                        {{ selectedTags.size }} ausgewählt
+                        {{ $t("extensions.index.selectedCount", { count: selectedTags.size }) }}
                       </span>
                       <button
                         type="button"
                         class="text-[11px] text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                         @click="selectedTags = new Set()"
                       >
-                        Auswahl leeren
+                        {{ $t("extensions.index.clearSelection") }}
                       </button>
                     </div>
                   </Command>
                 </PopoverContent>
               </Popover>
 
-              <!-- Active tag pills: quick-remove individual tags without reopening the dropdown -->
               <button
                 v-for="tag in Array.from(selectedTags)"
                 :key="tag"
@@ -584,13 +566,15 @@ async function unregisterLocalExtension(slug: string) {
                 <X class="size-3" />
               </button>
             </div>
-            <!-- Result summary + clear -->
             <div class="flex items-center justify-between text-xs text-muted-foreground">
               <span>
-                {{ filteredCatalog.length }}
-                <template v-if="filteredCatalog.length !== catalog.length"> von {{ catalog.length }}</template>
-                Extensions
-                <template v-if="selectedTags.size"> · {{ selectedTags.size }} Tag{{ selectedTags.size === 1 ? '' : 's' }} aktiv</template>
+                <template v-if="filteredCatalog.length !== catalog.length">
+                  {{ $t("extensions.index.extensionCountFiltered", { shown: filteredCatalog.length, total: catalog.length }) }}
+                </template>
+                <template v-else>
+                  {{ $t("extensions.index.extensionCountAll", { count: catalog.length }) }}
+                </template>
+                <template v-if="selectedTags.size"> · {{ $t("extensions.index.tagsActive", selectedTags.size, { count: selectedTags.size }) }}</template>
               </span>
               <button
                 v-if="searchQuery || selectedTags.size"
@@ -598,74 +582,67 @@ async function unregisterLocalExtension(slug: string) {
                 class="text-xs underline-offset-2 hover:text-foreground hover:underline"
                 @click="clearFilters"
               >
-                Filter zurücksetzen
+                {{ $t("extensions.index.clearFilters") }}
               </button>
             </div>
 
             <p v-if="filteredCatalog.length === 0" class="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
-              Keine Extensions treffen auf die Filter zu.
+              {{ $t("extensions.index.noMatchingExtensions") }}
             </p>
             <div v-else class="grid gap-2 md:grid-cols-2">
               <div
                 v-for="ext in filteredCatalog"
-              :key="ext.id"
-              class="relative flex h-full flex-col rounded-md border border-border/60 bg-muted/20 p-3 transition hover:border-primary/40 hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring"
-            >
-              <!-- Stretched link: sits on top, catches card clicks, navigates to detail page -->
-              <NuxtLink
-                :to="`/extensions/${ext.id}`"
-                class="absolute inset-0 rounded-md focus:outline-none"
-                :aria-label="`Details zu ${ext.name}`"
-              />
-              <!-- Row 1: name only -->
-              <div class="truncate text-sm font-medium">{{ ext.name }}</div>
-              <!-- Row 2: slug left + version right, always on the same line -->
-              <div class="mt-0.5 flex items-center justify-between gap-2">
-                <code class="truncate font-mono text-[11px] text-muted-foreground">{{ ext.id }}</code>
-                <Badge v-if="ext.version" variant="outline" class="shrink-0">
-                  v{{ ext.version }}
-                </Badge>
-              </div>
-              <!-- Description: reserved 2-line height so cards below stay aligned -->
-              <p class="mt-1 line-clamp-2 min-h-8 text-xs text-muted-foreground">
-                {{ ext.description ?? "" }}
-              </p>
-              <!-- Tags: capped to MAX_VISIBLE_TAGS so tag row height stays consistent -->
-              <div class="mt-2 flex min-h-5 flex-wrap gap-1">
-                <template v-if="ext.tags?.length">
-                  <span
-                    v-for="tag in ext.tags.slice(0, MAX_VISIBLE_TAGS)"
-                    :key="tag"
-                    class="rounded bg-background px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground"
+                :key="ext.id"
+                class="relative flex h-full flex-col rounded-md border border-border/60 bg-muted/20 p-3 transition hover:border-primary/40 hover:bg-muted/40 focus-within:ring-2 focus-within:ring-ring"
+              >
+                <NuxtLink
+                  :to="`/extensions/${ext.id}`"
+                  class="absolute inset-0 rounded-md focus:outline-none"
+                  :aria-label="$t('extensions.index.details', { name: ext.name })"
+                />
+                <div class="truncate text-sm font-medium">{{ ext.name }}</div>
+                <div class="mt-0.5 flex items-center justify-between gap-2">
+                  <code class="truncate font-mono text-[11px] text-muted-foreground">{{ ext.id }}</code>
+                  <Badge v-if="ext.version" variant="outline" class="shrink-0">
+                    v{{ ext.version }}
+                  </Badge>
+                </div>
+                <p class="mt-1 line-clamp-2 min-h-8 text-xs text-muted-foreground">
+                  {{ ext.description ?? "" }}
+                </p>
+                <div class="mt-2 flex min-h-5 flex-wrap gap-1">
+                  <template v-if="ext.tags?.length">
+                    <span
+                      v-for="tag in ext.tags.slice(0, MAX_VISIBLE_TAGS)"
+                      :key="tag"
+                      class="rounded bg-background px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground"
+                    >
+                      {{ tag }}
+                    </span>
+                    <span
+                      v-if="ext.tags.length > MAX_VISIBLE_TAGS"
+                      class="rounded bg-background px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground"
+                    >
+                      +{{ ext.tags.length - MAX_VISIBLE_TAGS }}
+                    </span>
+                  </template>
+                </div>
+                <div class="relative z-10 mt-auto flex items-center justify-between gap-2 pt-3 text-[11px] text-muted-foreground">
+                  <span class="truncate">{{ ext.author ?? t('extensions.index.community') }}</span>
+                  <Button
+                    v-if="!standardList.includes(ext.id)"
+                    variant="ghost"
+                    size="sm"
+                    class="h-auto shrink-0 px-2 py-1 text-xs"
+                    :disabled="saving"
+                    @click="updateList([...standardList, ext.id])"
                   >
-                    {{ tag }}
-                  </span>
-                  <span
-                    v-if="ext.tags.length > MAX_VISIBLE_TAGS"
-                    class="rounded bg-background px-1.5 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground"
-                  >
-                    +{{ ext.tags.length - MAX_VISIBLE_TAGS }}
-                  </span>
-                </template>
+                    <Star class="mr-1 size-3" />
+                    {{ $t("extensions.index.toFavorites") }}
+                  </Button>
+                  <Badge v-else variant="secondary" class="shrink-0">{{ $t("extensions.index.favoriteLabel") }}</Badge>
+                </div>
               </div>
-              <!-- Footer: mt-auto pins it to the bottom so author + action align across all cards.
-                   z-10 raises the footer above the stretched link so the Button receives its own clicks. -->
-              <div class="relative z-10 mt-auto flex items-center justify-between gap-2 pt-3 text-[11px] text-muted-foreground">
-                <span class="truncate">{{ ext.author ?? "Community" }}</span>
-                <Button
-                  v-if="!standardList.includes(ext.id)"
-                  variant="ghost"
-                  size="sm"
-                  class="h-auto shrink-0 px-2 py-1 text-xs"
-                  :disabled="saving"
-                  @click="updateList([...standardList, ext.id])"
-                >
-                  <Star class="mr-1 size-3" />
-                  Zum Standard
-                </Button>
-                <Badge v-else variant="secondary" class="shrink-0">Standard</Badge>
-              </div>
-            </div>
             </div>
           </template>
         </CardContent>

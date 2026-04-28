@@ -14,6 +14,8 @@ const emit = defineEmits<{
   openDrawer: [];
 }>();
 
+const { t } = useI18n();
+
 function icon(level: string) {
   if (level === "success") return CheckCircle2;
   if (level === "error") return AlertCircle;
@@ -31,11 +33,11 @@ function iconClass(level: string) {
 function relative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return "eben";
-  if (minutes < 60) return `vor ${minutes}m`;
+  if (minutes < 1) return t("time.justNow");
+  if (minutes < 60) return t("time.minutesAgo", { n: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `vor ${hours}h`;
-  return `vor ${Math.floor(hours / 24)}d`;
+  if (hours < 24) return t("time.hoursAgo", { n: hours });
+  return t("time.daysAgo", { n: Math.floor(hours / 24) });
 }
 </script>
 
@@ -45,18 +47,18 @@ function relative(iso: string): string {
       <div class="flex items-center justify-between gap-3">
         <div class="flex items-center gap-2">
           <Activity class="size-4 text-primary" />
-          <CardTitle class="text-base">Aktivität</CardTitle>
+          <CardTitle class="text-base">{{ $t("notifications.widgetTitle") }}</CardTitle>
         </div>
         <Button variant="ghost" size="sm" class="h-7 text-xs" @click="emit('openDrawer')">
-          Alle anzeigen
+          {{ $t("notifications.showAll") }}
           <ChevronRight class="ml-1 size-3" />
         </Button>
       </div>
     </CardHeader>
     <CardContent>
-      <p v-if="loading" class="text-xs text-muted-foreground">Lade…</p>
+      <p v-if="loading" class="text-xs text-muted-foreground">{{ $t("common.loading") }}</p>
       <p v-else-if="!events.length" class="text-xs text-muted-foreground">
-        Noch keine Aktivität. Starte eine Session in einem der Steps.
+        {{ $t("notifications.noActivity") }}
       </p>
       <ul v-else class="space-y-1.5">
         <li

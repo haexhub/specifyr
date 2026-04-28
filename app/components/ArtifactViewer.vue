@@ -26,14 +26,16 @@ interface ArtifactDir {
 
 const props = defineProps<{
   slug: string;
-  candidates: string[];   // ordered list of candidate paths to try
-  reloadToken?: number;   // bump this to force re-fetch (after chat turn completes)
+  candidates: string[];
+  reloadToken?: number;
 }>();
 
 const emit = defineEmits<{
   collapse: [];
   powerPrompt: [prompt: string];
 }>();
+
+const { t } = useI18n();
 
 const powerMode = ref(false);
 const selection = ref<{ text: string; anchorTop: number } | null>(null);
@@ -54,7 +56,6 @@ function onMouseUp() {
     clearSelection();
     return;
   }
-  // Position popover near the selection's client rect
   const range = sel!.getRangeAt(0);
   const rect = range.getBoundingClientRect();
   const preEl = preRef.value;
@@ -87,10 +88,6 @@ const dirBase = ref<string | null>(null);
 
 const isMarkdown = computed(() => !!file.value?.path.toLowerCase().endsWith(".md"));
 
-// Spec-kit templates embed author hints as HTML comments: <!-- Example: I. Library-First -->.
-// marked preserves comments but DOMPurify strips them, so the hints would vanish. We rewrite
-// each comment into an italic blockquote before rendering — the hint stays visible as a
-// visually distinct callout instead of being sanitized away.
 function surfaceHtmlComments(source: string): string {
   return source.replace(/<!--\s*([\s\S]*?)\s*-->/g, (_match, inner) => {
     const text = String(inner)
@@ -101,8 +98,6 @@ function surfaceHtmlComments(source: string): string {
   });
 }
 
-// Render markdown to sanitized HTML. In power-mode we keep the raw source view so text-selection
-// maps 1:1 to the underlying markdown (picking rendered HTML text would lose the source context).
 const renderedHtml = computed(() => {
   const source = file.value?.content ?? "";
   if (!source) return "";
@@ -134,9 +129,7 @@ async function resolveCandidate(): Promise<void> {
   selectedPath.value = null;
 
   try {
-    // 1) Try each candidate as-is (resolves exact file or directory)
     for (const candidate of props.candidates) {
-      // Strip spec-kit placeholder <feature> so we can try the containing dir
       if (candidate.includes("<feature>")) {
         const base = candidate.split("/<feature>/")[0];
         const tail = candidate.split("/<feature>/")[1];
@@ -144,14 +137,12 @@ async function resolveCandidate(): Promise<void> {
         const baseRes = await fetchPath(base);
         if (!baseRes) continue;
         if (baseRes.type === "dir") {
-          // Pick the first feature subdirectory and look for the expected tail file
           const featureDirs = baseRes.entries.filter((e) => e.isDirectory);
           if (featureDirs.length === 0) {
             dirEntries.value = baseRes.entries;
             dirBase.value = base;
             continue;
           }
-          // Pick the most recent-looking (sort by name desc since spec-kit prefixes with numbers)
           const sorted = [...featureDirs].sort((a, b) => b.name.localeCompare(a.name));
           for (const feat of sorted) {
             const full = `${base}/${feat.name}/${tail}`;
@@ -162,7 +153,6 @@ async function resolveCandidate(): Promise<void> {
               return;
             }
           }
-          // No file found — expose dir listing
           dirEntries.value = baseRes.entries;
           dirBase.value = base;
         }
@@ -181,7 +171,7 @@ async function resolveCandidate(): Promise<void> {
       }
     }
   } catch (err) {
-    errorMessage.value = err instanceof Error ? err.message : "Artefakt konnte nicht geladen werden.";
+    errorMessage.value = err instanceof Error ? err.message : t("artifact.loadError");
   } finally {
     loading.value = false;
   }
@@ -193,7 +183,6 @@ watch(
   { immediate: true }
 );
 
-// Live watcher: re-resolve whenever something changes in .specify/
 let watcherSource: EventSource | null = null;
 let watcherDebounce: ReturnType<typeof setTimeout> | null = null;
 
@@ -208,9 +197,7 @@ function openWatcher(forSlug: string) {
         resolveCandidate();
       }, 300);
     });
-    watcherSource.addEventListener("error", () => {
-      // Browser auto-reconnects EventSource by default; no action needed.
-    });
+    watcherSource.addEventListener("error", () => {});
   } catch {
     /* SSE unsupported */
   }
@@ -240,7 +227,7 @@ onUnmounted(() => closeWatcher());
   <div class="flex h-full flex-col">
     <div class="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
       <div class="min-w-0 flex-1">
-        <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Artefakt</p>
+        <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{{ $t("artifact.title") }}</p>
         <p class="mt-0.5 truncate font-mono text-xs">
           {{ selectedPath ?? candidates[0] ?? "–" }}
         </p>
@@ -250,7 +237,7 @@ onUnmounted(() => closeWatcher());
           type="button"
           class="inline-flex size-7 items-center justify-center rounded-md transition"
           :class="powerMode ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground'"
-          :title="powerMode ? 'Power-Modus aktiv — Text markieren, um ihn per Chat zu ändern' : 'Power-Modus: Selection-to-Prompt'"
+          :title="powerMode ? $t('artifact.powerModeActive') : $t('artifact.powerModeTitle')"
           @click="powerMode = !powerMode; clearSelection()"
         >
           <Wand2 class="size-3.5" />
@@ -258,7 +245,7 @@ onUnmounted(() => closeWatcher());
         <button
           type="button"
           class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          title="Neu laden"
+          :title="$t('artifact.reload')"
           :disabled="loading"
           @click="resolveCandidate"
         >
@@ -267,7 +254,7 @@ onUnmounted(() => closeWatcher());
         <button
           type="button"
           class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-          title="Artefakt ausblenden"
+          :title="$t('artifact.hide')"
           @click="emit('collapse')"
         >
           <PanelRightClose class="size-3.5" />
@@ -278,7 +265,7 @@ onUnmounted(() => closeWatcher());
     <div class="flex-1 overflow-y-auto">
       <div v-if="loading" class="flex items-center gap-2 p-4 text-xs text-muted-foreground">
         <Loader2 class="size-3.5 animate-spin" />
-        <span>Lade…</span>
+        <span>{{ $t("common.loading") }}</span>
       </div>
 
       <div v-else-if="errorMessage" class="m-4 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-xs text-destructive">
@@ -294,11 +281,8 @@ onUnmounted(() => closeWatcher());
           class="sticky top-0 z-10 border-b border-primary/30 bg-primary/5 px-4 py-2 text-[11px] text-primary"
         >
           <Wand2 class="mr-1 inline size-3" />
-          Power-Modus: Markiere Text, um ihn per Chat ändern zu lassen.
+          {{ $t("artifact.powerModeHint") }}
         </div>
-        <!-- Markdown files render as prose unless power-mode is active. Power-mode drops back to
-             raw source so selections map directly to the underlying markdown that gets sent to
-             the LLM. -->
         <article
           v-if="isMarkdown && !powerMode"
           ref="preRef"
@@ -320,7 +304,7 @@ onUnmounted(() => closeWatcher());
           :style="{ top: selection.anchorTop + 'px' }"
         >
           <div class="flex items-start justify-between gap-2">
-            <p class="text-[11px] font-medium">Auswahl als Prompt ändern</p>
+            <p class="text-[11px] font-medium">{{ $t("artifact.changeTitle") }}</p>
             <button
               type="button"
               class="inline-flex size-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
@@ -336,13 +320,13 @@ onUnmounted(() => closeWatcher());
             v-model="changeInstruction"
             rows="2"
             class="mt-2 w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-xs outline-none focus:ring-2 focus:ring-ring"
-            placeholder="Was soll geändert werden?"
+            :placeholder="$t('artifact.changeInstructionPlaceholder')"
             @keydown.meta.enter.prevent="sendPowerPrompt"
             @keydown.ctrl.enter.prevent="sendPowerPrompt"
           />
           <div class="mt-2 flex justify-end">
             <Button size="sm" :disabled="!changeInstruction.trim()" @click="sendPowerPrompt">
-              Als Prompt senden
+              {{ $t("artifact.sendAsPrompt") }}
             </Button>
           </div>
         </div>
@@ -355,7 +339,7 @@ onUnmounted(() => closeWatcher());
       <div v-else-if="dirEntries && dirBase" class="p-4">
         <p class="mb-2 text-xs font-medium">{{ dirBase }}/</p>
         <p class="mb-3 text-[11px] text-muted-foreground">
-          Noch keine passende Datei. Sobald eine Session das Artefakt erzeugt, taucht es hier auf.
+          {{ $t("artifact.pendingFile") }}
         </p>
         <ul v-if="dirEntries.length" class="space-y-0.5">
           <li
@@ -367,12 +351,12 @@ onUnmounted(() => closeWatcher());
             <code class="font-mono">{{ entry.name }}</code>
           </li>
         </ul>
-        <p v-else class="text-[11px] italic text-muted-foreground">Verzeichnis leer.</p>
+        <p v-else class="text-[11px] italic text-muted-foreground">{{ $t("artifact.dirEmpty") }}</p>
       </div>
 
       <div v-else class="p-4 text-xs text-muted-foreground">
-        <p>Artefakt existiert noch nicht.</p>
-        <p class="mt-1 italic opacity-70">Starte eine Session und tippe den ersten Prompt, um es zu erzeugen.</p>
+        <p>{{ $t("artifact.notExists") }}</p>
+        <p class="mt-1 italic opacity-70">{{ $t("artifact.notExistsHint") }}</p>
       </div>
     </div>
   </div>

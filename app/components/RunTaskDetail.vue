@@ -58,7 +58,7 @@ const canSkip = computed(() => {
 
 <template>
   <div v-if="!task" class="flex h-full items-center justify-center p-6 text-sm text-muted-foreground">
-    Wähle einen Task aus der Liste.
+    {{ $t("runTask.noTaskSelected") }}
   </div>
   <div v-else class="flex h-full flex-col">
     <header class="border-b border-border/60 px-5 py-3">
@@ -80,11 +80,11 @@ const canSkip = computed(() => {
             variant="outline"
             size="sm"
             :disabled="busy"
-            :title="task.status === 'completed' ? 'Task neu ausführen' : 'Task für nächsten Run zurücksetzen'"
+            :title="task.status === 'completed' ? $t('runTask.retryTitle') : $t('runTask.retryResetTitle')"
             @click="emit('retry', task.id)"
           >
             <RotateCcw class="mr-1.5 size-3.5" />
-            Retry
+            {{ $t('runTask.retryLabel') }}
           </Button>
           <Button
             v-if="canSkip"
@@ -92,11 +92,10 @@ const canSkip = computed(() => {
             size="sm"
             :disabled="busy"
             class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-            title="Task als übersprungen markieren"
             @click="emit('skip', task.id)"
           >
             <SkipForward class="mr-1.5 size-3.5" />
-            Skip
+            {{ $t('runTask.skipLabel') }}
           </Button>
         </div>
       </div>
@@ -104,13 +103,13 @@ const canSkip = computed(() => {
 
     <div class="flex-1 overflow-y-auto p-5 text-xs">
       <p v-if="!log.length && !liveText" class="italic text-muted-foreground">
-        Noch keine Ausgabe. Bei laufendem Run erscheinen Tokens live hier.
+        {{ $t("runTask.noOutput") }}
       </p>
 
       <div class="space-y-3">
         <div v-for="(entry, i) in log" :key="i" class="space-y-1">
           <div v-if="entry.kind === 'start'" class="rounded-md border border-border/60 bg-muted/30 p-3">
-            <p class="text-xs font-medium">Task gestartet</p>
+            <p class="text-xs font-medium">{{ $t("runTask.taskStarted") }}</p>
             <p v-if="entry.description" class="mt-1 whitespace-pre-wrap text-muted-foreground">{{ entry.description }}</p>
           </div>
           <pre v-else-if="entry.kind === 'chunk'" class="whitespace-pre-wrap wrap-break-word font-mono leading-5">{{ entry.text }}</pre>
@@ -121,14 +120,14 @@ const canSkip = computed(() => {
           <div v-else-if="entry.kind === 'complete'" class="flex items-start gap-2 rounded-md border border-emerald-500/30 bg-emerald-500/5 p-3 text-emerald-900 dark:text-emerald-200">
             <CheckCircle2 class="mt-0.5 size-4 shrink-0" />
             <div>
-              <p class="font-medium">Task abgeschlossen</p>
+              <p class="font-medium">{{ $t("runTask.taskCompleted") }}</p>
               <p v-if="entry.summary" class="mt-1 text-[11px] opacity-80">{{ entry.summary }}</p>
             </div>
           </div>
           <div v-else-if="entry.kind === 'failed'" class="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-destructive">
             <AlertCircle class="mt-0.5 size-4 shrink-0" />
             <div>
-              <p class="font-medium">Task fehlgeschlagen</p>
+              <p class="font-medium">{{ $t("runTask.taskFailed") }}</p>
               <p v-if="entry.error" class="mt-1 text-[11px]">{{ entry.error }}</p>
             </div>
           </div>
@@ -138,7 +137,7 @@ const canSkip = computed(() => {
 
         <p v-if="streaming" class="flex items-center gap-2 text-muted-foreground">
           <Loader2 class="size-3 animate-spin" />
-          <span>läuft…</span>
+          <span>{{ $t("runTask.running") }}</span>
         </p>
       </div>
     </div>

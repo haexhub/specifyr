@@ -1,15 +1,4 @@
 <script setup lang="ts">
-// Runtime-View — Inkrement 13.
-//
-// Layout matches Speckit-View: left sidebar (project context) + content area
-// with view-tab navigation. Three logically distinct panes in the body:
-//   1. Org Chart  — static from spec (reports_to + delivers_to)
-//   2. Live Status — polled from /company/status (current dispatch state)
-//   3. History    — polled from /company/events (JSONL → SQLite-indexed log)
-//
-// Polling is fine for v1; intervals are conservative because the underlying
-// source-of-truth is files-on-disk + SQLite, neither hammered well.
-
 import { Activity, Network, History, Circle } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Badge } from "~/components/ui/badge";
@@ -21,8 +10,6 @@ const route = useRoute();
 const router = useRouter();
 const slug = computed(() => route.params.slug as string);
 
-// Selected agent role lives in the URL (?agent=<role>) so the selection is
-// deep-linkable and survives page reloads. Browser back closes the panel.
 const selectedRole = computed(() => {
   const v = route.query.agent;
   return typeof v === "string" && v.length > 0 ? v : null;
@@ -65,8 +52,6 @@ interface EventRow {
   payload: Record<string, unknown>;
 }
 
-// Project snapshot — same fetch the Speckit page uses, so the sidebar can
-// show the project title.
 const { data: project } = await useFetch<{
   workflow?: string;
   workflowDefinition?: Workflow;
@@ -80,7 +65,6 @@ const workflow = computed(() =>
   resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null),
 );
 
-// Live status — refresh every 3s while running.
 const { data: companyStatus, refresh: refreshStatus } = await useFetch<CompanyStatus>(
   () => `/api/projects/${slug.value}/company/status`,
   {
@@ -91,7 +75,6 @@ const { data: companyStatus, refresh: refreshStatus } = await useFetch<CompanySt
 
 const isRunning = computed(() => companyStatus.value?.status === "running");
 
-// Events — polled while running.
 const events = ref<EventRow[]>([]);
 const eventsError = ref<string | null>(null);
 
@@ -125,8 +108,6 @@ onBeforeUnmount(() => {
   if (eventsTimer) clearInterval(eventsTimer);
 });
 
-// Pending dispatches — derived from event log: dispatch-started without a
-// matching terminal event (completed/failed/error) on the same task_path.
 const pendingDispatches = computed(() => {
   const started = new Map<string, EventRow>();
   for (const evt of [...events.value].reverse()) {
@@ -195,7 +176,7 @@ function relativeTime(iso: string): string {
   >
     <template #sidebar>
       <div class="space-y-3 px-3 py-3 text-xs text-muted-foreground">
-        <p class="font-medium text-foreground">Runtime</p>
+        <p class="font-medium text-foreground">{{ $t("runtime.sidebarTitle") }}</p>
         <div class="flex items-center gap-2">
           <Circle
             class="size-2 fill-current"
@@ -205,13 +186,13 @@ function relativeTime(iso: string): string {
         </div>
         <div v-if="isRunning" class="space-y-1">
           <p>
-            Agents: <span class="font-medium text-foreground">{{ companyStatus?.agents?.length ?? 0 }}</span>
+            {{ $t("runtime.sidebarAgents") }} <span class="font-medium text-foreground">{{ companyStatus?.agents?.length ?? 0 }}</span>
           </p>
           <p>
-            Queue-Tiefe: <span class="font-medium text-foreground">{{ companyStatus?.queueDepth ?? 0 }}</span>
+            {{ $t("runtime.sidebarQueueDepth") }} <span class="font-medium text-foreground">{{ companyStatus?.queueDepth ?? 0 }}</span>
           </p>
           <p>
-            Pending: <span class="font-medium text-foreground">{{ pendingDispatches.length }}</span>
+            {{ $t("runtime.sidebarPending") }} <span class="font-medium text-foreground">{{ pendingDispatches.length }}</span>
           </p>
         </div>
       </div>
@@ -227,12 +208,10 @@ function relativeTime(iso: string): string {
       </Badge>
     </header>
 
-        <!-- Idle state -->
         <Card v-if="!isRunning">
           <CardContent class="py-10 text-center text-sm text-muted-foreground">
-            Die Company läuft gerade nicht. Starte sie über den
-            <NuxtLink :to="`/specs/${slug}`" class="text-primary hover:underline">Speckit-Tab</NuxtLink>,
-            dann erscheinen hier Live-Status, Org-Chart und History.
+            {{ $t("runtime.idlePre") }}
+            <NuxtLink :to="`/specs/${slug}`" class="text-primary hover:underline">{{ $t("runtime.speckit") }}</NuxtLink>{{ $t("runtime.idlePost") }}
           </CardContent>
         </Card>
 
@@ -241,16 +220,15 @@ function relativeTime(iso: string): string {
             <CardHeader>
               <div class="flex items-center gap-2">
                 <Activity class="size-4 text-primary" />
-                <CardTitle class="text-base">Live Status</CardTitle>
+                <CardTitle class="text-base">{{ $t("runtime.liveStatus") }}</CardTitle>
               </div>
               <p class="text-xs text-muted-foreground">
-                Aktive Agents · {{ companyStatus?.agents?.length ?? 0 }} Rollen ·
-                Queue-Tiefe: {{ companyStatus?.queueDepth ?? 0 }} · Pending: {{ pendingDispatches.length }}
+                {{ $t("runtime.liveStatusDesc", { agents: companyStatus?.agents?.length ?? 0, depth: companyStatus?.queueDepth ?? 0, pending: pendingDispatches.length }) }}
               </p>
             </CardHeader>
             <CardContent class="space-y-2">
               <div v-if="pendingDispatches.length === 0" class="text-sm text-muted-foreground">
-                Keine laufenden Dispatches.
+                {{ $t("runtime.noDispatches") }}
               </div>
               <div
                 v-for="p in pendingDispatches"
@@ -261,7 +239,7 @@ function relativeTime(iso: string): string {
                   <span class="font-medium">{{ p.role }}</span>
                   <span class="ml-2 text-xs text-muted-foreground">{{ shortPath(p.task_path) }}</span>
                 </div>
-                <span class="text-xs text-muted-foreground">seit {{ relativeTime(p.at) }}</span>
+                <span class="text-xs text-muted-foreground">{{ $t("runtime.since", { time: relativeTime(p.at) }) }}</span>
               </div>
             </CardContent>
           </Card>
@@ -270,10 +248,10 @@ function relativeTime(iso: string): string {
             <CardHeader>
               <div class="flex items-center gap-2">
                 <Network class="size-4 text-primary" />
-                <CardTitle class="text-base">Org Chart</CardTitle>
+                <CardTitle class="text-base">{{ $t("runtime.orgChartTitle") }}</CardTitle>
               </div>
               <p class="text-xs text-muted-foreground">
-                Hierarchie aus <code>reports_to</code> · Workflow-Edges aus <code>delivers_to</code>
+                {{ $t("runtime.orgChartDescPre") }} <code>reports_to</code> {{ $t("runtime.orgChartDescMid") }} <code>delivers_to</code>
               </p>
             </CardHeader>
             <CardContent class="space-y-3">
@@ -286,7 +264,7 @@ function relativeTime(iso: string): string {
                 >
                   <div class="font-medium">{{ root.role }}</div>
                   <div v-if="root.delivers_to.length" class="mt-1 text-xs text-muted-foreground">
-                    liefert an: {{ root.delivers_to.join(", ") }}
+                    {{ $t("runtime.deliversTo") }} {{ root.delivers_to.join(", ") }}
                   </div>
                 </button>
                 <div
@@ -303,7 +281,7 @@ function relativeTime(iso: string): string {
                   >
                     <div class="font-medium">{{ child.role }}</div>
                     <div v-if="child.delivers_to.length" class="mt-1 text-xs text-muted-foreground">
-                      liefert an: {{ child.delivers_to.join(", ") }}
+                      {{ $t("runtime.deliversTo") }} {{ child.delivers_to.join(", ") }}
                     </div>
                   </button>
                 </div>
@@ -315,16 +293,16 @@ function relativeTime(iso: string): string {
             <CardHeader>
               <div class="flex items-center gap-2">
                 <History class="size-4 text-primary" />
-                <CardTitle class="text-base">History</CardTitle>
+                <CardTitle class="text-base">{{ $t("runtime.historyTitle") }}</CardTitle>
               </div>
               <p class="text-xs text-muted-foreground">
-                JSONL Event Log · letzte 50 Events · alle 5s aktualisiert
+                {{ $t("runtime.historyDesc") }}
               </p>
             </CardHeader>
             <CardContent>
               <div v-if="eventsError" class="text-sm text-amber-600">{{ eventsError }}</div>
               <div v-else-if="!events.length" class="text-sm text-muted-foreground">
-                Noch keine Events.
+                {{ $t("runtime.noEvents") }}
               </div>
               <div v-else class="space-y-1 font-mono text-xs">
                 <div

@@ -10,6 +10,7 @@ import { isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import type { StepState } from "~/lib/types";
 
+const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const slug = computed(() => route.params.slug as string);
@@ -25,10 +26,7 @@ const workflow = computed(() =>
 );
 const workflowSteps = computed(() => workflow.value.steps);
 
-// Run-step = the terminal execution step of the workflow (isRun: true).
-// For spec-kit it's `implement`; for AIDE it's `execute`.
 const runStep = computed(() => workflowSteps.value.find((s) => s.isRun) ?? workflowSteps.value[workflowSteps.value.length - 1]!);
-// Predecessor of the run step — the workflow step that produces the tasks to run.
 const tasksStep = computed(() => {
   const idx = workflowSteps.value.findIndex((s) => s.id === runStep.value.id);
   return idx > 0 ? workflowSteps.value[idx - 1]! : runStep.value;
@@ -91,7 +89,7 @@ const streaming = ref(false);
 const abortCtrl = ref<AbortController | null>(null);
 
 const activeTaskId = ref<string | null>(null);
-const liveText = ref(""); // current streaming task's accumulated text
+const liveText = ref("");
 const taskLogs = ref<Record<string, TaskLogEntry[]>>({});
 
 async function refreshStatus() {
@@ -115,7 +113,6 @@ async function loadTaskLog(taskId: string) {
 
 onMounted(async () => {
   await refreshStatus();
-  // If we loaded after a run finished, pre-select first task so detail isn't empty.
   const tasks = status.value?.graph?.tasks ?? [];
   if (tasks.length > 0) {
     activeTaskId.value = tasks[0]!.id;
@@ -251,7 +248,7 @@ async function startRun() {
             await refreshStatus();
             break;
           case "error":
-            startError.value = payload?.message ?? "Unbekannter Fehler";
+            startError.value = payload?.message ?? t("run.unknownError");
             break;
           case "done":
             break;
@@ -281,7 +278,7 @@ async function cancelRun() {
     await $fetch(`/api/projects/${slug.value}/run/cancel`, { method: "POST" });
     abortCtrl.value?.abort();
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Abbruch fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("run.cancelFailed"));
   } finally {
     cancelling.value = false;
   }
@@ -297,7 +294,7 @@ async function retryTask(taskId: string) {
     await refreshStatus();
     taskLogs.value[taskId] = [];
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Retry fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("run.retryFailed"));
   } finally {
     taskBusy.value = false;
   }
@@ -310,7 +307,7 @@ async function skipTask(taskId: string) {
     await $fetch(`/api/projects/${slug.value}/run/tasks/${taskId}/skip`, { method: "POST" });
     await refreshStatus();
   } catch (err) {
-    alert(err instanceof Error ? err.message : "Skip fehlgeschlagen.");
+    alert(err instanceof Error ? err.message : t("run.skipFailed"));
   } finally {
     taskBusy.value = false;
   }
@@ -330,13 +327,13 @@ onUnmounted(() => {
       :workflow="workflow"
     >
       <div class="px-3 py-3 text-xs text-muted-foreground">
-        <p class="font-medium text-foreground">Run-Status</p>
+        <p class="font-medium text-foreground">{{ $t("run.runStatus") }}</p>
         <p v-if="status?.current" class="mt-1">
           <Badge :variant="status.current.status === 'completed' ? 'default' : 'secondary'" class="align-middle">
             {{ status.current.status }}
           </Badge>
         </p>
-        <p v-else class="mt-1 italic opacity-70">Noch nicht gestartet.</p>
+        <p v-else class="mt-1 italic opacity-70">{{ $t("run.notStarted") }}</p>
       </div>
     </ProjectStepSidebar>
 
@@ -345,13 +342,12 @@ onUnmounted(() => {
         <div class="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
           <Lock class="size-6" />
         </div>
-        <h1 class="text-xl font-semibold">Implement ist gesperrt</h1>
+        <h1 class="text-xl font-semibold">{{ $t("run.locked") }}</h1>
         <p class="mt-2 text-sm text-muted-foreground">
-          Schließe zuerst <span class="font-medium text-foreground">Step 4: {{ tasksStep.label }}</span> ab,
-          bevor die Tasks ausgeführt werden können.
+          {{ $t("run.lockedDesc", { label: tasksStep.label }) }}
         </p>
         <Button class="mt-5" @click="router.push(`/specs/${slug}/steps/tasks`)">
-          Zu {{ tasksStep.label }} wechseln
+          {{ $t("run.switchTo", { label: tasksStep.label }) }}
         </Button>
       </div>
     </section>
@@ -363,8 +359,8 @@ onUnmounted(() => {
             <Rocket class="size-4" />
           </div>
           <div>
-            <p class="text-[11px] uppercase tracking-wider text-muted-foreground">Step 5 von 5</p>
-            <h1 class="text-lg font-semibold">Implement</h1>
+            <p class="text-[11px] uppercase tracking-wider text-muted-foreground">{{ $t("run.stepLabel") }}</p>
+            <h1 class="text-lg font-semibold">{{ $t("run.implement") }}</h1>
           </div>
         </div>
         <div class="flex items-center gap-2">
@@ -376,7 +372,7 @@ onUnmounted(() => {
           >
             <Loader2 v-if="starting" class="mr-1.5 size-3.5 animate-spin" />
             <Play v-else class="mr-1.5 size-3.5" />
-            {{ starting ? "Starte…" : (status?.current ? "Erneut starten" : "Run starten") }}
+            {{ starting ? $t("run.starting") : (status?.current ? $t("run.restart") : $t("run.startRun")) }}
           </Button>
           <Button
             v-else
@@ -386,7 +382,7 @@ onUnmounted(() => {
             @click="cancelRun"
           >
             <Square class="mr-1.5 size-3.5" />
-            {{ cancelling ? "Breche ab…" : "Abbrechen" }}
+            {{ cancelling ? $t("run.cancelling") : $t("run.cancel") }}
           </Button>
           <Button
             size="sm"
@@ -409,8 +405,8 @@ onUnmounted(() => {
       <div class="flex flex-1 overflow-hidden">
         <aside class="flex w-[340px] shrink-0 flex-col border-r border-border/60">
           <div class="border-b border-border/60 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-            Tasks
-            <span v-if="rows.length" class="normal-case"> · {{ rows.length }} insgesamt</span>
+            {{ $t("run.tasksHeader") }}
+            <span v-if="rows.length" class="normal-case"> · {{ rows.length }} {{ $t("common.total") }}</span>
           </div>
           <div class="flex-1 overflow-y-auto">
             <RunTaskList
@@ -420,7 +416,7 @@ onUnmounted(() => {
               @select="selectTask"
             />
             <p v-else class="p-4 text-xs text-muted-foreground">
-              Kein Task-Graph vorhanden. Start-Run extrahiert die Tasks aus tasks.md via Claude.
+              {{ $t("run.noTaskGraph") }}
             </p>
           </div>
         </aside>
