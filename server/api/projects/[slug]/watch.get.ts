@@ -3,8 +3,8 @@ import { projectCwd, assertProjectExists } from "../../../utils/specops-stores";
 
 /**
  * Server-Sent Events stream that emits whenever a file inside the project's
- * `.specify/` directory changes. Client-side ArtifactViewer listens and
- * triggers a refetch so the pane stays in sync with external edits.
+ * `.specify/` or `.specops/` directories changes. Client-side ArtifactViewer
+ * listens and triggers a refetch so the pane stays in sync with external edits.
  *
  * Events:
  *   - type "change"  : a watched file was added/modified/removed
@@ -18,11 +18,19 @@ export default defineEventHandler(async (event) => {
   await assertProjectExists(slug);
 
   const chokidar = await import("chokidar");
-  const specifyDir = path.join(projectCwd(slug), ".specify");
+  const projectDir = projectCwd(slug);
 
-  const watcher = chokidar.watch(specifyDir, {
+  // Watch the project root so the watcher is always anchored to an existing directory.
+  // Filtering to .specify/ and .specops/ avoids noise from unrelated files (git, code, etc.).
+  // Without this, chokidar on Linux (inotify) silently fails when .specify/ doesn't exist yet.
+  const watcher = chokidar.watch(projectDir, {
     ignoreInitial: true,
-    awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
+    awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
+    ignored: (filePath: string) => {
+      if (filePath === projectDir) return false;
+      const rel = path.relative(projectDir, filePath);
+      return !rel.startsWith(".specify") && !rel.startsWith(".specops");
+    }
   });
 
   const stream = createEventStream(event);
@@ -35,10 +43,10 @@ export default defineEventHandler(async (event) => {
     }
   };
 
-  const makeRel = (full: string) => path.relative(projectCwd(slug), full);
+  const makeRel = (full: string) => path.relative(projectDir, full);
 
   watcher
-    .on("ready", () => safePush("ready", { watched: specifyDir }))
+    .on("ready", () => safePush("ready", { watched: projectDir }))
     .on("add", (p: string) => safePush("change", { kind: "add", path: makeRel(p) }))
     .on("change", (p: string) => safePush("change", { kind: "change", path: makeRel(p) }))
     .on("unlink", (p: string) => safePush("change", { kind: "unlink", path: makeRel(p) }))
