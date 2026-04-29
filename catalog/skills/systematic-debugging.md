@@ -1,7 +1,9 @@
 ---
 id: systematic-debugging
 name: "Systematic Debugging"
-description: "Root-cause investigation before any fix attempt. No shotgun patches."
+description: >
+  Use when a concrete failure has appeared and the root cause is unclear.
+  Don't use for speculative pre-optimization — only after a reproducible failure is in hand.
 tags:
   - quality
   - debugging

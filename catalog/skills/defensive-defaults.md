@@ -1,7 +1,9 @@
 ---
 id: defensive-defaults
 name: "Defensive Defaults"
-description: "Fail closed, default-deny, principle of least authority."
+description: >
+  Use when designing or modifying any system boundary that multiple callers can invoke.
+  Don't use as post-hoc justification — apply as the default design lens from the first line of code.
 tags:
   - security
   - design
