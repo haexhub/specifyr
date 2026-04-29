@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { projectCwd, loadEventStore } from "./specops-stores";
+import { projectCwd, loadEventStore, dataDir, extensionsDir } from "./specops-stores";
 import { getAppConfigModule } from "./app-config";
 
 export interface ExtensionInstallRecord {
@@ -30,7 +30,7 @@ async function loadRunCommand() {
 }
 
 function manifestPathFor(projectSlug: string): string {
-  return path.join(process.cwd(), ".specops", projectSlug, "extensions.json");
+  return path.join(dataDir(), ".specops", projectSlug, "extensions.json");
 }
 
 export async function readManifest(projectSlug: string): Promise<ExtensionsManifest> {
@@ -96,9 +96,15 @@ export async function installExtensionsInProject(
   const { findLocalExtensionPath } = await getAppConfigModule();
 
   for (const slug of toInstall) {
-    // Locally-registered slugs take precedence over the community catalog:
-    // spec-kit's `--dev <path>` installs from a filesystem checkout.
-    const localPath = await findLocalExtensionPath(slug);
+    // Resolution order: app-config localExtensions → global extensions dir → community catalog.
+    let localPath = await findLocalExtensionPath(slug);
+    if (!localPath) {
+      const globalPath = path.join(extensionsDir(), slug);
+      try {
+        await fs.access(globalPath);
+        localPath = globalPath;
+      } catch { /* not in global dir */ }
+    }
     const args = localPath
       ? ["extension", "add", "--dev", localPath]
       : ["extension", "add", slug];

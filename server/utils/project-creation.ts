@@ -1,6 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { installExtensionsInProject } from "./extension-install";
+import { dataDir, projectsDir } from "./specops-stores";
 
 async function importModule<T = Record<string, unknown>>(relativePath: string): Promise<T> {
   const moduleUrl = pathToFileURL(path.join(process.cwd(), relativePath)).href;
@@ -30,10 +31,9 @@ export async function createProjectRecord(options: {
     throw new Error("Could not derive a valid project slug.");
   }
 
-  const cwd = process.cwd();
-  const projectsRoot = path.join(cwd, "projects");
+  const projectsRoot = projectsDir();
   const projectRoot = path.join(projectsRoot, slug);
-  const store = new ArtifactStore(cwd);
+  const store = new ArtifactStore(dataDir());
 
   await ensureDir(projectsRoot);
 

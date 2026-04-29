@@ -1,6 +1,9 @@
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineNuxtConfig({
+  nitro: {
+    alias: { "#su": "./server/utils" }
+  },
   compatibilityDate: "2025-01-01",
   devtools: { enabled: true },
   css: ["~/assets/css/tailwind.css"],

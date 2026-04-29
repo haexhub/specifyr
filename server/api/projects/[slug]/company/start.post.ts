@@ -24,6 +24,7 @@ import {
   projectCwd,
   projectHostCwd,
   assertProjectExists,
+  dataDir,
 } from "../../../../utils/specops-stores";
 import {
   getCompanyRuntimeModule,
@@ -117,7 +118,7 @@ export default defineEventHandler(async (event) => {
   // host paths.
   const pCwd = projectCwd(slug);
   const orgDir = path.join(pCwd, ".specify", "org");
-  const specopsBase = path.join(process.cwd(), ".specops", slug);
+  const specopsBase = path.join(dataDir(), ".specops", slug);
   const catalogDir = path.join(process.cwd(), "catalog");
 
   // Host-side path: passed to dockerRunnerFactory because the Docker daemon

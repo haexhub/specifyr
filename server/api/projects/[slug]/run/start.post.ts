@@ -1,7 +1,8 @@
 import {
   projectCwd,
   assertProjectExists,
-  loadEventStore
+  loadEventStore,
+  dataDir
 } from "../../../../utils/specops-stores";
 import {
   getSchedulerModule,
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const pCwd = projectCwd(slug);
-  const cwd = process.cwd();
+  const cwd = dataDir();
 
   // Build (or reuse) the task graph. This may call Claude once for extraction and
   // can take several seconds on first run.

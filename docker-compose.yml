@@ -32,13 +32,11 @@ services:
       # `HERMES_AGENT_IMAGE=ghcr.io/<owner>/hermes-agent:<tag>` in der Shell
       # vor `docker compose up`, oder hardcode hier.
       HERMES_AGENT_IMAGE: ${HERMES_AGENT_IMAGE:-hermes-agent:dev}
-      # Host-Pfad zu diesem Repo (= Host-Equivalent von /app im Container).
-      # Wird gebraucht, wenn haex-corp via /var/run/docker.sock Sibling-Container
-      # spawnt: deren Bind-Mount-Sources werden vom Host-Daemon aufgelöst, nicht
-      # gegen das Container-FS. Default `${PWD}` (`docker compose` setzt das auf
-      # das Verzeichnis der compose-Datei) — passt für das Standard-Setup.
-      # Wenn haex-corp nativ auf dem Host läuft, kann diese Variable leer bleiben.
-      HAEX_CORP_HOST_PROJECT_ROOT: ${HAEX_CORP_HOST_PROJECT_ROOT:-${PWD}}
+      # Pfade zum Laufzeit-Datenverzeichnis (~/.speculoos). Im Container liegt es
+      # unter /data; der Docker-Daemon löst Bind-Mount-Sources gegen das HOST-FS auf,
+      # daher muss SPECULOOS_HOST_DATA_DIR auf den Host-Pfad zeigen.
+      SPECULOOS_DATA_DIR: /data
+      SPECULOOS_HOST_DATA_DIR: ${SPECULOOS_HOST_DATA_DIR:-${HOME}/.speculoos}
       # Approval-Notification: Telegram-Channel. Falls beide Vars gesetzt sind,
       # registriert start.post.ts einen TelegramTransport. Sonst No-op-Fallback.
       # Werte landen in `.env` (gitignored), Setup-Anleitung steht in
@@ -52,6 +50,8 @@ services:
     volumes:
       # Source bind mount für HMR.
       - .:/app
+      # Laufzeit-Daten (Projekte, Extensions, Stores) außerhalb des Code-Verzeichnisses.
+      - ${HOME}/.speculoos:/data
       # Anonymous volumes verhindern, dass Host-node_modules/Nuxt-Caches die Container-
       # Versionen überschreiben (Alpine-Binaries vs. glibc-Host-Binaries).
       - /app/node_modules
