@@ -1,7 +1,9 @@
 ---
 id: verification-before-completion
 name: "Verification Before Completion"
-description: "Don't claim work done without running the verification commands and checking output."
+description: >
+  Use before marking any task done, committing code, or opening a PR — evidence of test/build success required.
+  Don't skip because the code looks right; the gate only clears on actual passing output.
 tags:
   - quality
   - completion-gate
