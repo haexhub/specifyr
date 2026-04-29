@@ -60,7 +60,19 @@ export default defineEventHandler(async (event) => {
         : (await loadInstalledExtensionWorkflow(slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
     const stepDef = workflow.steps.find((s) => s.id === stepId);
     if (stepDef?.command) {
-      promptForClaude = `${stepDef.command}\n\n${content}`;
+      const stepIndex = workflow.steps.findIndex((s) => s.id === stepId);
+      const total = workflow.steps.length;
+      const nextStep = stepIndex + 1 < total ? workflow.steps[stepIndex + 1] : null;
+      const workflowCtx = [
+        `SPECOPS WORKFLOW CONTEXT:`,
+        `You are in step ${stepIndex + 1} of ${total} ("${stepDef.label}") of the "${workflow.label}" workflow.`,
+        nextStep
+          ? `The next step is "${nextStep.label}" — it will unlock automatically once this step's artifacts are present.`
+          : `This is the final step.`,
+        `Focus exclusively on this step. Do not suggest actions from later steps or start the company runtime.`,
+        `If this step's artifacts already exist, confirm what is done and ask what to adjust or finalize for this step.`
+      ].join(" ");
+      promptForClaude = `${stepDef.command}\n\n${workflowCtx}\n\n${content}`;
     }
   }
 

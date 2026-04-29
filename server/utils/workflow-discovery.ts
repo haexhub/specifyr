@@ -64,6 +64,7 @@ interface ExtensionCommandYaml {
   name: string;
   file?: string;
   description?: string;
+  artifacts?: string[];
 }
 
 // Strip a leading YAML frontmatter block (`---\n...---\n`) if present.
@@ -355,18 +356,26 @@ export async function loadInstalledExtensionWorkflow(
     return wf;
   }
   const commands = parsedYaml.provides?.commands ?? [];
-  const fileByName = new Map<string, string>();
+  const cmdByName = new Map<string, ExtensionCommandYaml>();
   for (const cmd of commands) {
-    if (cmd.name && cmd.file) fileByName.set(cmd.name, cmd.file);
+    if (cmd.name) cmdByName.set(cmd.name, cmd);
   }
 
   for (const step of wf.steps) {
     // Command looks like `/speckit.aide.create-vision` — drop the leading slash to match yml.
     const cmdName = step.command.replace(/^\//, "");
-    const relFile = fileByName.get(cmdName);
-    if (!relFile) continue;
+    const cmdDef = cmdByName.get(cmdName);
+    if (!cmdDef) continue;
+
+    // Prefer explicit artifact declarations in extension.yml over body heuristics.
+    if (Array.isArray(cmdDef.artifacts) && cmdDef.artifacts.length > 0) {
+      step.artifacts = cmdDef.artifacts;
+      continue;
+    }
+
+    if (!cmdDef.file) continue;
     try {
-      const raw = await fs.readFile(path.join(extDir, relFile), "utf8");
+      const raw = await fs.readFile(path.join(extDir, cmdDef.file), "utf8");
       step.artifacts = extractArtifactPaths(stripFrontmatter(raw), step.id);
     } catch {
       // Missing command file — step stays without artifacts; the UI degrades gracefully.

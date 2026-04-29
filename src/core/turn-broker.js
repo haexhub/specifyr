@@ -78,27 +78,28 @@ export class TurnBroker {
     let toolUseSinceLastText = false;
     const toolUses = [];
 
-    const runner = this.runnerFactory({
-      cwd,
-      onEvent: async (claudeEvent) => {
-        if (claudeEvent?.type === "assistant" && Array.isArray(claudeEvent.message?.content)) {
-          for (const block of claudeEvent.message.content) {
-            if (block?.type === "text" && typeof block.text === "string") {
-              if (toolUseSinceLastText && assistantText) {
-                assistantText += `\n\n${block.text}`;
-              } else {
-                assistantText += block.text;
-              }
-              toolUseSinceLastText = false;
-            } else if (block?.type === "tool_use" && block.name) {
-              toolUses.push({ name: block.name, input: block.input });
-              toolUseSinceLastText = true;
+    const onEvent = async (claudeEvent) => {
+      if (claudeEvent?.type === "assistant" && Array.isArray(claudeEvent.message?.content)) {
+        for (const block of claudeEvent.message.content) {
+          if (block?.type === "text" && typeof block.text === "string") {
+            if (toolUseSinceLastText && assistantText) {
+              assistantText += `\n\n${block.text}`;
+            } else {
+              assistantText += block.text;
             }
+            toolUseSinceLastText = false;
+          } else if (block?.type === "tool_use" && block.name) {
+            toolUses.push({ name: block.name, input: block.input });
+            toolUseSinceLastText = true;
           }
         }
-        await append("claude", claudeEvent);
       }
-    });
+      await append("claude", claudeEvent);
+    };
+
+    // Mutable ref so cancel() always targets the currently-running child process,
+    // even after a session-expiry retry spawns a new runner.
+    let activeRunner = this.runnerFactory({ cwd, onEvent });
 
     // Mark the boundary between "before this turn" and "this turn's events". Clients
     // reconnecting to a running session use this as the `since` cursor so they replay
@@ -110,27 +111,41 @@ export class TurnBroker {
 
     const promise = (async () => {
       try {
-        const result = await runner.run({
+        let result = await activeRunner.run({
           prompt,
           resumeSessionId: claudeSessionId ?? undefined
         });
 
         // is_error=true means Claude Code itself reported a failure (e.g. expired --resume
         // ID, API error). exitCode !== 0 without a result event is also a hard failure.
-        // Don't persist the orphan session ID the failed run emitted — doing so causes
-        // every subsequent turn to loop on the same broken ID forever.
         const isError = result.result?.is_error === true || result.exitCode !== 0;
         if (isError && !assistantText.trim()) {
+          const errors = result.result?.errors ?? [];
+
+          // "No conversation found" = the --resume target expired (Claude's session cache has
+          // a short TTL). Auto-retry once without --resume so the turn succeeds. The user
+          // sees a notice; Claude loses previous context but the turn completes normally.
+          if (claudeSessionId && errors.some((e) => /no conversation found/i.test(String(e)))) {
+            await this.sessionStore.setClaudeSessionId(slug, stepId, sid, null);
+            await append("session_reset", {
+              message: "Session abgelaufen — starte ohne vorherigen Kontext neu."
+            });
+            assistantText = "";
+            toolUseSinceLastText = false;
+            toolUses.splice(0);
+            activeRunner = this.runnerFactory({ cwd, onEvent });
+            result = await activeRunner.run({ prompt }); // retry without --resume
+          }
+        }
+
+        // Re-evaluate after possible retry.
+        const isErrorFinal = result.result?.is_error === true || result.exitCode !== 0;
+        if (isErrorFinal && !assistantText.trim()) {
           const errors = result.result?.errors ?? [];
           const detail =
             (errors.length > 0 ? errors.join("; ") : null) ||
             result.stderr?.trim().slice(0, 300) ||
             `exit code ${result.exitCode}`;
-          // "No conversation found" = the resume target expired. Clear the stored ID so
-          // the next turn starts a fresh Claude session instead of hitting the same wall.
-          if (errors.some((e) => /no conversation found/i.test(String(e)))) {
-            await this.sessionStore.setClaudeSessionId(slug, stepId, sid, null);
-          }
           throw new Error(detail);
         }
 
@@ -189,7 +204,9 @@ export class TurnBroker {
       }
     })();
 
-    this.running.set(key, { runner, promise });
+    // Store a proxy so cancel() always reaches the current active runner,
+    // even if a session-expiry retry replaced it with a new instance.
+    this.running.set(key, { get runner() { return activeRunner; }, promise });
     return { startSeq };
   }
 

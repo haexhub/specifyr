@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PanelRightOpen, Check, RotateCcw, Lock } from "lucide-vue-next";
+import { PanelRightOpen, Lock } from "lucide-vue-next";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
@@ -129,7 +129,7 @@ const unlocked = computed(() => {
   return isStepUnlocked(step.value.id, statusMap.value, workflowSteps.value);
 });
 
-const currentStepStatus = computed<StepStatus | undefined>(() =>
+const currentStepStatus = computed(() =>
   step.value ? statusMap.value[step.value.id] : undefined
 );
 
@@ -222,36 +222,18 @@ async function selectSession(sessionId: string) {
 
 async function onTurnCompleted() {
   artifactReloadToken.value += 1;
-  await Promise.all([loadSessions(), loadStepStates()]);
+  await Promise.all([loadSessions(), loadStepStates(), autoCompleteStep()]);
 }
 
-const togglingComplete = ref(false);
-async function markComplete() {
-  if (togglingComplete.value) return;
-  togglingComplete.value = true;
+async function autoCompleteStep({ requireArtifact = false } = {}) {
   try {
-    await $fetch(`/api/projects/${slug.value}/steps/${stepIdParam.value}/complete`, {
+    await $fetch(`/api/projects/${slug.value}/steps/${stepIdParam.value}/auto-complete`, {
       method: "POST",
-      body: { sessionId: activeSessionId.value }
+      body: { sessionId: activeSessionId.value, requireArtifact }
     });
     await loadStepStates();
-  } catch (err) {
-    alert(err instanceof Error ? err.message : t("stepDetail.markFailed"));
-  } finally {
-    togglingComplete.value = false;
-  }
-}
-
-async function reopen() {
-  if (togglingComplete.value) return;
-  togglingComplete.value = true;
-  try {
-    await $fetch(`/api/projects/${slug.value}/steps/${stepIdParam.value}/reopen`, { method: "POST" });
-    await loadStepStates();
-  } catch (err) {
-    alert(err instanceof Error ? err.message : t("stepDetail.reopenFailed"));
-  } finally {
-    togglingComplete.value = false;
+  } catch {
+    // non-critical — step state stays in_progress if check fails
   }
 }
 
@@ -260,6 +242,9 @@ watch(
   async () => {
     await loadStepStates();
     if (!unlocked.value) return;
+    // On load: only complete if a concrete artifact file exists. Steps without
+    // artifacts (like validate) must be triggered by a user turn, not page navigation.
+    await autoCompleteStep({ requireArtifact: true });
     await loadSessions();
     await ensureActiveSession();
   },
@@ -337,25 +322,6 @@ const nextStep = computed(() => {
         </div>
         <div class="flex items-center gap-2">
           <Badge variant="outline">{{ step.command }}</Badge>
-          <Button
-            v-if="currentStepStatus !== 'complete'"
-            size="sm"
-            :disabled="togglingComplete"
-            @click="markComplete"
-          >
-            <Check class="mr-1.5 size-3.5" />
-            {{ $t("stepDetail.markComplete") }}
-          </Button>
-          <Button
-            v-else
-            variant="outline"
-            size="sm"
-            :disabled="togglingComplete"
-            @click="reopen"
-          >
-            <RotateCcw class="mr-1.5 size-3.5" />
-            {{ $t("stepDetail.reopen") }}
-          </Button>
         </div>
       </header>
 
