@@ -7,7 +7,11 @@ import {
   assertProjectExists
 } from "../../../../../../../utils/specops-stores";
 import { getProjectStepIds, getProjectWorkflowId } from "../../../../../../../utils/workflows";
-import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "../../../../../../../utils/workflow-discovery";
+import {
+  SPEC_KIT_WORKFLOW,
+  loadInstalledExtensionWorkflow,
+  loadStepCommandBody
+} from "../../../../../../../utils/workflow-discovery";
 
 /**
  * Kicks off a chat turn. The turn runs in the background under the TurnBroker —
@@ -60,7 +64,17 @@ export default defineEventHandler(async (event) => {
         : (await loadInstalledExtensionWorkflow(slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
     const stepDef = workflow.steps.find((s) => s.id === stepId);
     if (stepDef?.command) {
-      promptForClaude = `${stepDef.command}\n\n${content}`;
+      // Inject the full command-file body so Claude sees all steps (including mandatory
+      // write steps). Without this, headless `claude -p` only receives the slash-command
+      // name and never reads the actual skill file.
+      const commandBody = workflowId !== "spec-kit"
+        ? await loadStepCommandBody(slug, workflowId, stepId)
+        : null;
+      if (commandBody) {
+        promptForClaude = `${stepDef.command}\n\n${commandBody}\n\n---\n\n${content}`;
+      } else {
+        promptForClaude = `${stepDef.command}\n\n${content}`;
+      }
     }
   }
 

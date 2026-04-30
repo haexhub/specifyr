@@ -17,6 +17,7 @@ export async function exists(targetPath) {
 export async function readJson(filePath, fallback = null) {
   try {
     const content = await fs.readFile(filePath, "utf8");
+    if (!content.trim()) return fallback;
     return JSON.parse(content);
   } catch (error) {
     if (error.code === "ENOENT") {

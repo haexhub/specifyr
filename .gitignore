@@ -12,7 +12,7 @@ node_modules/
 # and changes independently of haex-corp's code. Tracking them produced 200+
 # noise lines in `git status`. Test fixtures live under tests/fixtures/ — not
 # here.
-projects/
+/projects/
 
 # Build artefacts
 .nuxt/
@@ -23,3 +23,9 @@ projects/
 
 # Per-machine Claude settings (user-local overrides)
 .claude/settings.local.json
+
+# Local Docker Compose overrides (per-machine port/volume tweaks)
+docker-compose.override.yml
+
+# Temporary scratch directory
+tmp/

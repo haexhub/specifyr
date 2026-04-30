@@ -49,6 +49,7 @@ export interface WorkflowStep {
   tips: string[];
   artifacts: string[];
   isRun?: boolean;
+  runAction?: string;
 }
 
 export interface WorkflowDefinition {
@@ -64,6 +65,8 @@ interface ExtensionCommandYaml {
   name: string;
   file?: string;
   description?: string;
+  is_run?: boolean;
+  run_action?: string;
 }
 
 // Strip a leading YAML frontmatter block (`---\n...---\n`) if present.
@@ -75,21 +78,14 @@ function stripFrontmatter(md: string): string {
   return rest.startsWith("\n") ? rest.slice(1) : rest;
 }
 
-// AIDE-style extensions don't declare artifacts structurally — they mention them in prose as
-// backtick-quoted relative paths (e.g. "store it in `docs/aide/vision.md`"). This extracts
-// those mentions and ranks them so the step's OUTPUT comes first.
+// Extensions can declare artifacts in two ways:
 //
-// A command body typically mentions both prerequisites (inputs from earlier steps) and the
-// new artifact this step produces. Example: create-roadmap mentions vision.md AND roadmap.md.
-// Without ranking, the ArtifactViewer would show the first-resolvable candidate, which is
-// usually the prereq (it already exists) — the user would see the wrong file.
+// 1. Explicit "## Output Artifact(s)" section — preferred; beats every heuristic.
+// 2. Inline backtick paths scattered through prose — filtered by step-id token matching.
 //
-// Heuristic: a step's own output usually shares a token with the step id.
-// create-vision → vision.md, create-roadmap → roadmap.md, create-progress → progress.md.
-// We derive tokens from the step id (strip action verbs like "create"/"execute"), then score
-// each candidate by whether its filename stem matches any token. Ties fall back to appearance
-// order in the body. Paths with uppercase placeholders (NNN, XXX) are dropped — they're
-// templates, not real paths.
+// Fallback: when token matching finds nothing, return all extracted paths rather than
+// nothing (handles steps whose output name is semantically but not lexically related to
+// the step id, e.g. "init" produces "constitution.md").
 const ARTIFACT_PATH_RE = /`([a-zA-Z0-9_./\-<>]+\.(?:md|json|ya?ml|txt))`/g;
 const ACTION_VERBS = new Set(["create", "execute", "update", "generate", "write", "make"]);
 
@@ -99,61 +95,78 @@ function stepTokens(stepId: string): string[] {
     .filter((t) => t.length > 0 && !ACTION_VERBS.has(t.toLowerCase()));
 }
 
-// Detects template segments like "NNN-descriptive-name" or "queue-NNN" — two-plus consecutive
-// uppercase letters in a path segment means "fill in the blank", not a real filename.
+// Detects template segments: uppercase 2+ letters (NNN, XXX) or angle-bracket placeholders
+// (<role>, <slug>). Both styles mean "fill in the blank", not a real filename.
 const TEMPLATE_SEGMENT_RE = /(?:^|-|_|\.)[A-Z]{2,}(?:-|_|\.|$)/;
+const ANGLE_PLACEHOLDER_RE = /<[a-z][a-z0-9-]*>/;
 
 function isTemplatePath(p: string): boolean {
-  return p.split("/").some((seg) => TEMPLATE_SEGMENT_RE.test(seg));
+  return p.split("/").some((seg) => TEMPLATE_SEGMENT_RE.test(seg) || ANGLE_PLACEHOLDER_RE.test(seg));
 }
 
-// For paths like "docs/aide/items/NNN-descriptive-name.md", return the parent dir
-// ("docs/aide/items") — the ArtifactViewer renders dir listings when it can't find a concrete
-// file, which is the right fallback for steps that create one-file-per-invocation.
+// Collapse a template path to the parent directory of its first template segment so the
+// ArtifactViewer can render a directory listing as a fallback.
+//   "docs/aide/items/NNN-name.md"   → "docs/aide/items"
+//   ".specify/org/specs/<role>.md"  → ".specify/org/specs"
 function templateToParentDir(p: string): string {
   const parts = p.split("/");
-  // Drop trailing segments until we hit one without a template.
+  const firstTemplate = parts.findIndex(
+    (seg) => TEMPLATE_SEGMENT_RE.test(seg) || ANGLE_PLACEHOLDER_RE.test(seg)
+  );
+  if (firstTemplate > 0) return parts.slice(0, firstTemplate).join("/");
+  // Legacy: trailing uppercase-only segments (original behaviour).
   while (parts.length > 0 && TEMPLATE_SEGMENT_RE.test(parts[parts.length - 1] ?? "")) {
     parts.pop();
   }
   return parts.join("/");
 }
 
-function extractArtifactPaths(body: string, stepId: string): string[] {
-  const ordered: string[] = [];
+// Return the body of the first "## Output Artifact(s)" section, or "" if absent.
+function outputSection(body: string): string {
+  const m = /^##\s+Output(?:\s+Artifact)?s?\s*$/im.exec(body);
+  if (!m) return "";
+  const start = m.index + m[0].length;
+  const nextHeading = body.indexOf("\n##", start);
+  return nextHeading === -1 ? body.slice(start) : body.slice(start, nextHeading);
+}
+
+// Extract and normalise backtick-quoted file paths from a text block.
+// Filters out absolute, explicitly-relative, and internal extension refs (<ext>/...).
+// Template paths are collapsed to their parent directory.
+function collectPaths(text: string): string[] {
+  const result: string[] = [];
   const seen = new Set<string>();
-  const push = (p: string) => {
-    if (!p || seen.has(p)) return;
-    seen.add(p);
-    ordered.push(p);
-  };
-  for (const m of body.matchAll(ARTIFACT_PATH_RE)) {
+  for (const m of text.matchAll(ARTIFACT_PATH_RE)) {
     const raw = m[1];
     if (!raw) continue;
-    if (raw.startsWith("/") || raw.startsWith("./") || raw.startsWith("../")) continue;
-    // Template paths collapse to the parent dir so the viewer can show a listing.
-    // Real paths go through unchanged. `<feature>`-style placeholders stay — the viewer
-    // already handles them with a special branch.
-    push(isTemplatePath(raw) ? templateToParentDir(raw) : raw);
+    if (raw.startsWith("/") || raw.startsWith("./") || raw.startsWith("../") || raw.startsWith("<")) continue;
+    const p = isTemplatePath(raw) ? templateToParentDir(raw) : raw;
+    if (!p || seen.has(p)) continue;
+    seen.add(p);
+    result.push(p);
   }
+  return result;
+}
+
+function extractArtifactPaths(body: string, stepId: string): string[] {
+  // 1. Explicit output section is a hard contract: if it exists (even empty), stop here.
+  //    An empty section means "this step produces no artifact" — do not fall through.
+  const hasOutputSection = /^##\s+Output(?:\s+Artifact)?s?\s*$/im.test(body);
+  const explicit = collectPaths(outputSection(body));
+  if (hasOutputSection) return explicit;
+
+  // 2. Full-body extraction with token ranking.
+  const ordered = collectPaths(body);
   const tokens = stepTokens(stepId).map((t) => t.toLowerCase());
   if (tokens.length === 0) return ordered;
-  // Keep only candidates whose last path segment contains a step token. For files this
-  // matches on the filename stem (vision → vision.md); for dirs it matches on the dir
-  // name (item → items/).
-  //
-  // Non-matching paths would be prerequisites (inputs from upstream steps) that the
-  // command mentions in prose like "read `docs/aide/vision.md` first". If we kept them
-  // as fallbacks, the ArtifactViewer would happily display an upstream file whenever
-  // the current step's output doesn't exist yet — silently showing the wrong artifact.
-  // Empty result is better than misleading result; the viewer falls back to the "not
-  // yet created" empty state which honestly reflects the step's pre-run condition.
+
   const matches = ordered.filter((p) => {
     const last = p.split("/").filter(Boolean).pop() ?? "";
     const stem = last.replace(/\.[^.]+$/, "").toLowerCase();
     return tokens.some((t) => stem.includes(t));
   });
-  return matches;
+  // 3. Nothing matched — return all rather than nothing.
+  return matches.length > 0 ? matches : ordered;
 }
 
 interface ExtensionYaml {
@@ -312,7 +325,9 @@ export function parseExtensionWorkflow(yamlContent: string): WorkflowDefinition 
         summary: description.split(/\. /)[0] || description,
         description,
         tips: [],
-        artifacts: []
+        artifacts: [],
+        ...(cmd.is_run && { isRun: true }),
+        ...(cmd.run_action && { runAction: cmd.run_action })
       };
       return step;
     })
@@ -397,6 +412,40 @@ export async function listProjectWorkflowExtensions(projectSlug: string): Promis
     if (wf) workflows.push(wf);
   }
   return workflows;
+}
+
+// Load the raw markdown body of a single step's command file, stripped of frontmatter.
+// Returns null if the extension, command, or file cannot be read.
+export async function loadStepCommandBody(
+  projectSlug: string,
+  extensionSlug: string,
+  stepId: string
+): Promise<string | null> {
+  const extDir = path.join(projectCwd(projectSlug), ".specify", "extensions", extensionSlug);
+  let ymlContent: string;
+  try {
+    ymlContent = await fs.readFile(path.join(extDir, "extension.yml"), "utf8");
+  } catch {
+    return null;
+  }
+  let parsedYaml: ExtensionYaml;
+  try {
+    parsedYaml = YAML.parse(ymlContent) as ExtensionYaml;
+  } catch {
+    return null;
+  }
+  for (const cmd of parsedYaml.provides?.commands ?? []) {
+    const shortId = cmd.name?.split(".").pop() ?? "";
+    if (shortId === stepId && cmd.file) {
+      try {
+        const raw = await fs.readFile(path.join(extDir, cmd.file), "utf8");
+        return stripFrontmatter(raw);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
 }
 
 // Return the full set of workflows available for a given project:

@@ -284,6 +284,7 @@
 
   "stepDetail": {
     "step": "Step {n} von {total}",
+    "run": "Starten",
     "markComplete": "Als erledigt markieren",
     "reopen": "Wieder öffnen",
     "staleWarning": "⚠ Dieser Step ist als veraltet markiert — ein Upstream-Step wurde geändert. Re-run oder wieder als erledigt markieren, sobald die Änderungen eingearbeitet sind.",

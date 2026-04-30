@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { marked } from "marked";
 import DOMPurify from "isomorphic-dompurify";
+import mermaid from "mermaid";
 import { FileWarning, Loader2, RefreshCw, PanelRightClose, Wand2, X } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 
 interface ArtifactFile {
   type: "file";
@@ -33,6 +35,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   collapse: [];
   powerPrompt: [prompt: string];
+  artifactResolved: [];
 }>();
 
 const { t } = useI18n();
@@ -85,6 +88,13 @@ const selectedPath = ref<string | null>(null);
 const file = ref<ArtifactFile | null>(null);
 const dirEntries = ref<DirectoryEntry[] | null>(null);
 const dirBase = ref<string | null>(null);
+const selectedDirFile = ref<string | null>(null);
+
+const dirFileEntries = computed(() =>
+  (dirEntries.value ?? [])
+    .filter((e) => e.isFile)
+    .sort((a, b) => a.name.localeCompare(b.name))
+);
 
 const isMarkdown = computed(() => !!file.value?.path.toLowerCase().endsWith(".md"));
 
@@ -106,6 +116,39 @@ const renderedHtml = computed(() => {
   return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true } });
 });
 
+const articleRef = ref<HTMLElement | null>(null);
+
+mermaid.initialize({ startOnLoad: false, theme: "default" });
+
+async function renderMermaidBlocks() {
+  if (!articleRef.value) return;
+  const blocks = articleRef.value.querySelectorAll("pre code.language-mermaid");
+  for (const block of Array.from(blocks)) {
+    const code = block.textContent?.trim() ?? "";
+    if (!code) continue;
+    const id = `mermaid-${Math.random().toString(36).slice(2, 9)}`;
+    try {
+      const { svg } = await mermaid.render(id, code);
+      // Parse via DOMParser (text/html) so foreignObject HTML content — including <br/> labels
+      // — is handled correctly. Avoids innerHTML and the SVG-namespace parsing issues of image/svg+xml.
+      const parsed = new DOMParser().parseFromString(svg, "text/html");
+      const svgEl = parsed.querySelector("svg");
+      if (!svgEl) continue;
+      const wrapper = document.createElement("div");
+      wrapper.className = "not-prose overflow-x-auto py-4";
+      wrapper.appendChild(document.adoptNode(svgEl));
+      block.closest("pre")?.replaceWith(wrapper);
+    } catch {
+      // leave as code block on parse error
+    }
+  }
+}
+
+watch(renderedHtml, async () => {
+  await nextTick();
+  renderMermaidBlocks();
+});
+
 type FsResponse = ArtifactFile | ArtifactDir;
 
 async function fetchPath(p: string): Promise<FsResponse | null> {
@@ -120,6 +163,16 @@ async function fetchPath(p: string): Promise<FsResponse | null> {
   }
 }
 
+async function selectDirFile(name: string): Promise<void> {
+  if (!dirBase.value) return;
+  const res = await fetchPath(`${dirBase.value}/${name}`);
+  if (res?.type === "file") {
+    file.value = res;
+    selectedPath.value = `${dirBase.value}/${name}`;
+    selectedDirFile.value = name;
+  }
+}
+
 async function resolveCandidate(): Promise<void> {
   loading.value = true;
   errorMessage.value = null;
@@ -127,6 +180,7 @@ async function resolveCandidate(): Promise<void> {
   dirEntries.value = null;
   dirBase.value = null;
   selectedPath.value = null;
+  selectedDirFile.value = null;
 
   try {
     for (const candidate of props.candidates) {
@@ -150,6 +204,7 @@ async function resolveCandidate(): Promise<void> {
             if (res?.type === "file") {
               file.value = res;
               selectedPath.value = full;
+              emit("artifactResolved");
               return;
             }
           }
@@ -162,6 +217,7 @@ async function resolveCandidate(): Promise<void> {
         if (res.type === "file") {
           file.value = res;
           selectedPath.value = candidate;
+          emit("artifactResolved");
           return;
         }
         if (res.type === "dir") {
@@ -169,6 +225,11 @@ async function resolveCandidate(): Promise<void> {
           dirBase.value = candidate;
         }
       }
+    }
+    // No direct file found — if a directory was resolved, auto-select its first file.
+    if (dirBase.value && dirFileEntries.value.length > 0) {
+      await selectDirFile(dirFileEntries.value[0]!.name);
+      if (file.value) emit("artifactResolved");
     }
   } catch (err) {
     errorMessage.value = err instanceof Error ? err.message : t("artifact.loadError");
@@ -276,6 +337,22 @@ onUnmounted(() => closeWatcher());
       </div>
 
       <div v-else-if="file" class="relative">
+        <!-- File picker when resolved from a directory with multiple files -->
+        <div
+          v-if="dirBase && dirFileEntries.length > 1"
+          class="sticky top-0 z-10 border-b border-border/60 bg-background px-3 py-2"
+        >
+          <Select :model-value="selectedDirFile ?? undefined" @update:model-value="selectDirFile">
+            <SelectTrigger class="h-7 font-mono text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem v-for="f in dirFileEntries" :key="f.name" :value="f.name" class="font-mono text-xs">
+                {{ f.name }}
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <div
           v-if="powerMode"
           class="sticky top-0 z-10 border-b border-primary/30 bg-primary/5 px-4 py-2 text-[11px] text-primary"
@@ -285,7 +362,7 @@ onUnmounted(() => closeWatcher());
         </div>
         <article
           v-if="isMarkdown && !powerMode"
-          ref="preRef"
+          ref="articleRef"
           class="prose prose-sm relative max-w-none p-4 prose-headings:text-foreground prose-a:text-primary prose-code:text-foreground prose-pre:bg-muted prose-pre:text-foreground"
           v-html="renderedHtml"
         />
@@ -336,22 +413,10 @@ onUnmounted(() => closeWatcher());
         </div>
       </div>
 
-      <div v-else-if="dirEntries && dirBase" class="p-4">
-        <p class="mb-2 text-xs font-medium">{{ dirBase }}/</p>
-        <p class="mb-3 text-[11px] text-muted-foreground">
-          {{ $t("artifact.pendingFile") }}
-        </p>
-        <ul v-if="dirEntries.length" class="space-y-0.5">
-          <li
-            v-for="entry in dirEntries"
-            :key="entry.name"
-            class="flex items-center gap-2 rounded px-2 py-1 text-xs text-muted-foreground"
-          >
-            <span>{{ entry.isDirectory ? "📁" : "📄" }}</span>
-            <code class="font-mono">{{ entry.name }}</code>
-          </li>
-        </ul>
-        <p v-else class="text-[11px] italic text-muted-foreground">{{ $t("artifact.dirEmpty") }}</p>
+      <!-- Only shown when directory exists but contains no files (files auto-select into the file view above) -->
+      <div v-else-if="dirBase" class="p-4 text-xs text-muted-foreground">
+        <p class="mb-1 font-mono font-medium text-foreground">{{ dirBase }}/</p>
+        <p class="italic">{{ $t("artifact.dirEmpty") }}</p>
       </div>
 
       <div v-else class="p-4 text-xs text-muted-foreground">

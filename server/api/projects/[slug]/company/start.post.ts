@@ -20,6 +20,7 @@
  *   <repo-root>/catalog/                        global catalog (shared)
  */
 
+import fs from "node:fs/promises";
 import {
   projectCwd,
   projectHostCwd,
@@ -220,10 +221,22 @@ export default defineEventHandler(async (event) => {
 
   registerCompany(slug, runtime);
 
+  const agents = runtime.listAgents();
+
+  // Write the sentinel file so the workflow UI can auto-complete the start step.
+  const sentinelPath = path.join(pCwd, ".specify", "org", "company-started.md");
+  const timestamp = new Date().toISOString();
+  const agentList = agents.map((a) => `- ${a.role}`).join("\n");
+  await fs.writeFile(
+    sentinelPath,
+    `---\nstatus: started\ntimestamp: ${timestamp}\nagents: ${agents.length}\n---\n\n✓ Company '${slug}' is live.\n\n## Agents\n\n${agentList}\n`,
+    "utf8"
+  );
+
   return {
     status: "started",
     slug,
-    agents: runtime.listAgents().map((a) => ({
+    agents: agents.map((a) => ({
       role: a.role,
       capabilities: a.capabilities,
       resources: a.resources ?? null,
