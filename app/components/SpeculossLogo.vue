@@ -1,21 +1,35 @@
 <script setup lang="ts">
-defineProps<{
-  compact?: boolean;
-  showText?: boolean;
-  large?: boolean;
-}>();
+withDefaults(
+  defineProps<{
+    compact?: boolean;
+    showText?: boolean;
+    size?: "sm" | "md" | "lg" | "hero";
+  }>(),
+  {
+    compact: false,
+    showText: true,
+    size: "md"
+  }
+);
+
+const sizeClasses = {
+  sm: "size-8",
+  md: "size-10",
+  lg: "size-14",
+  hero: "size-20"
+};
 </script>
 
 <template>
-  <span class="inline-flex items-center gap-2 font-semibold text-foreground" :class="large ? 'flex-col gap-3' : ''">
+  <span class="inline-flex min-w-0 items-center gap-2">
     <img
       src="/speculoss-logo.png"
-      alt="speculoss"
+      alt="speculoss Gewuerzspekulatius mit Speckit-Spross"
       class="shrink-0 object-contain"
-      :class="large ? 'size-20' : compact ? 'size-6' : 'size-7'"
-    />
-    <span v-if="showText !== false" :class="large ? 'text-3xl tracking-tight' : 'truncate text-sm tracking-tight'">
-      speculoos
+      :class="compact ? sizeClasses.sm : sizeClasses[size]"
+    >
+    <span v-if="showText && !compact" class="truncate text-sm font-semibold tracking-tight">
+      speculoss
     </span>
   </span>
 </template>

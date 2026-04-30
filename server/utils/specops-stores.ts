@@ -59,6 +59,22 @@ export function projectCwd(slug: string): string {
   return path.join(projectsDir(), slug);
 }
 
+/**
+ * Host-side equivalent of `process.cwd()` for use in Docker bind-mount sources.
+ *
+ * When speculoss runs inside a container, `process.cwd()` is `/app` — a path
+ * the Docker daemon cannot resolve when spawning sibling containers via
+ * /var/run/docker.sock (the daemon resolves bind sources against the HOST
+ * filesystem, not against speculoss' container fs). Operators should set
+ * `SPECULOSS_HOST_PROJECT_ROOT` to the host path that maps to /app.
+ *
+ * When speculoss runs natively on the host, the env var is unset and this
+ * falls back to `process.cwd()` — host and container paths coincide.
+ */
+export function hostProjectRoot(): string {
+  return process.env.SPECULOSS_HOST_PROJECT_ROOT || process.cwd();
+}
+
 export function projectHostCwd(slug: string): string {
   return path.join(hostProjectsDir(), slug);
 }

@@ -26,7 +26,11 @@ async function handleCreated() {
 <template>
   <div class="flex min-h-screen items-center justify-center px-8 py-12">
     <div class="w-full max-w-xl text-center">
-      <SpeculossLogo large class="mb-6" />
+      <div class="mx-auto mb-6 inline-flex size-24 items-center justify-center rounded-lg bg-primary/10 text-primary">
+        <SpeculossLogo size="hero" :show-text="false" />
+      </div>
+
+      <h1 class="text-3xl font-semibold tracking-tight">speculoss</h1>
       <p class="mt-3 text-muted-foreground">
         {{ $t("index.subtitle") }}
       </p>

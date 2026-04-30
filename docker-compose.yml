@@ -2,23 +2,23 @@
 #
 # Usage:
 #   docker compose up --build            # start dev server on http://localhost:3000
-#   docker compose exec haex-corp sh     # shell inside the running container
+#   docker compose exec speculoss sh     # shell inside the running container
 #
 # Authentifizierung gegen Anthropic (Solo-Tool-Setup):
 #   - Default: Host-Login wird per Bind-Mount (~/.claude) wiederverwendet. Kein zusätzlicher
 #     Login im Container nötig — der Container sieht genau das, was dein Host-`claude` sieht.
 #   - API-Key: Alternativ/ergänzend ANTHROPIC_API_KEY in .env oder Shell setzen.
 #   - Multi-User später: Statt des Bind-Mounts ein benanntes Volume einhängen und
-#     `docker compose exec haex-corp claude login` pro Setup ausführen. Siehe Kommentar
+#     `docker compose exec speculoss claude login` pro Setup ausführen. Siehe Kommentar
 #     an der volumes-Zeile unten.
 
 services:
-  haex-corp:
+  speculoss:
     build:
       context: .
       target: dev
-    image: haex-corp:dev
-    container_name: haex-corp-dev
+    image: speculoss:dev
+    container_name: speculoss-dev
     ports:
       - "3000:3000"
     environment:
@@ -37,6 +37,11 @@ services:
       # daher muss SPECULOOS_HOST_DATA_DIR auf den Host-Pfad zeigen.
       SPECULOOS_DATA_DIR: /data
       SPECULOOS_HOST_DATA_DIR: ${SPECULOOS_HOST_DATA_DIR:-${HOME}/.speculoos}
+      # Host-Pfad zu diesem Repo (= Host-Equivalent von /app im Container).
+      # Wird gebraucht, wenn speculoss via /var/run/docker.sock Sibling-Container
+      # spawnt: deren Bind-Mount-Sources werden vom Host-Daemon aufgelöst, nicht
+      # gegen das Container-FS. Default `${PWD}` — passt für das Standard-Setup.
+      SPECULOSS_HOST_PROJECT_ROOT: ${SPECULOSS_HOST_PROJECT_ROOT:-${PWD}}
       # Approval-Notification: Telegram-Channel. Falls beide Vars gesetzt sind,
       # registriert start.post.ts einen TelegramTransport. Sonst No-op-Fallback.
       # Werte landen in `.env` (gitignored), Setup-Anleitung steht in
@@ -61,17 +66,20 @@ services:
       #   - claude_home:/home/node/.claude
       # und das `volumes:`-Block unten einkommentieren + `claude login` im Container ausführen.
       - ${HOME}/.claude:/home/node/.claude
-      # Docker-Socket: erlaubt der haex-corp-App, per `docker run` Hermes-Agent-Container
+      # Docker-Socket: erlaubt der speculoss-App, per `docker run` Hermes-Agent-Container
       # zu spawnen. SICHERHEITS-HINWEIS: dieser Mount = effektiv root auf dem Host für
       # alles innerhalb dieses Containers. Acceptabel für Solo-Dev-Setup; in Multi-User-
       # /Cloud-Deployments stattdessen einen privilegierten Sidecar oder rootless-docker
       # erwägen. Wir mounten rw, weil `docker run` schreibend auf den Socket zugreifen muss.
       - /var/run/docker.sock:/var/run/docker.sock
     networks:
-      # haex-corp und alle gespawnten Hermes-Agent-Container teilen sich dieses
+      # speculoss und alle gespawnten Hermes-Agent-Container teilen sich dieses
       # benutzerdefinierte Bridge-Network. Agenten erreichen die Orchestrator-API
-      # als http://haex-corp:3000.
-      - companies
+      # als http://speculoss:3000. Der alte Alias bleibt fuer bestehende Setups.
+      companies:
+        aliases:
+          - speculoss
+          - haex-corp
     # UID/GID-Mapping für Bind-Mounts (Linux). Auf macOS/Windows ignoriert Docker das.
     # Falls dein Host-User nicht UID 1000 hat: `UID=$(id -u) GID=$(id -g) docker compose up`
     user: "${UID:-1000}:${GID:-1000}"
