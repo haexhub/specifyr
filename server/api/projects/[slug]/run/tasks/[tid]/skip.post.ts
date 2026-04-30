@@ -1,5 +1,5 @@
 import { getRunStoreModule, getActiveScheduler } from "../../../../../../utils/run-manager";
-import { loadEventStore } from "../../../../../../utils/specops-stores";
+import { loadEventStore, dataDir } from "../../../../../../utils/specops-stores";
 
 /**
  * Marks a task as `skipped`. Downstream tasks that depend on it stay blocked —
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { RunStore } = await getRunStoreModule();
-  const store = new RunStore(process.cwd());
+  const store = new RunStore(dataDir());
   const state = await store.getCurrent(slug);
   if (!state) throw createError({ statusCode: 404, statusMessage: "Kein Run-State" });
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, AlertTriangle, Loader2, Lock } from "lucide-vue-next";
-import { isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
+import { ArrowLeft, Check, AlertTriangle, Loader2 } from "lucide-vue-next";
+import { type StepId, type StepStatus } from "~/lib/steps";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import type { StepState } from "~/lib/types";
 
@@ -37,10 +37,6 @@ const statusMap = computed(() => {
 
 function stateFor(id: StepId) {
   return stepStates.value?.find((s) => s.id === id);
-}
-
-function unlocked(id: StepId): boolean {
-  return isStepUnlocked(id, statusMap.value, steps.value);
 }
 
 function stepRoute(step: { id: StepId; isRun?: boolean }) {
@@ -83,7 +79,6 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
       <ol class="flex flex-col gap-0.5">
         <li v-for="(step, index) in steps" :key="step.id">
           <NuxtLink
-            v-if="unlocked(step.id)"
             :to="stepRoute(step)"
             class="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm transition"
             :class="step.id === activeStepId
@@ -117,21 +112,6 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
               />
             </span>
           </NuxtLink>
-          <div
-            v-else
-            class="flex cursor-not-allowed items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm text-muted-foreground/60"
-            :title="$t('stepSidebar.locked', { n: index + 1 })"
-          >
-            <span class="flex min-w-0 items-center gap-2">
-              <span
-                class="inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted/60 text-[10px] font-semibold"
-              >
-                {{ index + 1 }}
-              </span>
-              <span class="truncate">{{ step.label }}</span>
-            </span>
-            <Lock class="size-3.5 shrink-0 text-muted-foreground/60" />
-          </div>
         </li>
       </ol>
     </div>

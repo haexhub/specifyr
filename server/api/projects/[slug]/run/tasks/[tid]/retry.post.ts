@@ -1,5 +1,5 @@
 import { getRunStoreModule, getActiveScheduler } from "../../../../../../utils/run-manager";
-import { loadEventStore } from "../../../../../../utils/specops-stores";
+import { loadEventStore, dataDir } from "../../../../../../utils/specops-stores";
 
 /**
  * Resets a task's status to `pending` so the next run-start picks it up again.
@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { RunStore } = await getRunStoreModule();
-  const store = new RunStore(process.cwd());
+  const store = new RunStore(dataDir());
   const state = await store.getCurrent(slug);
   if (!state) throw createError({ statusCode: 404, statusMessage: "Kein Run-State" });
 

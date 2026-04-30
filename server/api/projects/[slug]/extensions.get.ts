@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { projectCwd } from "../../../utils/specops-stores";
+import { dataDir, projectCwd } from "../../../utils/specops-stores";
 
 interface ExtensionInstallRecord {
   slug: string;
@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Primary source: haex-corp's own manifest written by installExtensionsInProject.
-  const manifestPath = path.join(process.cwd(), ".specops", slug, "extensions.json");
+  const manifestPath = path.join(dataDir(), ".specops", slug, "extensions.json");
   try {
     const content = await fs.readFile(manifestPath, "utf8");
     const manifest = JSON.parse(content) as ExtensionsManifest;

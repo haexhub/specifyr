@@ -1,5 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { dataDir, projectsDir } from "#su/specops-stores";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -7,9 +8,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
-  const cwd = process.cwd();
-  const specopsDir = path.join(cwd, ".specops", slug);
-  const projectDir = path.join(cwd, "projects", slug);
+  const specopsDir = path.join(dataDir(), ".specops", slug);
+  const projectDir = path.join(projectsDir(), slug);
 
   const removed: string[] = [];
   const failures: string[] = [];

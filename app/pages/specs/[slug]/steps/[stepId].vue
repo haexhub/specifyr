@@ -1,14 +1,13 @@
 <script setup lang="ts">
-import { PanelRightOpen, Check, RotateCcw, Lock } from "lucide-vue-next";
+import { PanelRightOpen, Play } from "lucide-vue-next";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
 import SessionList from "~/components/SessionList.vue";
 import ChatStream from "~/components/ChatStream.vue";
 import ArtifactViewer from "~/components/ArtifactViewer.vue";
-import StepInfoBanner from "~/components/StepInfoBanner.vue";
 import HookGateBanner from "~/components/HookGateBanner.vue";
-import { stepById, isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
+import { stepById, type StepId, type StepStatus } from "~/lib/steps";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import { gatesForStep } from "~/lib/hooks";
 import type { SessionMetadata, StepState } from "~/lib/types";
@@ -124,17 +123,8 @@ const statusMap = computed(() => {
   return map;
 });
 
-const unlocked = computed(() => {
-  if (!step.value) return false;
-  return isStepUnlocked(step.value.id, statusMap.value, workflowSteps.value);
-});
-
 const currentStepStatus = computed<StepStatus | undefined>(() =>
   step.value ? statusMap.value[step.value.id] : undefined
-);
-
-const previousStep = computed(() =>
-  stepIndex.value > 0 ? workflowSteps.value[stepIndex.value - 1] : null
 );
 
 const activeSession = computed(() =>
@@ -159,7 +149,6 @@ async function loadSessions() {
 }
 
 async function ensureActiveSession() {
-  if (!unlocked.value) return;
   if (activeSessionId.value) return;
   if (sessions.value.length > 0) {
     await selectSession(sessions.value[0]!.id);
@@ -201,33 +190,22 @@ async function onTurnCompleted() {
   await Promise.all([loadSessions(), loadStepStates()]);
 }
 
-const togglingComplete = ref(false);
-async function markComplete() {
-  if (togglingComplete.value) return;
-  togglingComplete.value = true;
-  try {
-    await $fetch(`/api/projects/${slug.value}/steps/${stepIdParam.value}/complete`, {
-      method: "POST",
-      body: { sessionId: activeSessionId.value }
-    });
-    await loadStepStates();
-  } catch (err) {
-    alert(err instanceof Error ? err.message : t("stepDetail.markFailed"));
-  } finally {
-    togglingComplete.value = false;
-  }
-}
+const runningAction = ref(false);
+const runActionError = ref<string | null>(null);
 
-async function reopen() {
-  if (togglingComplete.value) return;
-  togglingComplete.value = true;
+async function runStepAction() {
+  if (!step.value?.runAction || runningAction.value) return;
+  runningAction.value = true;
+  runActionError.value = null;
   try {
-    await $fetch(`/api/projects/${slug.value}/steps/${stepIdParam.value}/reopen`, { method: "POST" });
-    await loadStepStates();
+    await $fetch(`/api/projects/${slug.value}/${step.value.runAction}`, { method: "POST" });
+    artifactReloadToken.value += 1;
   } catch (err) {
-    alert(err instanceof Error ? err.message : t("stepDetail.reopenFailed"));
+    const msg = (err as { data?: { statusMessage?: string }; message?: string })?.data?.statusMessage
+      ?? (err instanceof Error ? err.message : String(err));
+    runActionError.value = msg;
   } finally {
-    togglingComplete.value = false;
+    runningAction.value = false;
   }
 }
 
@@ -235,7 +213,6 @@ watch(
   [slug, stepIdParam],
   async () => {
     await loadStepStates();
-    if (!unlocked.value) return;
     await loadSessions();
     await ensureActiveSession();
   },
@@ -264,7 +241,6 @@ const nextStep = computed(() => {
     >
       <ClientOnly>
         <SessionList
-          v-if="unlocked"
           :slug="slug"
           :step-id="step.id"
           :sessions="sessions"
@@ -284,26 +260,7 @@ const nextStep = computed(() => {
         </section>
       </template>
 
-    <section v-if="!unlocked" class="flex h-screen flex-1 items-center justify-center p-8">
-      <div class="max-w-md text-center">
-        <div class="mx-auto mb-4 inline-flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-          <Lock class="size-6" />
-        </div>
-        <h1 class="text-xl font-semibold">{{ $t("stepDetail.lockedTitle", { label: step.label }) }}</h1>
-        <p class="mt-2 text-sm text-muted-foreground">
-          {{ $t("stepDetail.lockedDesc", { n: stepIndex, label: previousStep?.label }) }}
-        </p>
-        <Button
-          v-if="previousStep"
-          class="mt-5"
-          @click="router.push(`/specs/${slug}/steps/${previousStep.id}`)"
-        >
-          {{ $t("stepDetail.switchTo", { label: previousStep.label }) }}
-        </Button>
-      </div>
-    </section>
-
-    <section v-else class="flex h-screen flex-1 flex-col">
+    <section class="flex h-screen flex-1 flex-col">
       <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-3">
         <div>
           <p class="text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -314,28 +271,23 @@ const nextStep = computed(() => {
         <div class="flex items-center gap-2">
           <Badge variant="outline">{{ step.command }}</Badge>
           <Button
-            v-if="currentStepStatus !== 'complete'"
+            v-if="step.runAction && currentStepStatus !== 'complete'"
             size="sm"
-            :disabled="togglingComplete"
-            @click="markComplete"
+            :disabled="runningAction"
+            @click="runStepAction"
           >
-            <Check class="mr-1.5 size-3.5" />
-            {{ $t("stepDetail.markComplete") }}
-          </Button>
-          <Button
-            v-else
-            variant="outline"
-            size="sm"
-            :disabled="togglingComplete"
-            @click="reopen"
-          >
-            <RotateCcw class="mr-1.5 size-3.5" />
-            {{ $t("stepDetail.reopen") }}
+            <Play class="mr-1.5 size-3.5" :class="runningAction && 'animate-pulse'" />
+            {{ runningAction ? $t("common.loading") : $t("stepDetail.run") }}
           </Button>
         </div>
       </header>
 
-      <StepInfoBanner :step="step" />
+      <div
+        v-if="runActionError"
+        class="border-b border-destructive/30 bg-destructive/5 px-6 py-2 text-xs text-destructive"
+      >
+        {{ runActionError }}
+      </div>
 
       <HookGateBanner :gates="hookGates" @use-command="handleGateUseCommand" />
 
@@ -361,7 +313,7 @@ const nextStep = computed(() => {
     </section>
 
     <aside
-      v-if="unlocked && !artifactOpen"
+      v-if="!artifactOpen"
       class="flex h-screen w-10 shrink-0 flex-col items-center border-l border-border bg-muted/10 py-3"
     >
       <button
@@ -378,7 +330,7 @@ const nextStep = computed(() => {
     </aside>
 
     <aside
-      v-if="unlocked && artifactOpen"
+      v-if="artifactOpen"
       class="relative flex h-screen shrink-0 flex-col border-l border-border bg-muted/10"
       :class="artifactResizing && 'select-none'"
       :style="{ width: `${artifactWidth}px` }"

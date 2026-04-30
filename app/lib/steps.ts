@@ -13,6 +13,7 @@ export interface StepDefinition {
   tips: string[];
   artifacts: string[];
   isRun?: boolean;
+  runAction?: string;
 }
 
 // Backwards-compatible default: pre-workflow code reads `STEPS` and gets the built-in spec-kit

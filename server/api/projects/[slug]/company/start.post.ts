@@ -20,10 +20,12 @@
  *   <repo-root>/catalog/                        global catalog (shared)
  */
 
+import fs from "node:fs/promises";
 import {
   projectCwd,
   projectHostCwd,
   assertProjectExists,
+  dataDir,
 } from "../../../../utils/specops-stores";
 import {
   getCompanyRuntimeModule,
@@ -117,7 +119,7 @@ export default defineEventHandler(async (event) => {
   // host paths.
   const pCwd = projectCwd(slug);
   const orgDir = path.join(pCwd, ".specify", "org");
-  const specopsBase = path.join(process.cwd(), ".specops", slug);
+  const specopsBase = path.join(dataDir(), ".specops", slug);
   const catalogDir = path.join(process.cwd(), "catalog");
 
   // Host-side path: passed to dockerRunnerFactory because the Docker daemon
@@ -219,10 +221,22 @@ export default defineEventHandler(async (event) => {
 
   registerCompany(slug, runtime);
 
+  const agents = runtime.listAgents();
+
+  // Write the sentinel file so the workflow UI can auto-complete the start step.
+  const sentinelPath = path.join(pCwd, ".specify", "org", "company-started.md");
+  const timestamp = new Date().toISOString();
+  const agentList = agents.map((a) => `- ${a.role}`).join("\n");
+  await fs.writeFile(
+    sentinelPath,
+    `---\nstatus: started\ntimestamp: ${timestamp}\nagents: ${agents.length}\n---\n\n✓ Company '${slug}' is live.\n\n## Agents\n\n${agentList}\n`,
+    "utf8"
+  );
+
   return {
     status: "started",
     slug,
-    agents: runtime.listAgents().map((a) => ({
+    agents: agents.map((a) => ({
       role: a.role,
       capabilities: a.capabilities,
       resources: a.resources ?? null,

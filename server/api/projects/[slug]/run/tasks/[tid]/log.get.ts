@@ -1,4 +1,5 @@
 import { getRunStoreModule } from "../../../../../../utils/run-manager";
+import { dataDir } from "#su/specops-stores";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -8,7 +9,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const { RunStore } = await getRunStoreModule();
-  const store = new RunStore(process.cwd());
+  const store = new RunStore(dataDir());
   const entries = await store.readTaskLog(slug, tid);
   return { slug, taskId: tid, entries };
 });
