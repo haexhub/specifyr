@@ -12,7 +12,7 @@
  *      this slice).
  */
 
-import { findRuntimeByApprovalId } from "#su/company-manager";
+import { findRuntimeByApprovalId } from "@su/company-manager";
 
 export default defineEventHandler((event) => {
   const id = getRouterParam(event, "id");

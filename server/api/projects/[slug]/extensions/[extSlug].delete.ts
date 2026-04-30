@@ -1,8 +1,8 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { dataDir } from "#su/data-dirs";
-import { projectCwd, loadEventStore } from "#su/specops-stores";
+import { dataDir } from "@su/data-dirs";
+import { projectCwd, loadEventStore } from "@su/specops-stores";
 
 interface ExtensionInstallRecord {
   slug: string;

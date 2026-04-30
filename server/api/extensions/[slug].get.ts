@@ -1,4 +1,4 @@
-import { getExtensionDetail } from "#su/extension-detail";
+import { getExtensionDetail } from "@su/extension-detail";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

@@ -12,7 +12,7 @@
  * runtimes.
  */
 
-import { listActiveCompanies } from "#su/company-manager";
+import { listActiveCompanies } from "@su/company-manager";
 
 export default defineEventHandler(() => {
   const all = listActiveCompanies().flatMap(([slug, runtime]) =>

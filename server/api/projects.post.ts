@@ -1,6 +1,6 @@
-import { createProjectRecord } from "#su/project-creation";
-import { getAppConfigModule } from "#su/app-config";
-import { DEFAULT_WORKFLOW_ID } from "#su/workflows";
+import { createProjectRecord } from "@su/project-creation";
+import { getAppConfigModule } from "@su/app-config";
+import { DEFAULT_WORKFLOW_ID } from "@su/workflows";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{

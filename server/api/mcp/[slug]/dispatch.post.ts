@@ -37,7 +37,7 @@
 import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { requireRuntimeAuth } from "#su/mcp-auth";
+import { requireRuntimeAuth } from "@su/mcp-auth";
 
 interface DispatchBody {
   worker?: string;

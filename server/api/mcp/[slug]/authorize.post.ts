@@ -27,7 +27,7 @@
  * the runtime's secretsResolver. Mismatch → 401.
  */
 
-import { requireRuntimeAuth } from "#su/mcp-auth";
+import { requireRuntimeAuth } from "@su/mcp-auth";
 
 interface AuthorizeBody {
   role?: string;

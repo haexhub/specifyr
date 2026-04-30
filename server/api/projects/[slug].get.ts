@@ -1,6 +1,6 @@
-import { createOrchestrator } from "#su/orchestrator";
-import { getProjectWorkflowId } from "#su/workflows";
-import { getProjectWorkflow } from "#su/workflow-discovery";
+import { createOrchestrator } from "@su/orchestrator";
+import { getProjectWorkflowId } from "@su/workflows";
+import { getProjectWorkflow } from "@su/workflow-discovery";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

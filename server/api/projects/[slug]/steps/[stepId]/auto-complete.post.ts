@@ -5,9 +5,9 @@ import {
   loadEventStore,
   projectCwd,
   assertProjectExists
-} from "#su/specops-stores";
-import { getProjectWorkflowId } from "#su/workflows";
-import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "#su/workflow-discovery";
+} from "@su/specops-stores";
+import { getProjectWorkflowId } from "@su/workflows";
+import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "@su/workflow-discovery";
 
 /**
  * Checks whether the current step's artifact files exist in the project directory.

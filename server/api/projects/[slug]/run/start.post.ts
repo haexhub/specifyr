@@ -1,9 +1,9 @@
-import { dataDir } from "#su/data-dirs";
+import { dataDir } from "@su/data-dirs";
 import {
   projectCwd,
   assertProjectExists,
   loadEventStore,
-} from "#su/specops-stores";
+} from "@su/specops-stores";
 import {
   getSchedulerModule,
   getTaskGraphModule,
@@ -11,7 +11,7 @@ import {
   getActiveScheduler,
   registerScheduler,
   deregisterScheduler
-} from "#su/run-manager";
+} from "@su/run-manager";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

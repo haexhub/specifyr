@@ -1,6 +1,6 @@
 import path from "node:path";
-import { getAppConfigModule } from "#su/app-config";
-import { readLocalManifest } from "#su/local-extension";
+import { getAppConfigModule } from "@su/app-config";
+import { readLocalManifest } from "@su/local-extension";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ path?: unknown }>(event);

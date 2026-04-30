@@ -1,4 +1,4 @@
-import { getExtensionCatalog, getLastCatalogMeta } from "#su/extension-catalog";
+import { getExtensionCatalog, getLastCatalogMeta } from "@su/extension-catalog";
 
 export default defineEventHandler(async (event) => {
   const q = getQuery(event);

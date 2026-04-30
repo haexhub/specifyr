@@ -21,18 +21,18 @@
  */
 
 import fs from "node:fs/promises";
-import { dataDir } from "#su/data-dirs";
+import { dataDir } from "@su/data-dirs";
 import {
   projectCwd,
   projectHostCwd,
   assertProjectExists,
-} from "#su/specops-stores";
+} from "@su/specops-stores";
 import {
   getCompanyRuntimeModule,
   getDockerRunnerFactoryModule,
   getActiveCompany,
   registerCompany,
-} from "#su/company-manager";
+} from "@su/company-manager";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";

@@ -15,7 +15,7 @@
  * to opening a read-only handle directly against state.db.)
  */
 
-import { getActiveCompany } from "#su/company-manager";
+import { getActiveCompany } from "@su/company-manager";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

@@ -5,13 +5,13 @@ import {
   loadTurnBroker,
   projectCwd,
   assertProjectExists
-} from "#su/specops-stores";
-import { getProjectStepIds, getProjectWorkflowId } from "#su/workflows";
+} from "@su/specops-stores";
+import { getProjectStepIds, getProjectWorkflowId } from "@su/workflows";
 import {
   SPEC_KIT_WORKFLOW,
   loadInstalledExtensionWorkflow,
   loadStepCommandBody
-} from "#su/workflow-discovery";
+} from "@su/workflow-discovery";
 
 /**
  * Kicks off a chat turn. The turn runs in the background under the TurnBroker —

@@ -1,8 +1,8 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { dataDir } from "#su/data-dirs";
-import { assertProjectExists } from "#su/specops-stores";
-import { listProjectWorkflows } from "#su/workflow-discovery";
+import { dataDir } from "@su/data-dirs";
+import { assertProjectExists } from "@su/specops-stores";
+import { listProjectWorkflows } from "@su/workflow-discovery";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

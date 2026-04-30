@@ -1,5 +1,5 @@
-import { getAppConfigModule } from "#su/app-config";
-import { enrichLocalExtension, type LocalExtensionMetadata } from "#su/local-extension";
+import { getAppConfigModule } from "@su/app-config";
+import { enrichLocalExtension, type LocalExtensionMetadata } from "@su/local-extension";
 
 export default defineEventHandler(async () => {
   const { loadAppConfig } = await getAppConfigModule();

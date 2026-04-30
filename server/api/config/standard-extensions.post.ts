@@ -1,4 +1,4 @@
-import { getAppConfigModule } from "#su/app-config";
+import { getAppConfigModule } from "@su/app-config";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ extensions?: unknown }>(event);

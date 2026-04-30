@@ -1,4 +1,4 @@
-import { loadTurnBroker, assertProjectExists } from "#su/specops-stores";
+import { loadTurnBroker, assertProjectExists } from "@su/specops-stores";
 
 /**
  * Cancels an in-flight turn for this session. Idempotent — returns 204 even if
