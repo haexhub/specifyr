@@ -6,9 +6,21 @@ version_check: "git --version"
 description: |
   Distributed version control. Read-only ops (status, log, diff, show) need
   filesystem:read. Mutating ops (add, commit, init, worktree, branch) need
-  filesystem:write. Remote ops add network:http (clone, fetch, pull) or
-  network:http (push). Each agent must grant the capabilities matching
-  the operations it intends to run.
+  filesystem:write. Remote ops (clone, fetch, pull, push) need network:http.
+
+  Private repos: set GITHUB_TOKEN or GITLAB_TOKEN as a project secret and
+  add secrets:read_env to the agent's capabilities. The agent can then
+  authenticate via HTTPS using the token directly in the URL:
+    git clone https://oauth2:$GITHUB_TOKEN@github.com/org/repo.git
+  Or inject git config at runtime:
+    git -c credential.helper='' \
+        -c url.https://oauth2:$GITHUB_TOKEN@github.com/.insteadOf=https://github.com/ \
+        clone https://github.com/org/repo.git
+  Add the skill "private-git-access" to have the agent apply this automatically.
+env_keys:
+  - GITHUB_TOKEN   # for github.com private repos
+  - GITLAB_TOKEN   # for gitlab.com or self-hosted GitLab private repos
+nix_package: git
 required_capabilities:
   - shell:execute
 tags:

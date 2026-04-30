@@ -7,6 +7,7 @@ description: |
   Node.js JavaScript runtime, version 22+. Like python3, the interpreter
   itself only needs shell:execute; the executed JavaScript inherits the
   agent's other capabilities for filesystem and network access.
+nix_package: nodejs_22
 required_capabilities:
   - shell:execute
 tags:

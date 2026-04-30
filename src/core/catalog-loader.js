@@ -7,14 +7,17 @@
  *   <catalogRoot>/binaries/<id>.yml      system binary manifest (`python3`, `gh`, …)
  *
  * Agents reference catalog entries by ID in their frontmatter:
- *   tools.mcp:      [<tool-id>, …]
- *   tools.binaries: [<binary-id>, …]
- *   skills:         [<skill-id>, …]
+ *   tools.mcp: [<tool-id>, …]
+ *   skills:    [<skill-id>, …]
  *
- * The runtime calls `resolveToolsForAgent` / `resolveSkillsForAgent` /
- * `resolveBinariesForAgent` to hydrate those references into full specs at
- * spawn time. The validator calls `validateCatalogReferences` to catch
- * dangling references and capability gaps before the runtime starts.
+ * Runtime dependencies (binaries) are declared directly on the agent spec as
+ *   nix_packages: [<nixpkgs-attr>, …]
+ * and are NOT referenced via the catalog. `catalog/binaries/` entries serve
+ * as reference documentation (env_keys, required_capabilities) only.
+ *
+ * The runtime calls `resolveToolsForAgent` / `resolveSkillsForAgent` to
+ * hydrate those references into full specs at spawn time. The validator calls
+ * `validateCatalogReferences` to catch dangling references before startup.
  */
 
 import { readFile, readdir, stat } from "node:fs/promises";
@@ -31,6 +34,20 @@ import { parse as parseYaml } from "yaml";
  * @property {string[]} [args]
  * @property {string[]} [env_keys]
  * @property {string} description
+ * @property {string[]} required_capabilities
+ * @property {string[]} [tags]
+ * @property {string} _file
+ */
+
+/**
+ * @typedef {object} BinarySpec
+ * @property {string} id
+ * @property {string} name
+ * @property {string} command
+ * @property {string} [version_check]
+ * @property {string} [description]
+ * @property {string[]} [env_keys]
+ * @property {string|null} nix_package   nixpkgs attribute name (e.g. "gh", "nodejs_22"); required for agent images
  * @property {string[]} required_capabilities
  * @property {string[]} [tags]
  * @property {string} _file
@@ -87,6 +104,8 @@ export async function loadBinaries(binariesDir) {
     if (!spec || !spec.id) continue;
     spec._file = filePath;
     spec.required_capabilities = spec.required_capabilities ?? [];
+    spec.env_keys = spec.env_keys ?? [];
+    spec.nix_package = spec.nix_package ?? null;
     spec.tags = spec.tags ?? [];
     spec.command = spec.command ?? spec.id;
     out.set(spec.id, spec);

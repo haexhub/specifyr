@@ -111,10 +111,19 @@ interface CompanyRuntimeModule {
 interface DockerRunnerFactoryModule {
   dockerRunnerFactory: (cfg: {
     projectRoot: string;
+    imageForRole?: (role: string) => string;
     image?: string;
     network?: string;
     secretsResolver?: (agent: unknown) => Record<string, string> | undefined;
   }) => (agent: unknown, runtimeMeta?: unknown) => unknown;
+}
+
+interface AgentImageBuilderModule {
+  buildAgentImage: (opts: {
+    nix_packages: string[];
+    projectRoot?: string;
+    dockerCommand?: string;
+  }) => Promise<string>;
 }
 
 async function loadEsm<T>(rel: string): Promise<T> {
@@ -128,6 +137,10 @@ export async function getCompanyRuntimeModule() {
 
 export async function getDockerRunnerFactoryModule() {
   return loadEsm<DockerRunnerFactoryModule>("src/runners/hermes-docker.js");
+}
+
+export async function getAgentImageBuilderModule() {
+  return loadEsm<AgentImageBuilderModule>("src/runners/agent-image-builder.js");
 }
 
 const registry = new Map<string, CompanyRuntimeInstance>();

@@ -30,9 +30,11 @@ import {
 import {
   getCompanyRuntimeModule,
   getDockerRunnerFactoryModule,
+  getAgentImageBuilderModule,
   getActiveCompany,
   registerCompany,
 } from "@su/company-manager";
+import { getProjectSecrets } from "@su/secrets-store";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
@@ -129,13 +131,21 @@ export default defineEventHandler(async (event) => {
 
   const { CompanyRuntime } = await getCompanyRuntimeModule();
   const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
+  const { buildAgentImage } = await getAgentImageBuilderModule();
 
-  // Build per-role queue dirs from the active agent roster. Pre-loading
-  // agents here means a misconfigured org spec surfaces as a clean 400
-  // before we mint a token / build a runner factory.
+  // Load agent specs to derive roles (queue dirs) and per-agent nix_packages.
+  const agentSpecLoaderUrl = pathToFileURL(
+    path.join(process.cwd(), "src/agents/spec-loader.js")
+  ).href;
+  const agentSpecMod = (await import(agentSpecLoaderUrl)) as {
+    loadAgents: (dir: string) => Promise<Map<string, { role: string; nix_packages?: string[] }>>;
+  };
+
+  let agentMap: Map<string, { role: string; nix_packages?: string[] }>;
   let roles: string[];
   try {
-    roles = await loadAgentRoles(orgDir);
+    agentMap = await agentSpecMod.loadAgents(orgDir);
+    roles = [...agentMap.keys()];
   } catch (err) {
     throw createError({
       statusCode: 400,
@@ -145,6 +155,23 @@ export default defineEventHandler(async (event) => {
   const queueDirs: Record<string, string> = {};
   for (const role of roles) {
     queueDirs[role] = path.join(specopsBase, `queue-${role}`);
+  }
+
+  // Build (or reuse) a Nix-based Docker image for each agent from its
+  // declared nix_packages. Agents with identical package sets share the same
+  // cached image via hash-based deduplication in the builder.
+  const agentImages = new Map<string, string>();
+  try {
+    for (const [role, agent] of agentMap) {
+      const nix_packages = agent.nix_packages ?? [];
+      const image = await buildAgentImage({ nix_packages, projectRoot: process.cwd() });
+      agentImages.set(role, image);
+    }
+  } catch (err) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: err instanceof Error ? err.message : "Failed to build agent image",
+    });
   }
 
   // Generate the per-runtime ops token here so the same value flows into
@@ -158,6 +185,9 @@ export default defineEventHandler(async (event) => {
   const opsUrl =
     process.env.COMPANY_OPS_URL_BASE ?? "http://haex-corp:3000/mcp";
 
+  // Load project-level secrets (encrypted at rest, set via UI).
+  const projectSecrets = await getProjectSecrets(slug);
+
   // Default secrets forwarding: any agent with `secrets:read_env` gets
   // ANTHROPIC_API_KEY (LLM auth) plus COMPANY_OPS_TOKEN/URL (callback
   // channel). capability-to-docker.js hard-fails if secrets are passed
@@ -169,10 +199,12 @@ export default defineEventHandler(async (event) => {
   // Falls back to the default Anthropic endpoint when the env is unset.
   const runnerFactory = dockerRunnerFactory({
     projectRoot: pHostCwd,
+    imageForRole: (role) => agentImages.get(role) ?? "hermes-agent:dev",
     network: "companies",
     secretsResolver: (agent: any) => {
       if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
       const env: Record<string, string> = {
+        ...projectSecrets,
         COMPANY_OPS_TOKEN: opsToken,
         COMPANY_OPS_URL: `${opsUrl}/${slug}`,
         ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? "http://haex-claude-proxy:8080",

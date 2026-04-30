@@ -8,6 +8,7 @@ description: |
   (pnpm list, pnpm why) need filesystem:read. Install/update ops need
   filesystem:write and network:http to fetch packages. Publish needs
   network:http and typically secrets:read_env for the registry token.
+nix_package: pnpm
 required_capabilities:
   - shell:execute
 tags:
