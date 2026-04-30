@@ -8,7 +8,7 @@ import ChatStream from "~/components/ChatStream.vue";
 import ArtifactViewer from "~/components/ArtifactViewer.vue";
 import HookGateBanner from "~/components/HookGateBanner.vue";
 import { stepById, type StepId, type StepStatus } from "~/lib/steps";
-import { resolveWorkflow, type Workflow } from "~/lib/workflows";
+import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/lib/workflows";
 import { gatesForStep } from "~/lib/hooks";
 import type { SessionMetadata, StepState } from "~/lib/types";
 
@@ -42,7 +42,7 @@ const step = computed(() => {
   }
 });
 const stepIndex = computed(() =>
-  workflowSteps.value.findIndex((s) => s.id === stepIdParam.value)
+  workflowSteps.value.findIndex((s: WorkflowStep) => s.id === stepIdParam.value)
 );
 
 const sessions = ref<SessionMetadata[]>([]);
@@ -128,7 +128,7 @@ const currentStepStatus = computed<StepStatus | undefined>(() =>
 );
 
 const activeSession = computed(() =>
-  sessions.value.find((s) => s.id === activeSessionId.value) ?? null
+  sessions.value.find((s: SessionMetadata) => s.id === activeSessionId.value) ?? null
 );
 
 async function loadStepStates() {
@@ -166,7 +166,7 @@ async function ensureActiveSession() {
   if (activeSessionId.value) return;
   const stored = getStoredSessionId(slug.value, stepIdParam.value);
   if (stored) {
-    const found = sessions.value.find((s) => s.id === stored);
+    const found = sessions.value.find((s: SessionMetadata) => s.id === stored);
     if (found) {
       await selectSession(found.id);
       return;

@@ -5,9 +5,9 @@ import { Badge } from "~/components/ui/badge";
 import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
 import RunTaskList, { type RunTaskRow } from "~/components/RunTaskList.vue";
 import RunTaskDetail, { type TaskLogEntry } from "~/components/RunTaskDetail.vue";
-import { openSse } from "~/lib/sse-client";
+import { openSse, type SseEvent } from "~/lib/sse-client";
 import { isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
-import { resolveWorkflow, type Workflow } from "~/lib/workflows";
+import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/lib/workflows";
 import type { StepState } from "~/lib/types";
 
 const { t } = useI18n();
@@ -26,9 +26,9 @@ const workflow = computed(() =>
 );
 const workflowSteps = computed(() => workflow.value.steps);
 
-const runStep = computed(() => workflowSteps.value.find((s) => s.isRun) ?? workflowSteps.value[workflowSteps.value.length - 1]!);
+const runStep = computed(() => workflowSteps.value.find((s: WorkflowStep) => s.isRun) ?? workflowSteps.value[workflowSteps.value.length - 1]!);
 const tasksStep = computed(() => {
-  const idx = workflowSteps.value.findIndex((s) => s.id === runStep.value.id);
+  const idx = workflowSteps.value.findIndex((s: WorkflowStep) => s.id === runStep.value.id);
   return idx > 0 ? workflowSteps.value[idx - 1]! : runStep.value;
 });
 
@@ -183,7 +183,7 @@ async function startRun() {
       method: "POST",
       body: {},
       signal: ctrl.signal,
-      onEvent: async (ev) => {
+      onEvent: async (ev: SseEvent) => {
         let payload: any = {};
         try {
           payload = JSON.parse(ev.data);
@@ -254,7 +254,7 @@ async function startRun() {
             break;
         }
       },
-      onError: (err) => {
+      onError: (err: unknown) => {
         startError.value = err instanceof Error ? err.message : String(err);
       },
       onClose: async () => {

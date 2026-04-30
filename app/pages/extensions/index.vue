@@ -508,7 +508,7 @@ async function unregisterLocalExtension(slug: string) {
                   <Button variant="outline" size="sm" class="h-auto gap-2 px-3 py-1.5 text-xs">
                     <Filter class="size-3.5" />
                     <span v-if="selectedTags.size === 0">{{ $t("extensions.index.filterTags") }}</span>
-                    <span v-else>{{ $t("extensions.index.tagsActive", selectedTags.size, { count: selectedTags.size }) }}</span>
+                    <span v-else>{{ $t("extensions.index.tagsActive", { count: selectedTags.size }) }}</span>
                     <ChevronsUpDown class="size-3 opacity-50" />
                   </Button>
                 </PopoverTrigger>
@@ -574,7 +574,7 @@ async function unregisterLocalExtension(slug: string) {
                 <template v-else>
                   {{ $t("extensions.index.extensionCountAll", { count: catalog.length }) }}
                 </template>
-                <template v-if="selectedTags.size"> · {{ $t("extensions.index.tagsActive", selectedTags.size, { count: selectedTags.size }) }}</template>
+                <template v-if="selectedTags.size"> · {{ $t("extensions.index.tagsActive", { count: selectedTags.size }) }}</template>
               </span>
               <button
                 v-if="searchQuery || selectedTags.size"

@@ -194,7 +194,7 @@ function openStream(sid: string, since: number) {
   es.addEventListener("assistant_message", (ev: MessageEvent) => {
     const data = updateSeq(ev.data) as ChatMessageType | undefined;
     if (!data) return;
-    if (!messages.value.some((m) => m.id === data.id)) {
+    if (!messages.value.some((m: ChatMessageType) => m.id === data.id)) {
       messages.value = [...messages.value, data];
     }
     streamingMessage.value = null;
@@ -254,11 +254,11 @@ async function send() {
       `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}/turn`,
       { method: "POST", body: { content } }
     );
-    messages.value = messages.value.map((m) => (m.id === optimistic.id ? resp.userMessage : m));
+    messages.value = messages.value.map((m: ChatMessageType) => (m.id === optimistic.id ? resp.userMessage : m));
     openStream(sid, resp.startSeq);
   } catch (err: any) {
     waitingForFirstToken.value = false;
-    messages.value = messages.value.filter((m) => m.id !== optimistic.id);
+    messages.value = messages.value.filter((m: ChatMessageType) => m.id !== optimistic.id);
     streamError.value =
       err?.statusCode === 409
         ? t("chat.turnError409")

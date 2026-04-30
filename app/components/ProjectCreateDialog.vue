@@ -40,7 +40,7 @@ async function refreshWorkflows() {
 }
 
 const selectedWorkflowSummary = computed(() =>
-  workflows.value.find((w) => w.id === selectedWorkflow.value) ?? null
+  workflows.value.find((w: WorkflowSummary) => w.id === selectedWorkflow.value) ?? null
 );
 
 async function refreshStandardExtensions() {

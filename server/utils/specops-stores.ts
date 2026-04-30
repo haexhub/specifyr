@@ -1,7 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { dataDir, projectsDir, hostProjectsDir } from "./data-dirs";
-export { dataDir, projectsDir, extensionsDir, hostProjectsDir } from "./data-dirs";
 
 async function loadModule<T = Record<string, unknown>>(rel: string): Promise<T> {
   const url = pathToFileURL(path.join(process.cwd(), rel)).href;
