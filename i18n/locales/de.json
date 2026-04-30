@@ -182,7 +182,9 @@
     "placeholder": "Nachricht tippen… (Cmd/Ctrl+Enter zum Senden)",
     "shortcut": "{key} senden",
     "stop": "Stopp",
-    "send": "Senden"
+    "send": "Senden",
+    "thinking": "Denkt nach…",
+    "copy": "Kopieren"
   },
 
   "agentDrawer": {

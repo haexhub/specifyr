@@ -126,8 +126,15 @@ export default defineEventHandler(async (event) => {
   }
 
   // (4) If no turn is running for this session, the disk replay was the entire story.
-  // Close so the client doesn't sit waiting forever.
+  // Push a terminal event if the session is interrupted so the client stops its spinner,
+  // then close. Without the event the client's EventSource reconnects forever.
   if (!closed && !broker.isRunning(slug, stepId, sid)) {
+    if (session.status === "interrupted") {
+      await stream.push({
+        event: "turn_failed",
+        data: JSON.stringify({ seq: highestSent + 1, data: { message: "interrupted" } })
+      }).catch(() => {});
+    }
     closed = true;
     await stream.close().catch(() => {});
   }

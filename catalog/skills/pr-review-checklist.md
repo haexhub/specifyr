@@ -1,7 +1,9 @@
 ---
 id: pr-review-checklist
 name: "PR Review Checklist"
-description: "Structured pass over a diff before approving."
+description: >
+  Use when reviewing a diff before approving — apply as a structured gate.
+  Don't use during implementation; activate only at review time.
 tags:
   - quality
   - review

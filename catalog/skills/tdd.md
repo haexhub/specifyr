@@ -1,7 +1,9 @@
 ---
 id: tdd
 name: "Test-Driven Development"
-description: "Red → green → refactor: write the failing test first."
+description: >
+  Use when starting any feature implementation or bug fix — write the failing test first.
+  Don't use when the task is pure documentation, configuration, or exploration with no testable behavior.
 tags:
   - quality
   - engineering

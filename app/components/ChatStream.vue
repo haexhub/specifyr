@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Send, Loader2, MessageSquarePlus, Info, ArrowRight, FileText, RotateCcw, Square } from "lucide-vue-next";
+import { Send, Loader2, MessageSquarePlus, Info, ArrowRight, FileText, RotateCcw, Square, AlertTriangle } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import ChatMessage from "~/components/ChatMessage.vue";
 import type { ChatMessage as ChatMessageType, SessionMetadata } from "~/lib/types";
@@ -38,6 +38,7 @@ const streamingMessage = ref<ChatMessageType | null>(null);
 const currentToolUses = ref<{ name: string; input: unknown }[]>([]);
 const toolUseSinceLastText = ref(false);
 const lastSeenSeq = ref(0);
+const sessionResetNotice = ref(false);
 
 let eventSource: EventSource | null = null;
 
@@ -73,6 +74,7 @@ function resetStreamingDisplay() {
   streamingMessage.value = null;
   currentToolUses.value = [];
   toolUseSinceLastText.value = false;
+  sessionResetNotice.value = false;
 }
 
 watch(
@@ -118,10 +120,31 @@ function appendTextToStreamingMessage(text: string) {
   }
 }
 
+function appendThinkingToStreamingMessage(text: string) {
+  if (!streamingMessage.value) {
+    streamingMessage.value = {
+      id: `streaming-${Date.now()}`,
+      role: "assistant",
+      content: "",
+      thinking: text,
+      createdAt: new Date().toISOString()
+    };
+  } else {
+    streamingMessage.value = {
+      ...streamingMessage.value,
+      thinking: (streamingMessage.value.thinking ?? "") + text
+    };
+  }
+}
+
 function handleClaudeEvent(payload: any) {
   if (payload?.type === "assistant" && Array.isArray(payload.message?.content)) {
     for (const block of payload.message.content) {
-      if (block?.type === "text" && typeof block.text === "string") {
+      if (block?.type === "thinking" && typeof block.thinking === "string") {
+        waitingForFirstToken.value = false;
+        appendThinkingToStreamingMessage(block.thinking);
+      } else if (block?.type === "text" && typeof block.text === "string") {
+        waitingForFirstToken.value = false;
         const text = block.text;
         if (toolUseSinceLastText.value && streamingMessage.value?.content) {
           appendTextToStreamingMessage(`\n\n${text}`);
@@ -130,6 +153,7 @@ function handleClaudeEvent(payload: any) {
         }
         toolUseSinceLastText.value = false;
       } else if (block?.type === "tool_use" && block.name) {
+        waitingForFirstToken.value = false;
         currentToolUses.value = [...currentToolUses.value, { name: block.name, input: block.input }];
         toolUseSinceLastText.value = true;
       }
@@ -163,7 +187,6 @@ function openStream(sid: string, since: number) {
   };
 
   es.addEventListener("claude", (ev: MessageEvent) => {
-    waitingForFirstToken.value = false;
     const data = updateSeq(ev.data);
     if (data) handleClaudeEvent(data);
   });
@@ -185,6 +208,11 @@ function openStream(sid: string, since: number) {
     scrollToBottom();
   });
 
+  es.addEventListener("session_reset", (ev: MessageEvent) => {
+    updateSeq(ev.data);
+    sessionResetNotice.value = true;
+  });
+
   es.addEventListener("turn_failed", (ev: MessageEvent) => {
     const data = updateSeq(ev.data) as { message?: string } | undefined;
     streamError.value = data?.message ?? t("chat.turnFailed");
@@ -193,10 +221,12 @@ function openStream(sid: string, since: number) {
   });
 
   es.onerror = () => {
-    if (es.readyState === EventSource.CLOSED) {
-      eventSource = null;
-      streaming.value = false;
-    }
+    // EventSource never transitions to CLOSED on server disconnect — it goes straight
+    // to CONNECTING for auto-reconnect. Close explicitly so the spinner doesn't hang.
+    es.close();
+    eventSource = null;
+    streaming.value = false;
+    waitingForFirstToken.value = false;
   };
 }
 
@@ -357,6 +387,14 @@ const isInterrupted = computed(() => sessionView.value?.status === "interrupted"
           :message="streamingMessage"
           streaming
         />
+
+        <div
+          v-if="sessionResetNotice"
+          class="flex items-start gap-2 rounded-md border border-warning/30 bg-warning/5 px-3 py-2 text-xs text-warning"
+        >
+          <AlertTriangle class="mt-0.5 size-3.5 shrink-0" />
+          <span>Session abgelaufen — Claude startet ohne vorherigen Gesprächskontext neu.</span>
+        </div>
 
         <div
           v-if="waitingForFirstToken"

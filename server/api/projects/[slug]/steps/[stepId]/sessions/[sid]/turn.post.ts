@@ -64,16 +64,25 @@ export default defineEventHandler(async (event) => {
         : (await loadInstalledExtensionWorkflow(slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
     const stepDef = workflow.steps.find((s) => s.id === stepId);
     if (stepDef?.command) {
-      // Inject the full command-file body so Claude sees all steps (including mandatory
-      // write steps). Without this, headless `claude -p` only receives the slash-command
-      // name and never reads the actual skill file.
+      const stepIndex = workflow.steps.findIndex((s) => s.id === stepId);
+      const total = workflow.steps.length;
+      const nextStep = stepIndex + 1 < total ? workflow.steps[stepIndex + 1] : null;
+      const workflowCtx = [
+        `SPECOPS WORKFLOW CONTEXT:`,
+        `You are in step ${stepIndex + 1} of ${total} ("${stepDef.label}") of the "${workflow.label}" workflow.`,
+        nextStep ? `The next step is "${nextStep.label}".` : `This is the final step.`,
+        `Focus exclusively on this step. Do not suggest actions from later steps or start the company runtime.`,
+        `If this step's artifacts already exist, confirm what is done and ask what to adjust or finalize for this step.`
+      ].join(" ");
+      // Inject the full command-file body so Claude sees all skill instructions.
+      // Without this, headless `claude -p` only receives the slash-command name.
       const commandBody = workflowId !== "spec-kit"
         ? await loadStepCommandBody(slug, workflowId, stepId)
         : null;
       if (commandBody) {
-        promptForClaude = `${stepDef.command}\n\n${commandBody}\n\n---\n\n${content}`;
+        promptForClaude = `${stepDef.command}\n\n${commandBody}\n\n---\n\n${workflowCtx}\n\n${content}`;
       } else {
-        promptForClaude = `${stepDef.command}\n\n${content}`;
+        promptForClaude = `${stepDef.command}\n\n${workflowCtx}\n\n${content}`;
       }
     }
   }
