@@ -13,6 +13,7 @@ env_keys:
 nix_package: glab
 required_capabilities:
   - shell:execute
+  - network:http
 tags:
   - vcs
   - gitlab

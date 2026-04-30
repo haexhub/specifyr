@@ -21,10 +21,14 @@ const adding = ref(false);
 const error = ref<string | null>(null);
 
 async function removeSecret(key: string) {
-  await $fetch(`/api/projects/${slug.value}/secrets/${encodeURIComponent(key)}`, {
-    method: "DELETE",
-  });
-  await refresh();
+  try {
+    await $fetch(`/api/projects/${slug.value}/secrets/${encodeURIComponent(key)}`, {
+      method: "DELETE",
+    });
+    await refresh();
+  } catch (e: any) {
+    error.value = e?.data?.statusMessage ?? "Failed to delete secret.";
+  }
 }
 
 // TODO: Implement addSecret() here.

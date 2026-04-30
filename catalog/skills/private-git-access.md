@@ -20,7 +20,7 @@ using the token available in your environment — do not prompt for credentials.
 ## GitHub
 
 ```bash
-git clone https://oauth2:$GITHUB_TOKEN@github.com/ORG/REPO.git
+git clone https://x-access-token:$GITHUB_TOKEN@github.com/ORG/REPO.git
 ```
 
 Or, to avoid embedding the token in the URL (keeps it out of `git log --remotes`):

@@ -15,6 +15,17 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { dataDir } from "./data-dirs";
 
+const writeQueues = new Map<string, Promise<void>>();
+
+function enqueueWrite(slug: string, op: () => Promise<void>): Promise<void> {
+  const prev = writeQueues.get(slug) ?? Promise.resolve();
+  const next = prev.then(op, op);
+  writeQueues.set(slug, next.finally(() => {
+    if (writeQueues.get(slug) === next) writeQueues.delete(slug);
+  }));
+  return next;
+}
+
 type EncryptedEntry = { iv: string; tag: string; data: string };
 type SecretsFile = Record<string, EncryptedEntry>;
 
@@ -31,8 +42,12 @@ async function masterKey(): Promise<Buffer> {
   const keyPath = path.join(dataDir(), "master.key");
   try {
     const hex = (await fs.readFile(keyPath, "utf8")).trim();
+    if (!/^[0-9a-fA-F]{64}$/.test(hex)) {
+      throw new Error(`master.key is malformed — expected 64 hex chars, got ${hex.length}`);
+    }
     return Buffer.from(hex, "hex");
-  } catch {
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
     const key = crypto.randomBytes(32);
     await fs.mkdir(path.dirname(keyPath), { recursive: true });
     await fs.writeFile(keyPath, key.toString("hex"), { mode: 0o600 });
@@ -44,8 +59,9 @@ async function masterKey(): Promise<Buffer> {
 async function readFile(slug: string): Promise<SecretsFile> {
   try {
     return JSON.parse(await fs.readFile(secretsFilePath(slug), "utf8"));
-  } catch {
-    return {};
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
+    throw err;
   }
 }
 
@@ -76,18 +92,23 @@ export async function listSecretKeys(slug: string): Promise<string[]> {
   return Object.keys(await readFile(slug));
 }
 
-export async function setSecret(slug: string, key: string, value: string): Promise<void> {
-  const [file, mkey] = await Promise.all([readFile(slug), masterKey()]);
-  file[key] = encrypt(value, mkey);
-  await writeFile(slug, file);
+export function setSecret(slug: string, key: string, value: string): Promise<void> {
+  return enqueueWrite(slug, async () => {
+    const [file, mkey] = await Promise.all([readFile(slug), masterKey()]);
+    file[key] = encrypt(value, mkey);
+    await writeFile(slug, file);
+  });
 }
 
-export async function deleteSecret(slug: string, key: string): Promise<boolean> {
-  const file = await readFile(slug);
-  if (!(key in file)) return false;
-  delete file[key];
-  await writeFile(slug, file);
-  return true;
+export function deleteSecret(slug: string, key: string): Promise<boolean> {
+  let existed = false;
+  return enqueueWrite(slug, async () => {
+    const file = await readFile(slug);
+    if (!(key in file)) return;
+    existed = true;
+    delete file[key];
+    await writeFile(slug, file);
+  }).then(() => existed);
 }
 
 export async function getProjectSecrets(slug: string): Promise<Record<string, string>> {

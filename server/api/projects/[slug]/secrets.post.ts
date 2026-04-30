@@ -11,6 +11,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Body must have { key: string, value: string }" });
   }
 
-  await setSecret(slug, body.key.trim(), body.value);
-  return { ok: true, key: body.key.trim() };
+  const key = body.key.trim();
+  if (!key) {
+    throw createError({ statusCode: 400, statusMessage: "Secret key must be non-empty" });
+  }
+
+  await setSecret(slug, key, body.value);
+  return { ok: true, key };
 });
