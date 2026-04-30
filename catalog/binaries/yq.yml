@@ -7,6 +7,7 @@ description: |
   Command-line YAML processor (Mike Farah's Go implementation). Like jq,
   reads stdin/files and writes stdout. In-place edits (yq -i) need
   filesystem:write; reading from files needs filesystem:read.
+nix_package: yq-go
 required_capabilities:
   - shell:execute
 tags:

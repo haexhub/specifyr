@@ -8,6 +8,7 @@ description: |
   The interpreter itself only needs shell:execute. Whatever the executed
   Python code does (read files, write files, network calls) inherits the
   agent's other capabilities — grant them according to the script's needs.
+nix_package: python3
 required_capabilities:
   - shell:execute
 tags:

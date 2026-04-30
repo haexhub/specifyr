@@ -1,0 +1,17 @@
+id: gitlab
+name: "GitLab MCP"
+type: mcp
+transport: stdio
+command: "uvx"
+args: ["mcp-server-gitlab"]
+env_keys:
+  - GITLAB_PERSONAL_ACCESS_TOKEN
+  - GITLAB_API_URL   # optional — defaults to https://gitlab.com/api/v4 for SaaS; set for self-hosted
+description: "Read/write GitLab repos, issues, merge requests, file contents, pipelines."
+required_capabilities:
+  - secrets:read_env
+  - network:http
+  - account:gitlab
+tags:
+  - vcs
+  - collaboration

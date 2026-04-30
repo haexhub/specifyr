@@ -22,7 +22,6 @@ import { HermesAgentRunner } from "./base.js";
 import { runCommand } from "../utils/process.js";
 import { capabilityFlags } from "./capability-to-docker.js";
 import { hermesHomeForAgent } from "./hermes-paths.js";
-import { resolveBinariesForAgent } from "../core/catalog-loader.js";
 
 function buildHermesPrompt(workItem, runtimeContext) {
   return [
@@ -86,11 +85,9 @@ function defaultUserId() {
 export class HermesDockerRunner extends HermesAgentRunner {
   /**
    * @param {object} options
-   * @param {object} options.agent           agent spec (role, capabilities, tools.binaries)
+   * @param {object} options.agent           agent spec (role, capabilities, nix_packages)
    * @param {string} options.projectRoot     absolute host path; bind-mounted into container
    * @param {string} options.profileDir      absolute host path for HERMES_HOME
-   * @param {string[]} [options.binaryWhitelist]
-   *                                         catalog binary IDs (post wildcard expansion)
    * @param {string} [options.image]         container image tag, default 'hermes-agent:dev'
    * @param {string} [options.network]       compose network name
    * @param {Object<string,string>} [options.secrets]
@@ -209,43 +206,36 @@ export class HermesDockerRunner extends HermesAgentRunner {
  * Factory for plugging the docker runner into CompanyRuntime.
  *
  * Returned function matches the runnerFactory signature expected by
- * CompanyRuntime: `(agent, runtimeMeta) => runner`. The second argument
- * carries runtime-loaded context (currently `catalog`) that wasn't
- * available at factory-construction time.
+ * CompanyRuntime: `(agent, runtimeMeta) => runner`.
  *
  * Image resolution precedence (highest first):
- *   1. explicit `cfg.image`            (caller wired a specific tag)
- *   2. `process.env.HERMES_AGENT_IMAGE` (deploy-time override; e.g. compose
- *                                       sets this to a GHCR pin in prod)
- *   3. `"hermes-agent:dev"`             (local-build fallback)
+ *   1. `cfg.imageForRole(agent.role)`   (per-agent Nix-built image tag)
+ *   2. `cfg.image`                      (single override for all agents)
+ *   3. `process.env.HERMES_AGENT_IMAGE` (deploy-time override)
+ *   4. `"hermes-agent:dev"`             (local-build default)
  *
  * @param {object} cfg
- * @param {string} cfg.projectRoot               absolute host path
- * @param {string} [cfg.image]                   container image tag
- * @param {string} [cfg.network]                 compose network name
+ * @param {string} cfg.projectRoot                       absolute host path
+ * @param {(role: string) => string} [cfg.imageForRole]  per-agent image resolver
+ * @param {string} [cfg.image]                           single image override
+ * @param {string} [cfg.network]                         compose network name
  * @param {(agent) => Object<string,string>} [cfg.secretsResolver]
- *                                                per-agent secret resolution;
- *                                                returned KV map is passed
- *                                                through to capabilityFlags()
- *                                                which will throw if the
- *                                                agent lacks secrets:read_env
  * @returns {(agent, runtimeMeta) => HermesDockerRunner}
  */
-export function dockerRunnerFactory({ projectRoot, image, network, secretsResolver }) {
+export function dockerRunnerFactory({ projectRoot, imageForRole, image, network, secretsResolver }) {
   if (!projectRoot) throw new Error("dockerRunnerFactory: projectRoot required");
-  const resolvedImage = image ?? process.env.HERMES_AGENT_IMAGE ?? "hermes-agent:dev";
-  return (agent, runtimeMeta = {}) => {
+  return (agent, _runtimeMeta = {}) => {
     const profileDir = hermesHomeForAgent({ projectRoot, role: agent.role });
-    const catalog = runtimeMeta.catalog;
-    const binaryWhitelist = catalog
-      ? resolveBinariesForAgent(agent, catalog).map((spec) => spec.id)
-      : agent?.tools?.binaries; // raw passthrough; wildcards stay unexpanded
+    const resolvedImage =
+      (imageForRole ? imageForRole(agent.role) : null) ??
+      image ??
+      process.env.HERMES_AGENT_IMAGE ??
+      "hermes-agent:dev";
     const secrets = secretsResolver ? secretsResolver(agent) : undefined;
     return new HermesDockerRunner({
       agent,
       projectRoot,
       profileDir,
-      binaryWhitelist,
       image: resolvedImage,
       network,
       secrets,

@@ -7,6 +7,7 @@ description: |
   HTTP client for ad-hoc requests. Network access is curl's entire purpose,
   so network:http is required. POST/PUT/DELETE additionally need
   network:http. Saving response bodies to disk needs filesystem:write.
+nix_package: curl
 required_capabilities:
   - shell:execute
   - network:http

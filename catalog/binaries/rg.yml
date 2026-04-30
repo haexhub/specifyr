@@ -6,6 +6,7 @@ version_check: "rg --version"
 description: |
   Recursive grep replacement, very fast. Reading files is rg's entire
   purpose, so filesystem:read is required. No write or network ops.
+nix_package: ripgrep
 required_capabilities:
   - shell:execute
   - filesystem:read
