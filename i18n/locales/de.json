@@ -130,7 +130,6 @@
       "noReadme": "Kein README verfügbar.",
       "dependents": "Abhängige Extensions:",
       "commandsTitle": "Commands ({count})",
-      "utilityCommandsTitle": "Utility Commands ({count})",
       "hooksTitle": "Hooks ({count})",
       "hooksDesc": "Hooks feuern automatisch, wenn das entsprechende spec-kit-Kommando ausgeführt wird. Markierte Hooks fragen vorher nach Bestätigung.",
       "prompt": "Prompt: „{prompt}“",

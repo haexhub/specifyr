@@ -68,8 +68,6 @@ interface ExtensionCommandYaml {
   is_run?: boolean;
   run_action?: string;
   artifacts?: string[];
-  // When true: registered as a slash command but excluded from the workflow step list.
-  hidden?: boolean;
 }
 
 // Strip a leading YAML frontmatter block (`---\n...---\n`) if present.
@@ -314,7 +312,6 @@ export function parseExtensionWorkflow(yamlContent: string): WorkflowDefinition 
   const commands = parsed.provides!.commands!;
 
   const steps: WorkflowStep[] = commands
-    .filter((cmd) => !cmd.hidden)
     .map((cmd) => {
       const fullCommand = cmd.name?.trim();
       if (!fullCommand) return null;

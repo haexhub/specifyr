@@ -51,7 +51,6 @@ interface ExtensionCommand {
   file?: string;
   description?: string;
   aliases?: string[];
-  hidden?: boolean;
 }
 
 interface ExtensionHook {
@@ -99,9 +98,6 @@ const { data: projects, refresh: refreshProjects } = await useFetch<ProjectListI
 const saving = ref(false);
 const standardList = computed(() => standardData.value?.extensions ?? []);
 const isStandard = computed(() => standardList.value.includes(slug.value));
-
-const workflowCommands = computed(() => (data.value?.commands ?? []).filter((c) => !c.hidden));
-const utilityCommands = computed(() => (data.value?.commands ?? []).filter((c) => c.hidden));
 
 const readmeHtml = computed(() => {
   const source = data.value?.readmeContent ?? "";
@@ -344,12 +340,12 @@ async function installIntoSelectedProjects() {
           </div>
         </header>
 
-        <section v-if="workflowCommands.length" class="rounded-md border border-border/60 bg-card">
+        <section v-if="data.commands?.length" class="rounded-md border border-border/60 bg-card">
           <h3 class="border-b border-border/60 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {{ $t("extensions.detail.commandsTitle", { count: workflowCommands.length }) }}
+            {{ $t("extensions.detail.commandsTitle", { count: data.commands.length }) }}
           </h3>
           <ul class="divide-y divide-border/60">
-            <li v-for="cmd in workflowCommands" :key="cmd.name" class="px-4 py-2.5">
+            <li v-for="cmd in data.commands" :key="cmd.name" class="px-4 py-2.5">
               <code class="font-mono text-sm text-foreground">/{{ cmd.name }}</code>
               <p v-if="cmd.description" class="mt-1 text-xs text-muted-foreground">
                 {{ cmd.description }}
@@ -357,20 +353,6 @@ async function installIntoSelectedProjects() {
               <p v-if="cmd.aliases?.length" class="mt-1 flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground">
                 <span>{{ $t("extensions.detail.aliases") }}</span>
                 <code v-for="alias in cmd.aliases" :key="alias" class="font-mono">/{{ alias }}</code>
-              </p>
-            </li>
-          </ul>
-        </section>
-
-        <section v-if="utilityCommands.length" class="rounded-md border border-border/60 bg-card">
-          <h3 class="border-b border-border/60 px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {{ $t("extensions.detail.utilityCommandsTitle", { count: utilityCommands.length }) }}
-          </h3>
-          <ul class="divide-y divide-border/60">
-            <li v-for="cmd in utilityCommands" :key="cmd.name" class="px-4 py-2.5">
-              <code class="font-mono text-sm text-foreground">/{{ cmd.name }}</code>
-              <p v-if="cmd.description" class="mt-1 text-xs text-muted-foreground">
-                {{ cmd.description }}
               </p>
             </li>
           </ul>
