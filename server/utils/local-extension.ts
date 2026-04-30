@@ -23,6 +23,8 @@ export interface ExtensionCommandEntry {
   file?: string;
   description?: string;
   aliases?: string[];
+  /** When true: available as a slash command but excluded from the workflow step list. */
+  hidden?: boolean;
 }
 
 export interface ExtensionHookEntry {
@@ -98,7 +100,8 @@ export async function readLocalManifest(extensionRoot: string): Promise<ParsedMa
       name: typeof c.name === "string" ? c.name : "",
       file: typeof c.file === "string" ? c.file : undefined,
       description: typeof c.description === "string" ? c.description : undefined,
-      aliases: Array.isArray(c.aliases) ? (c.aliases as unknown[]).map(String) : undefined
+      aliases: Array.isArray(c.aliases) ? (c.aliases as unknown[]).map(String) : undefined,
+      hidden: c.hidden === true ? true : undefined
     }))
     .filter((c) => c.name);
 
