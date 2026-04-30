@@ -1,7 +1,8 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { projectCwd, loadEventStore, dataDir, extensionsDir } from "./specops-stores";
+import { projectCwd, loadEventStore } from "./specops-stores";
+import { dataDir, extensionsDir } from "./data-dirs";
 import { getAppConfigModule } from "./app-config";
 
 export interface ExtensionInstallRecord {

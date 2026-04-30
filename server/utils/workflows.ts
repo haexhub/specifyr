@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { dataDir } from "./specops-stores";
+import { dataDir } from "./data-dirs";
 import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "./workflow-discovery";
 
 // Only spec-kit is a built-in workflow. Every other workflow comes from a project-installed

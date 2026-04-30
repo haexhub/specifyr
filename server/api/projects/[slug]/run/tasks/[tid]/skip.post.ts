@@ -1,5 +1,6 @@
 import { getRunStoreModule, getActiveScheduler } from "#su/run-manager";
-import { loadEventStore, dataDir } from "#su/specops-stores";
+import { dataDir } from "#su/data-dirs";
+import { loadEventStore } from "#su/specops-stores";
 
 /**
  * Marks a task as `skipped`. Downstream tasks that depend on it stay blocked —

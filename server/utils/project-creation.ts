@@ -1,7 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { installExtensionsInProject } from "./extension-install";
-import { dataDir, projectsDir } from "./specops-stores";
+import { dataDir, projectsDir } from "./data-dirs";
 
 async function importModule<T = Record<string, unknown>>(relativePath: string): Promise<T> {
   const moduleUrl = pathToFileURL(path.join(process.cwd(), relativePath)).href;

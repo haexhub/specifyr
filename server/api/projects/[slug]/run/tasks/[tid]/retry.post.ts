@@ -1,5 +1,6 @@
 import { getRunStoreModule, getActiveScheduler } from "#su/run-manager";
-import { loadEventStore, dataDir } from "#su/specops-stores";
+import { dataDir } from "#su/data-dirs";
+import { loadEventStore } from "#su/specops-stores";
 
 /**
  * Resets a task's status to `pending` so the next run-start picks it up again.

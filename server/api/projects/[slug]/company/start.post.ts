@@ -21,11 +21,11 @@
  */
 
 import fs from "node:fs/promises";
+import { dataDir } from "#su/data-dirs";
 import {
   projectCwd,
   projectHostCwd,
   assertProjectExists,
-  dataDir,
 } from "#su/specops-stores";
 import {
   getCompanyRuntimeModule,

@@ -1,8 +1,8 @@
+import { dataDir } from "#su/data-dirs";
 import {
   projectCwd,
   assertProjectExists,
   loadEventStore,
-  dataDir
 } from "#su/specops-stores";
 import {
   getSchedulerModule,

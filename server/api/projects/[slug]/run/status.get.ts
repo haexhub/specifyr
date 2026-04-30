@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { getActiveScheduler } from "#su/run-manager";
-import { dataDir } from "#su/specops-stores";
+import { dataDir } from "#su/data-dirs";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

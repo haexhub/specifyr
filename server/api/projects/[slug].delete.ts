@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { dataDir, projectsDir } from "#su/specops-stores";
+import { dataDir, projectsDir } from "#su/data-dirs";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
