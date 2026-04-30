@@ -11,7 +11,7 @@
  *   { agents: [{ role, capabilities, resources, tools, skills, binaries }, ...] }
  */
 
-import { requireRuntimeAuth } from "../../../utils/mcp-auth";
+import { requireRuntimeAuth } from "#su/mcp-auth";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

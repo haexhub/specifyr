@@ -1,4 +1,4 @@
-import { createOrchestrator } from "../utils/orchestrator";
+import { createOrchestrator } from "#su/orchestrator";
 
 export default defineEventHandler(async () => {
   const orchestrator = await createOrchestrator();

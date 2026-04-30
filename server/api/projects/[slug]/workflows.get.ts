@@ -1,5 +1,5 @@
-import { listProjectWorkflows } from "../../../utils/workflow-discovery";
-import { assertProjectExists } from "../../../utils/specops-stores";
+import { listProjectWorkflows } from "#su/workflow-discovery";
+import { assertProjectExists } from "#su/specops-stores";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

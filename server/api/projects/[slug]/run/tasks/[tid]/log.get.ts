@@ -1,4 +1,4 @@
-import { getRunStoreModule } from "../../../../../../utils/run-manager";
+import { getRunStoreModule } from "#su/run-manager";
 import { dataDir } from "#su/specops-stores";
 
 export default defineEventHandler(async (event) => {

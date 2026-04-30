@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { getActiveScheduler } from "../../../../utils/run-manager";
+import { getActiveScheduler } from "#su/run-manager";
 import { dataDir } from "#su/specops-stores";
 
 export default defineEventHandler(async (event) => {

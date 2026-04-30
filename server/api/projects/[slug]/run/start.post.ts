@@ -3,7 +3,7 @@ import {
   assertProjectExists,
   loadEventStore,
   dataDir
-} from "../../../../utils/specops-stores";
+} from "#su/specops-stores";
 import {
   getSchedulerModule,
   getTaskGraphModule,
@@ -11,7 +11,7 @@ import {
   getActiveScheduler,
   registerScheduler,
   deregisterScheduler
-} from "../../../../utils/run-manager";
+} from "#su/run-manager";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

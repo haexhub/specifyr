@@ -16,7 +16,7 @@
  * proper auth before opening the host port.
  */
 
-import { findRuntimeByApprovalId } from "../../../utils/company-manager";
+import { findRuntimeByApprovalId } from "#su/company-manager";
 
 const VALID_DECISIONS = new Set(["approved", "denied", "escalated"]);
 

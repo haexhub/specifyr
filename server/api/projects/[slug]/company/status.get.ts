@@ -10,7 +10,7 @@
  * that need authoritative liveness should treat 404 differently from idle.
  */
 
-import { getActiveCompany } from "../../../../utils/company-manager";
+import { getActiveCompany } from "#su/company-manager";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

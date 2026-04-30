@@ -1,4 +1,4 @@
-import { getAppConfigModule } from "../../utils/app-config";
+import { getAppConfigModule } from "#su/app-config";
 
 export default defineEventHandler(async () => {
   const { loadAppConfig } = await getAppConfigModule();

@@ -1,5 +1,5 @@
-import { loadStepStateStore } from "../../../utils/specops-stores";
-import { getProjectStepIds } from "../../../utils/workflows";
+import { loadStepStateStore } from "#su/specops-stores";
+import { getProjectStepIds } from "#su/workflows";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

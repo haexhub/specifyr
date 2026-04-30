@@ -1,5 +1,5 @@
 import path from "node:path";
-import { projectCwd, assertProjectExists } from "../../../utils/specops-stores";
+import { projectCwd, assertProjectExists } from "#su/specops-stores";
 
 /**
  * Server-Sent Events stream that emits whenever a file inside the project's

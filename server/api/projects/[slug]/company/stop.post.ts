@@ -14,7 +14,7 @@
 import {
   getActiveCompany,
   deregisterCompany,
-} from "../../../../utils/company-manager";
+} from "#su/company-manager";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

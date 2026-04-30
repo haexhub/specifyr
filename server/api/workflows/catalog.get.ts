@@ -1,7 +1,7 @@
-import { getExtensionCatalog } from "../../utils/extension-catalog";
-import { SPEC_KIT_WORKFLOW } from "../../utils/workflow-discovery";
-import { getAppConfigModule } from "../../utils/app-config";
-import { readLocalManifest } from "../../utils/local-extension";
+import { getExtensionCatalog } from "#su/extension-catalog";
+import { SPEC_KIT_WORKFLOW } from "#su/workflow-discovery";
+import { getAppConfigModule } from "#su/app-config";
+import { readLocalManifest } from "#su/local-extension";
 
 // Entries suitable for a pre-project workflow picker: spec-kit plus any extension
 // that self-declares the `workflow` tag. Step lists are intentionally not populated —

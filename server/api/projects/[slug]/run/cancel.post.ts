@@ -1,5 +1,5 @@
-import { getActiveScheduler } from "../../../../utils/run-manager";
-import { loadEventStore } from "../../../../utils/specops-stores";
+import { getActiveScheduler } from "#su/run-manager";
+import { loadEventStore } from "#su/specops-stores";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

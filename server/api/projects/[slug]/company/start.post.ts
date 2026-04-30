@@ -26,13 +26,13 @@ import {
   projectHostCwd,
   assertProjectExists,
   dataDir,
-} from "../../../../utils/specops-stores";
+} from "#su/specops-stores";
 import {
   getCompanyRuntimeModule,
   getDockerRunnerFactoryModule,
   getActiveCompany,
   registerCompany,
-} from "../../../../utils/company-manager";
+} from "#su/company-manager";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";

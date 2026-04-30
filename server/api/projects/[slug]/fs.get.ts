@@ -1,6 +1,6 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { projectCwd } from "../../../utils/specops-stores";
+import { projectCwd } from "#su/specops-stores";
 
 /**
  * Read a file or list a directory inside a project's working tree.
