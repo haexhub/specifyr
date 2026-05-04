@@ -1,5 +1,7 @@
 import { EventEmitter } from "node:events";
 
+const CONTEXT_MESSAGES_ON_RESET = 10;
+
 /**
  * Per-process singleton that owns the lifecycle of in-flight chat turns.
  *
@@ -127,14 +129,25 @@ export class TurnBroker {
           // sees a notice; Claude loses previous context but the turn completes normally.
           if (claudeSessionId && errors.some((e) => /no conversation found/i.test(String(e)))) {
             await this.sessionStore.setClaudeSessionId(slug, stepId, sid, null);
+
+            const recentMessages = await this.sessionStore.listMessages(slug, stepId, sid);
+            const contextMessages = recentMessages.slice(-CONTEXT_MESSAGES_ON_RESET);
+            let retryPrompt = prompt;
+            if (contextMessages.length > 0) {
+              const history = contextMessages
+                .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+                .join("\n\n");
+              retryPrompt = `[Vorheriger Gesprächsverlauf — Session nach Ablauf wiederhergestellt]\n\n${history}\n\n---\n\n${prompt}`;
+            }
+
             await append("session_reset", {
-              message: "Session abgelaufen — starte ohne vorherigen Kontext neu."
+              message: "Session abgelaufen — Kontext aus Verlauf wiederhergestellt."
             });
             assistantText = "";
             toolUseSinceLastText = false;
             toolUses.splice(0);
             activeRunner = this.runnerFactory({ cwd, onEvent });
-            result = await activeRunner.run({ prompt }); // retry without --resume
+            result = await activeRunner.run({ prompt: retryPrompt });
           }
         }
 
