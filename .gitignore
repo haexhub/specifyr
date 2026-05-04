@@ -32,3 +32,6 @@ docker-compose.override.yml
 
 # Temporary scratch directory
 tmp/
+
+# Playwright MCP browser cache
+.playwright-mcp/
