@@ -227,8 +227,7 @@
   },
 
   "stepSidebar": {
-    "steps": "Steps",
-    "locked": "Bitte zuerst Step {n} abschließen"
+    "steps": "Steps"
   },
 
   "localExtPicker": {
@@ -278,7 +277,6 @@
     "deleteMessage": "Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle SpecOps-Metadaten.",
     "deleteDetails": "Betroffen: projects/{slug}/ und .specops/{slug}/",
     "deleteConfirm": "Endgültig löschen",
-    "completeFirst": "Zuerst Step {n} abschließen",
     "eventsLabel": "Events gesammelt",
     "workflowChangeFailed": "Workflow-Wechsel fehlgeschlagen.",
     "deleteFailed": "Löschen fehlgeschlagen."
@@ -311,10 +309,8 @@
   "run": {
     "runStatus": "Run-Status",
     "notStarted": "Noch nicht gestartet.",
-    "implement": "Implement",
-    "stepLabel": "Step 5 von 5",
-    "locked": "Implement ist gesperrt",
-    "lockedDesc": "Schließe zuerst Step 4: {label} ab, bevor die Tasks ausgeführt werden können.",
+    "stepLabel": "Step {n} von {total}",
+    "prerequisiteWarning": "{label} wurde noch nicht abgeschlossen.",
     "switchTo": "Zu {label} wechseln",
     "startRun": "Run starten",
     "restart": "Erneut starten",
@@ -327,7 +323,20 @@
     "retryFailed": "Retry fehlgeschlagen.",
     "skipFailed": "Skip fehlgeschlagen.",
     "unknownError": "Unbekannter Fehler",
-    "tasksHeader": "Tasks"
+    "tasksHeader": "Tasks",
+    "buildingImages": "Agent-Images werden gebaut",
+    "imagePending": "ausstehend",
+    "companyAlreadyRunning": "Company läuft bereits – alle Agents sind aktiv.",
+    "viewRuntime": "Zur Runtime →"
+  },
+
+  "taskBoard": {
+    "title": "Agent Tasks",
+    "desc": "Geplante, aktive und abgeschlossene Tasks pro Agent · alle 3s aktualisiert",
+    "colAgent": "Agent",
+    "colPlanned": "Geplant",
+    "colActive": "Aktiv",
+    "colDone": "Erledigt"
   },
 
   "runtime": {
@@ -350,7 +359,37 @@
     "idlePre": "Die Company läuft gerade nicht. Starte sie über den",
     "idlePost": ", dann erscheinen hier Live-Status, Org-Chart und History.",
     "orgChartDescPre": "Hierarchie aus",
-    "orgChartDescMid": "· Workflow-Edges aus"
+    "orgChartDescMid": "· Workflow-Edges aus",
+    "startNow": "Company jetzt starten →",
+    "recentFailures": "Fehlgeschlagene Dispatches",
+    "dispatchBtn": "Task an CEO senden",
+    "dispatchTitle": "Task an CEO senden",
+    "dispatchGoalLabel": "Auftrag",
+    "dispatchGoalPlaceholder": "Was soll der CEO tun?",
+    "dispatchTitleLabel": "Titel (optional)",
+    "dispatchTitlePlaceholder": "Kurze Bezeichnung",
+    "dispatchSend": "Senden",
+    "dispatchCancel": "Abbrechen",
+    "dispatchSuccess": "Task in CEO-Queue eingereiht.",
+    "dispatchError": "Fehler beim Dispatch: {msg}",
+    "stopBtn": "Company stoppen",
+    "stopConfirm": "Company wirklich stoppen? Laufende Dispatches werden abgebrochen.",
+    "historyBtn": "Verlauf"
+  },
+
+  "history": {
+    "title": "Event-Verlauf",
+    "subtitle": "Alle Dispatch- und Runtime-Events der aktuellen Session — Filter zur Eingrenzung.",
+    "backToRuntime": "Zurück zur Runtime",
+    "filtersTitle": "Filter",
+    "filterType": "Typ",
+    "filterRole": "Rolle",
+    "filterLimit": "Max. Anzahl",
+    "filterAll": "Alle",
+    "refresh": "Aktualisieren",
+    "eventsTitle": "Events ({shown} / {total})",
+    "empty": "Keine Events für diese Filter.",
+    "showTranscript": "Transcript anzeigen"
   },
 
   "approvals": {

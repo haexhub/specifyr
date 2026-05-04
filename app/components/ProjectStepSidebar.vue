@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, AlertTriangle, Loader2 } from "lucide-vue-next";
+import { ArrowLeft, Check, AlertTriangle } from "lucide-vue-next";
 import { type StepId, type StepStatus } from "~/lib/steps";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import type { StepState } from "~/lib/types";
@@ -99,11 +99,6 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
                 v-if="stateFor(step.id)?.status === 'complete'"
                 class="size-3.5 text-emerald-600"
                 :title="$t('common.statusComplete')"
-              />
-              <Loader2
-                v-else-if="stateFor(step.id)?.status === 'in_progress'"
-                class="size-3.5 animate-spin text-primary"
-                :title="$t('common.statusInProgress')"
               />
               <AlertTriangle
                 v-else-if="stateFor(step.id)?.status === 'stale'"

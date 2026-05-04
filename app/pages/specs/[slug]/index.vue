@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, Trash2, Check, Lock, AlertTriangle, Loader2 } from "lucide-vue-next";
+import { ChevronRight, Trash2, Check, AlertTriangle, Loader2 } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -8,7 +8,7 @@ import ProjectShell from "~/components/ProjectShell.vue";
 import NotificationLogWidget from "~/components/NotificationLogWidget.vue";
 import NotificationDrawer from "~/components/NotificationDrawer.vue";
 import InstalledExtensionsWidget from "~/components/InstalledExtensionsWidget.vue";
-import { isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
+import { type StepId, type StepStatus } from "~/lib/steps";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 import type { StepState, NotificationEvent } from "~/lib/types";
 
@@ -68,10 +68,6 @@ const completionStats = computed(() => {
 function stepRoute(step: { id: string; isRun?: boolean }) {
   if (step.isRun) return `/specs/${slug.value}/run`;
   return `/specs/${slug.value}/steps/${step.id}`;
-}
-
-function stepUnlocked(id: StepId): boolean {
-  return isStepUnlocked(id, statusMap.value, workflowSteps.value);
 }
 
 function stepStatus(id: StepId): StepStatus | undefined {
@@ -197,54 +193,39 @@ async function deleteProject() {
             </p>
           </CardHeader>
           <CardContent class="space-y-2">
-            <template v-for="(step, index) in workflowSteps" :key="step.id">
-              <NuxtLink
-                v-if="stepUnlocked(step.id)"
-                :to="stepRoute(step)"
-                class="group flex items-start gap-3 rounded-md border border-border/60 bg-muted/20 p-3 transition hover:border-primary/40 hover:bg-muted/40"
-              >
-                <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                  {{ index + 1 }}
-                </span>
-                <div class="flex-1">
-                  <p class="text-sm font-medium">{{ step.label }}</p>
-                  <p class="text-xs text-muted-foreground">{{ step.summary }}</p>
-                </div>
-                <span class="flex shrink-0 items-center gap-2">
-                  <Check
-                    v-if="stepStatus(step.id) === 'complete'"
-                    class="size-4 text-emerald-600"
-                    :title="$t('common.statusComplete')"
-                  />
-                  <Loader2
-                    v-else-if="stepStatus(step.id) === 'in_progress'"
-                    class="size-4 animate-spin text-primary"
-                    :title="$t('common.statusInProgress')"
-                  />
-                  <AlertTriangle
-                    v-else-if="stepStatus(step.id) === 'stale'"
-                    class="size-4 text-amber-500"
-                    :title="$t('common.statusStale')"
-                  />
-                  <Badge variant="outline">{{ step.command }}</Badge>
-                  <ChevronRight class="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
-                </span>
-              </NuxtLink>
-              <div
-                v-else
-                class="flex cursor-not-allowed items-start gap-3 rounded-md border border-dashed border-border/60 bg-muted/10 p-3 text-muted-foreground/70"
-                :title="$t('stepSidebar.locked', { n: index })"
-              >
-                <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-muted/60 text-xs font-medium">
-                  {{ index + 1 }}
-                </span>
-                <div class="flex-1">
-                  <p class="text-sm font-medium">{{ step.label }}</p>
-                  <p class="text-xs">{{ step.summary }}</p>
-                </div>
-                <Lock class="mt-0.5 size-4 shrink-0" />
+            <NuxtLink
+              v-for="(step, index) in workflowSteps"
+              :key="step.id"
+              :to="stepRoute(step)"
+              class="group flex items-start gap-3 rounded-md border border-border/60 bg-muted/20 p-3 transition hover:border-primary/40 hover:bg-muted/40"
+            >
+              <span class="inline-flex size-6 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                {{ index + 1 }}
+              </span>
+              <div class="flex-1">
+                <p class="text-sm font-medium">{{ step.label }}</p>
+                <p class="text-xs text-muted-foreground">{{ step.summary }}</p>
               </div>
-            </template>
+              <span class="flex shrink-0 items-center gap-2">
+                <Check
+                  v-if="stepStatus(step.id) === 'complete'"
+                  class="size-4 text-emerald-600"
+                  :title="$t('common.statusComplete')"
+                />
+                <Loader2
+                  v-else-if="stepStatus(step.id) === 'in_progress'"
+                  class="size-4 animate-spin text-primary"
+                  :title="$t('common.statusInProgress')"
+                />
+                <AlertTriangle
+                  v-else-if="stepStatus(step.id) === 'stale'"
+                  class="size-4 text-amber-500"
+                  :title="$t('common.statusStale')"
+                />
+                <Badge variant="outline">{{ step.command }}</Badge>
+                <ChevronRight class="size-4 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-foreground" />
+              </span>
+            </NuxtLink>
           </CardContent>
         </Card>
 
