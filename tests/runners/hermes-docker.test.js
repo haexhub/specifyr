@@ -143,6 +143,54 @@ test("HERMES_HOME profile mount + env var are always set", async () => {
   assert.ok(calls[0].args.includes("HERMES_HOME=/profile"));
 });
 
+test("compose project label derives from runtimeContext.slug when not injected", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+  const runner = new HermesDockerRunner({
+    ...baseRunnerOptions(),
+    commandRunner: fakeCommandRunner,
+  });
+  await runner.execute(fakeWorkItem(), fakeContext());
+
+  assert.ok(
+    calls[0].args.includes("com.docker.compose.project=test-slug"),
+    "expected compose project label using runtimeContext.slug"
+  );
+  assert.ok(
+    calls[0].args.includes("com.docker.compose.service=ceo"),
+    "expected compose service label using agent.role"
+  );
+});
+
+test("compose project label sanitises slug like the container name does", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+  const runner = new HermesDockerRunner({
+    ...baseRunnerOptions(),
+    commandRunner: fakeCommandRunner,
+  });
+  const ctx = fakeContext();
+  ctx.slug = "weird/slug:with*chars";
+  await runner.execute(fakeWorkItem(), ctx);
+
+  assert.ok(
+    calls[0].args.includes("com.docker.compose.project=weird_slug_with_chars"),
+    "compose project must use the same sanitiser as container names"
+  );
+});
+
+test("explicit composeProject from constructor wins over runtimeContext.slug", async () => {
+  const { fakeCommandRunner, calls } = makeFakeRunner();
+  const runner = new HermesDockerRunner({
+    ...baseRunnerOptions(),
+    composeProject: "injected-slug",
+    composeService: "injected-svc",
+    commandRunner: fakeCommandRunner,
+  });
+  await runner.execute(fakeWorkItem(), fakeContext());
+
+  assert.ok(calls[0].args.includes("com.docker.compose.project=injected-slug"));
+  assert.ok(calls[0].args.includes("com.docker.compose.service=injected-svc"));
+});
+
 test("container name derives from slug + role, sanitised", async () => {
   const { fakeCommandRunner, calls } = makeFakeRunner();
   const runner = new HermesDockerRunner({
@@ -157,7 +205,7 @@ test("container name derives from slug + role, sanitised", async () => {
 
   const i = calls[0].args.indexOf("--name");
   assert.ok(i >= 0);
-  assert.equal(calls[0].args[i + 1], "hermes-agent_weird_slug_with_chars_ceo");
+  assert.match(calls[0].args[i + 1], /^hermes-agent_weird_slug_with_chars_ceo_[0-9a-z]+$/);
 });
 
 test("prompt is passed as `hermes chat -q <prompt>` arg, not stdin", async () => {
@@ -179,7 +227,7 @@ test("prompt is passed as `hermes chat -q <prompt>` arg, not stdin", async () =>
   assert.match(prompt, /Pattern: test-pattern/);
 });
 
-test("hermes chat invocation uses --yolo, --ignore-user-config, --max-turns", async () => {
+test("hermes chat invocation uses --yolo, --max-turns; does NOT use --ignore-user-config", async () => {
   const { fakeCommandRunner, calls } = makeFakeRunner();
   const runner = new HermesDockerRunner({
     ...baseRunnerOptions(),
@@ -189,7 +237,9 @@ test("hermes chat invocation uses --yolo, --ignore-user-config, --max-turns", as
 
   const args = calls[0].args;
   assert.ok(args.includes("--yolo"));
-  assert.ok(args.includes("--ignore-user-config"));
+  // --ignore-user-config would suppress $HERMES_HOME/config.yaml (the pre-seeded profile),
+  // causing the first-run wizard to fire in non-interactive containers.
+  assert.ok(!args.includes("--ignore-user-config"));
   const maxIdx = args.indexOf("--max-turns");
   assert.ok(maxIdx >= 0);
   assert.match(args[maxIdx + 1], /^\d+$/);
@@ -417,6 +467,25 @@ test("dockerRunnerFactory: profileDir is derived from projectRoot + role", () =>
   const factory = dockerRunnerFactory({ projectRoot: "/home/dev/proj" });
   const runner = factory({ role: "dev", capabilities: [] });
   assert.equal(runner.profileDir, "/home/dev/proj/.hermes/dev");
+});
+
+test("dockerRunnerFactory: composeProject is set from runtimeMeta.slug, composeService from agent.role", () => {
+  const factory = dockerRunnerFactory({ projectRoot: "/p" });
+  const runner = factory(
+    { role: "ceo", capabilities: ["shell:execute"] },
+    { slug: "my-project" }
+  );
+  assert.equal(runner.composeProject, "my-project");
+  assert.equal(runner.composeService, "ceo");
+});
+
+test("dockerRunnerFactory: composeProject sanitises slug (matches persistent-container name rules)", () => {
+  const factory = dockerRunnerFactory({ projectRoot: "/p" });
+  const runner = factory(
+    { role: "ceo", capabilities: ["shell:execute"] },
+    { slug: "weird/slug:with*chars" }
+  );
+  assert.equal(runner.composeProject, "weird_slug_with_chars");
 });
 
 test("dockerRunnerFactory: image, network propagate to runner", () => {

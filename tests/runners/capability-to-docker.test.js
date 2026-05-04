@@ -33,6 +33,27 @@ test("HERMES_HOME profile volume is always mounted rw + env set", () => {
   assert.ok(e >= 0, "HERMES_HOME=/profile must be set");
 });
 
+test("composeProject sets compose labels so containers group as a stack in Docker Desktop", () => {
+  const input = baseInput();
+  input.composeProject = "my-slug";
+  input.composeService = "ceo";
+  const args = capabilityFlags(input);
+
+  assert.ok(args.includes("com.docker.compose.project=my-slug"),
+    "expected com.docker.compose.project label");
+  assert.ok(args.includes("com.docker.compose.service=ceo"),
+    "expected com.docker.compose.service label");
+  assert.ok(args.includes("com.docker.compose.oneoff=False"),
+    "expected oneoff=False so Compose treats agents as a long-lived stack");
+});
+
+test("composeProject omitted → no compose.* labels emitted (back-compat)", () => {
+  const args = capabilityFlags(baseInput());
+  const s = flagsAsString(args);
+  assert.ok(!/com\.docker\.compose/.test(s),
+    "no compose labels should be set when composeProject is unset");
+});
+
 test("filesystem:read → project mount in :ro mode", () => {
   const input = baseInput();
   input.agent.capabilities = ["filesystem:read"];

@@ -59,6 +59,10 @@ const BASELINE_FLAGS = Object.freeze([
   "/tmp:rw,size=512m,mode=1777",
 ]);
 
+const BASELINE_FLAGS_PERSISTENT = Object.freeze(
+  BASELINE_FLAGS.filter((f) => f !== "--rm")
+);
+
 /**
  * @param {object} input
  * @param {{role: string, capabilities: string[], tools?: {binaries?: string[]}}} input.agent
@@ -74,6 +78,19 @@ const BASELINE_FLAGS = Object.freeze([
  * @param {string} [input.image]       container image tag (default: hermes-agent:dev)
  * @param {string} [input.network]     compose network name agents join (e.g. "companies")
  * @param {string} [input.containerName]  optional --name value
+ * @param {string} [input.composeProject] When set, emits Docker Compose labels
+ *                                     (com.docker.compose.project / .service /
+ *                                     .oneoff) so all agents spawned for one
+ *                                     haex-corp project appear as a single
+ *                                     stack in Docker Desktop and `docker
+ *                                     compose ls`. The value should be the
+ *                                     project slug (already sanitised by the
+ *                                     caller). Compose treats labelled
+ *                                     containers as part of the project even
+ *                                     without a compose.yaml on disk.
+ * @param {string} [input.composeService] Service name within the stack (the
+ *                                     agent role). Only used when
+ *                                     composeProject is set.
  * @param {string} [input.userId]      `--user UID[:GID]` value. Forces the
  *                                     container to run as that UID instead
  *                                     of root. Critical when --cap-drop=ALL
@@ -85,6 +102,11 @@ const BASELINE_FLAGS = Object.freeze([
  *                                     Caller passes `${uid}:${gid}` from
  *                                     process.getuid()/getgid() in the
  *                                     common case.
+ * @param {boolean} [input.remove]     Include `--rm` in baseline flags.
+ *                                     Set to false for persistent containers
+ *                                     that must survive beyond a single
+ *                                     command (managed via docker stop/rm).
+ *                                     Defaults to true.
  * @returns {string[]}                 docker run argv (after `docker run`, before image tag)
  */
 export function capabilityFlags({
@@ -96,7 +118,10 @@ export function capabilityFlags({
   image = "hermes-agent:dev",
   network,
   containerName,
+  composeProject,
+  composeService,
   userId,
+  remove = true,
 }) {
   if (!agent || !Array.isArray(agent.capabilities)) {
     throw new Error("capabilityFlags: agent.capabilities (string[]) is required");
@@ -111,10 +136,26 @@ export function capabilityFlags({
     );
   }
 
-  const flags = [...BASELINE_FLAGS];
+  const flags = [...(remove ? BASELINE_FLAGS : BASELINE_FLAGS_PERSISTENT)];
 
   if (containerName) flags.push("--name", containerName);
   if (userId) flags.push("--user", String(userId));
+
+  // Compose labels: when composeProject is set, every container we spawn for
+  // a haex-corp project carries the standard `com.docker.compose.*` labels.
+  // Docker Desktop and `docker compose ls` group containers by these labels,
+  // so the agents for one project show up as one stack — no compose.yaml on
+  // disk required. The sanitised slug becomes the project name; the role
+  // becomes the service name. Setting `oneoff=False` keeps Compose treating
+  // them as long-lived service replicas (matters for the persistent runner
+  // and for `docker compose down -p <slug>` semantics).
+  if (composeProject) {
+    flags.push("--label", `com.docker.compose.project=${composeProject}`);
+    if (composeService) {
+      flags.push("--label", `com.docker.compose.service=${composeService}`);
+    }
+    flags.push("--label", "com.docker.compose.oneoff=False");
+  }
 
   // Resource limits from agent.resources. Both fields are optional and
   // independently emitted. Format-validated here so config drift surfaces
@@ -165,8 +206,12 @@ export function capabilityFlags({
   }
   // else: no project mount. Agent has profile-only access.
 
-  // Network: default-deny.
-  if (caps.has("network:http")) {
+  // Network: default-deny. Any `network:*` capability grants outbound access
+  // (`network:http`, `network:fetch`, `network:any`, etc. all map to Docker
+  // network access — the capability name describes the agent's semantic
+  // intent; the Docker layer enforces at the network level, not the protocol).
+  const hasNetwork = [...caps].some((c) => c.startsWith("network:"));
+  if (hasNetwork) {
     if (network) {
       flags.push("--network", network);
     }
