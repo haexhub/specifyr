@@ -23,12 +23,17 @@ export default defineNuxtConfig({
     componentDir: "./app/components/generated"
   },
   runtimeConfig: {
+    companyClaudeProxyUrl: process.env.COMPANY_CLAUDE_PROXY_URL ?? "",
+    companyOpsUrlBase: process.env.COMPANY_OPS_URL_BASE ?? "http://haex-corp:3000/mcp",
+    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
+    anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL ?? "",
     public: {
       appName: "speculoss"
     }
   },
   i18n: {
     locales: [{ code: "de", language: "de-DE", file: "de.json" }],
-    defaultLocale: "de"
+    defaultLocale: "de",
+    lazy: false
   }
 });

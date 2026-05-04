@@ -5,10 +5,8 @@
  * directory by slug, then instantiates CompanyRuntime with the docker runner
  * factory so each agent runs in its own hermes-agent container.
  *
- * Returns once `runtime.start()` has finished provisioning agent profile
- * dirs and starting the queue poller — does NOT wait for any agent to
- * dispatch a task. The caller (UI) gets the agent roster back and can
- * monitor activity via subsequent endpoints (deferred).
+ * Returns SSE events while building agent images and starting the runtime.
+ * Events: status, building_image, image_ready, started, error, done.
  *
  * Lifecycle: one CompanyRuntime per slug for the process lifetime. Calling
  * start twice on the same slug returns 409. Stop endpoint not yet
@@ -33,6 +31,9 @@ import {
   getAgentImageBuilderModule,
   getActiveCompany,
   registerCompany,
+  isCompanyStarting,
+  markCompanyStarting,
+  clearCompanyStarting,
 } from "@su/company-manager";
 import { getProjectSecrets } from "@su/secrets-store";
 import path from "node:path";
@@ -84,194 +85,194 @@ async function buildApprovalTransport(): Promise<NotifyTransport | null> {
   return new mod.CompositeTransport(transports);
 }
 
-// Pre-load the company spec so we know which agent roles exist. The
-// runtime needs an explicit `queueDirs: { [role]: dir }` map at
-// construction time, and the only source of truth for "which roles" is
-// the org spec on disk. Re-loading inside runtime.start() is idempotent
-// (pure fs reads), so the duplicate cost is negligible.
-async function loadAgentRoles(orgDir: string): Promise<string[]> {
-  const url = pathToFileURL(path.join(process.cwd(), "src/agents/spec-loader.js")).href;
-  const mod = (await import(url)) as {
-    loadAgents: (
-      dir: string,
-      opts?: { includeRetired?: boolean }
-    ) => Promise<Map<string, { role: string }>>;
-  };
-  const agents = await mod.loadAgents(orgDir);
-  return [...agents.keys()];
-}
-
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
+  const config = useRuntimeConfig(event);
   if (!slug) {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
   await assertProjectExists(slug);
 
-  if (getActiveCompany(slug)) {
+  if (getActiveCompany(slug) || isCompanyStarting(slug)) {
     throw createError({
       statusCode: 409,
       statusMessage: `Company runtime already running for project '${slug}'`,
     });
   }
 
-  // Container-side paths: used by Node code in haex-corp itself (mkdir,
-  // readFile, watchers). When running natively on the host these equal the
-  // host paths.
-  const pCwd = projectCwd(slug);
-  const orgDir = path.join(pCwd, ".specify", "org");
-  const specopsBase = path.join(dataDir(), ".specops", slug);
-  const catalogDir = path.join(process.cwd(), "catalog");
-
-  // Host-side path: passed to dockerRunnerFactory because the Docker daemon
-  // resolves bind-mount sources against the HOST filesystem, not against
-  // haex-corp's container view. See specops-stores.ts:hostProjectRoot.
-  const pHostCwd = projectHostCwd(slug);
-
-  const { CompanyRuntime } = await getCompanyRuntimeModule();
-  const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
-  const { buildAgentImage } = await getAgentImageBuilderModule();
-
-  // Load agent specs to derive roles (queue dirs) and per-agent nix_packages.
-  const agentSpecLoaderUrl = pathToFileURL(
-    path.join(process.cwd(), "src/agents/spec-loader.js")
-  ).href;
-  const agentSpecMod = (await import(agentSpecLoaderUrl)) as {
-    loadAgents: (dir: string) => Promise<Map<string, { role: string; nix_packages?: string[] }>>;
+  const stream = createEventStream(event);
+  const push = async (name: string, payload: unknown) => {
+    try { await stream.push({ event: name, data: JSON.stringify(payload) }); } catch { /* closed */ }
   };
 
-  let agentMap: Map<string, { role: string; nix_packages?: string[] }>;
-  let roles: string[];
-  try {
-    agentMap = await agentSpecMod.loadAgents(orgDir);
-    roles = [...agentMap.keys()];
-  } catch (err) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: err instanceof Error ? err.message : "Failed to load agent specs",
-    });
-  }
-  const queueDirs: Record<string, string> = {};
-  for (const role of roles) {
-    queueDirs[role] = path.join(specopsBase, `queue-${role}`);
-  }
+  markCompanyStarting(slug);
+  (async () => {
+    try {
+      const pCwd = projectCwd(slug);
+      const orgDir = path.join(pCwd, ".specify", "org");
+      const specopsBase = path.join(dataDir(), ".specops", slug);
+      const catalogDir = path.join(process.cwd(), "catalog");
+      const pHostCwd = projectHostCwd(slug);
 
-  // Build (or reuse) a Nix-based Docker image for each agent from its
-  // declared nix_packages. Agents with identical package sets share the same
-  // cached image via hash-based deduplication in the builder.
-  const agentImages = new Map<string, string>();
-  try {
-    for (const [role, agent] of agentMap) {
-      const nix_packages = agent.nix_packages ?? [];
-      const image = await buildAgentImage({ nix_packages, projectRoot: process.cwd() });
-      agentImages.set(role, image);
-    }
-  } catch (err) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: err instanceof Error ? err.message : "Failed to build agent image",
-    });
-  }
+      const { CompanyRuntime } = await getCompanyRuntimeModule();
+      const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
+      const { buildAgentImage } = await getAgentImageBuilderModule();
 
-  // Generate the per-runtime ops token here so the same value flows into
-  // both the runtime (server-side validation) AND the secretsResolver
-  // closure (worker-side env injection). Constructed before the runtime
-  // because the resolver needs it at runner-build time.
-  const opsToken = randomBytes(32).toString("hex");
-  // URL workers use to call back into the company-ops MCP server.
-  // Default targets the compose service name; override via env for
-  // bare-metal/native runs or alternate routing.
-  const opsUrl =
-    process.env.COMPANY_OPS_URL_BASE ?? "http://haex-corp:3000/mcp";
-
-  // Load project-level secrets (encrypted at rest, set via UI).
-  const projectSecrets = await getProjectSecrets(slug);
-
-  // Default secrets forwarding: any agent with `secrets:read_env` gets
-  // ANTHROPIC_API_KEY (LLM auth) plus COMPANY_OPS_TOKEN/URL (callback
-  // channel). capability-to-docker.js hard-fails if secrets are passed
-  // without the cap, so we only emit when the cap is granted.
-  //
-  // ANTHROPIC_BASE_URL routes Anthropic-API traffic through the
-  // haex-claude-proxy sidecar (companies network) so workers can use a
-  // Claude Pro/Max subscription via OAuth instead of paid API credits.
-  // Falls back to the default Anthropic endpoint when the env is unset.
-  const runnerFactory = dockerRunnerFactory({
-    projectRoot: pHostCwd,
-    imageForRole: (role) => agentImages.get(role) ?? "hermes-agent:dev",
-    network: "companies",
-    secretsResolver: (agent: any) => {
-      if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
-      const env: Record<string, string> = {
-        ...projectSecrets,
-        COMPANY_OPS_TOKEN: opsToken,
-        COMPANY_OPS_URL: `${opsUrl}/${slug}`,
-        ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? "http://haex-claude-proxy:8080",
+      const agentSpecLoaderUrl = pathToFileURL(path.join(process.cwd(), "src/agents/spec-loader.js")).href;
+      const agentSpecMod = (await import(agentSpecLoaderUrl)) as {
+        loadAgents: (dir: string) => Promise<Map<string, { role: string; nix_packages?: string[] }>>;
       };
-      // Hermes refuses to start without ANTHROPIC_API_KEY in env even when
-      // an alternate base URL handles auth itself (the proxy ignores inbound
-      // auth headers). Pass a sentinel so the SDK is happy.
-      env.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY ?? "proxy-no-auth-needed";
-      return env;
-    },
-    // image resolved via factory: explicit > HERMES_AGENT_IMAGE > hermes-agent:dev
-  });
 
-  // Build the notification transport (optional — falls back to no-op if no
-  // channel env vars are set). The ApprovalService takes ownership; agents
-  // declare which channel they want via `approval.notify_via` in their spec.
-  const transport = await buildApprovalTransport();
-  let approvalService: unknown = undefined;
-  if (transport) {
-    const url = pathToFileURL(
-      path.join(process.cwd(), "src/core/capability-approval-service.js"),
-    ).href;
-    const mod = (await import(url)) as ApprovalServiceModule;
-    approvalService = new mod.CapabilityApprovalService({ transport });
-  }
+      await push("status", { message: "Loading agent specs…" });
+      let agentMap: Map<string, { role: string; nix_packages?: string[] }>;
+      try {
+        agentMap = await agentSpecMod.loadAgents(orgDir);
+      } catch (err) {
+        await push("error", { message: err instanceof Error ? err.message : "Failed to load agent specs" });
+        return;
+      }
 
-  const runtime = new CompanyRuntime({
-    projectRoot: pCwd,
-    orgDir,
-    queueDirs,
-    catalogDir,
-    slug,
-    opsToken,
-    runnerFactory,
-    approvalService,
-  });
+      const roles = [...agentMap.keys()];
+      await push("roles_loaded", { roles });
 
-  try {
-    await runtime.start();
-  } catch (err) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: err instanceof Error ? err.message : "Company runtime failed to start",
-    });
-  }
+      // Purge stale auth.json for every agent. hermes caches the resolved
+      // credential (including the token value and auth_type) in auth.json.
+      // Without deletion, a prior run's cached OAuth token overrides the
+      // ANTHROPIC_API_KEY injected via -e flags — even if the key changed.
+      for (const role of roles) {
+        const authJsonPath = path.join(pHostCwd, ".hermes", role, "auth.json");
+        try { await fs.unlink(authJsonPath); } catch { /* not present */ }
+      }
 
-  registerCompany(slug, runtime);
+      const queueDirs: Record<string, string> = {};
+      for (const role of roles) {
+        queueDirs[role] = path.join(specopsBase, `queue-${role}`);
+      }
 
-  const agents = runtime.listAgents();
+      const agentImages = new Map<string, string>();
+      for (const [role, agent] of agentMap) {
+        const nix_packages = agent.nix_packages ?? [];
+        await push("building_image", { role, packages: nix_packages });
 
-  // Write the sentinel file so the workflow UI can auto-complete the start step.
-  const sentinelPath = path.join(pCwd, ".specify", "org", "company-started.md");
-  const timestamp = new Date().toISOString();
-  const agentList = agents.map((a) => `- ${a.role}`).join("\n");
-  await fs.writeFile(
-    sentinelPath,
-    `---\nstatus: started\ntimestamp: ${timestamp}\nagents: ${agents.length}\n---\n\n✓ Company '${slug}' is live.\n\n## Agents\n\n${agentList}\n`,
-    "utf8"
-  );
+        // Firefox closes idle fetch SSE streams aggressively — send an immediate
+        // heartbeat then repeat every 2s to keep the connection alive during builds.
+        await push("heartbeat", { role });
+        const heartbeat = setInterval(() => { push("heartbeat", { role }); }, 2_000);
+        try {
+          const image = await buildAgentImage({
+            nix_packages,
+            // Docker bind mounts are resolved by the HOST daemon; use the host-side
+            // equivalent of process.cwd() when speculoss runs in a container.
+            projectRoot: process.env.SPECULOSS_HOST_PROJECT_ROOT || process.cwd(),
+            onLog: (line: string) => { push("build_log", { role, line }); },
+          });
+          agentImages.set(role, image);
+          await push("image_ready", { role, tag: image });
+        } catch (err) {
+          await push("error", { message: err instanceof Error ? err.message : `Image build failed for '${role}'` });
+          return;
+        } finally {
+          clearInterval(heartbeat);
+        }
+      }
 
-  return {
-    status: "started",
-    slug,
-    agents: agents.map((a) => ({
-      role: a.role,
-      capabilities: a.capabilities,
-      resources: a.resources ?? null,
-    })),
-  };
+      await push("status", { message: "Starting company runtime…" });
+
+      const opsToken = randomBytes(32).toString("hex");
+      const opsUrl = config.companyOpsUrlBase;
+      const projectSecrets = await getProjectSecrets(slug);
+
+      const runnerFactory = dockerRunnerFactory({
+        projectRoot: pHostCwd,
+        imageForRole: (role) => {
+          const img = agentImages.get(role);
+          if (!img) throw new Error(`No image built for agent role '${role}'`);
+          return img;
+        },
+        network: "companies",
+        secretsResolver: (agent: any) => {
+          if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
+          const env: Record<string, string> = {
+            COMPANY_OPS_TOKEN: opsToken,
+            COMPANY_OPS_URL: `${opsUrl}/${slug}`,
+          };
+
+          const proxyUrl = config.companyClaudeProxyUrl || undefined;
+          if (proxyUrl) {
+            // Route through the local claude-proxy container which forwards requests
+            // to api.anthropic.com using the Claude CLI OAuth credentials.
+            env.ANTHROPIC_BASE_URL = proxyUrl;
+            // Must use the sk-ant-api03- prefix so hermes classifies this as an
+            // API key (not OAuth/setup-token). The api03 path uses ANTHROPIC_BASE_URL
+            // directly (→ /v1/messages at the proxy). The sk-ant-proxy- prefix
+            // triggers the OAuth exchange path which ignores ANTHROPIC_BASE_URL
+            // and falls back to an OpenAI-compat client with no key → 401.
+            // The proxy ignores the key value; any api03-prefixed string works.
+            env.ANTHROPIC_API_KEY = "sk-ant-api03-proxy0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000AA";
+          } else {
+            // Direct API: runtimeConfig takes priority, then project secrets.
+            const apiKey = config.anthropicApiKey || projectSecrets["ANTHROPIC_API_KEY"];
+            if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
+            if (config.anthropicBaseUrl) env.ANTHROPIC_BASE_URL = config.anthropicBaseUrl;
+          }
+
+          // Pass through any other non-ANTHROPIC project secrets.
+          for (const [k, v] of Object.entries(projectSecrets)) {
+            if (v && !k.startsWith("ANTHROPIC_")) env[k] = v;
+          }
+          return env;
+        },
+      });
+
+      const transport = await buildApprovalTransport();
+      let approvalService: unknown = undefined;
+      if (transport) {
+        const url = pathToFileURL(path.join(process.cwd(), "src/core/capability-approval-service.js")).href;
+        const mod = (await import(url)) as ApprovalServiceModule;
+        approvalService = new mod.CapabilityApprovalService({ transport });
+      }
+
+      const runtime = new CompanyRuntime({
+        projectRoot: pCwd, hostProjectRoot: pHostCwd, orgDir, queueDirs, catalogDir, slug, opsToken, runnerFactory, approvalService,
+      });
+
+      try {
+        await runtime.start();
+      } catch (err) {
+        await push("error", { message: err instanceof Error ? err.message : "Company runtime failed to start" });
+        return;
+      }
+
+      registerCompany(slug, runtime);
+      const agents = runtime.listAgents();
+
+      const sentinelPath = path.join(pCwd, ".specify", "org", "company-started.md");
+      const agentList = agents.map((a: any) => `- ${a.role}`).join("\n");
+      await fs.writeFile(
+        sentinelPath,
+        `---\nstatus: started\ntimestamp: ${new Date().toISOString()}\nagents: ${agents.length}\n---\n\n✓ Company '${slug}' is live.\n\n## Agents\n\n${agentList}\n`,
+        "utf8"
+      );
+
+      await push("started", {
+        slug,
+        agents: agents.map((a: any) => ({
+          role: a.role,
+          capabilities: a.capabilities,
+          resources: a.resources ?? null,
+        })),
+      });
+    } catch (err) {
+      await push("error", { message: err instanceof Error ? err.message : "Unexpected error" });
+    } finally {
+      clearCompanyStarting(slug);
+      await push("done", {});
+      try { await stream.close(); } catch { /* already closed */ }
+    }
+  })();
+
+  stream.onClosed(() => { /* client disconnected — IIFE continues, push calls are no-ops */ });
+
+  return stream.send();
 });

@@ -96,6 +96,7 @@ interface CompanyRuntimeInstance {
 interface CompanyRuntimeModule {
   CompanyRuntime: new (opts: {
     projectRoot: string;
+    hostProjectRoot?: string;
     orgDir: string;
     queueDirs: Record<string, string>;
     catalogDir?: string;
@@ -143,13 +144,40 @@ export async function getAgentImageBuilderModule() {
   return loadEsm<AgentImageBuilderModule>("src/runners/agent-image-builder.js");
 }
 
-const registry = new Map<string, CompanyRuntimeInstance>();
+// globalThis persists across Nitro HMR reloads. A module-scoped Map would be
+// re-created on each reload while old pollers kept running — causing duplicate
+// company runtimes to dispatch the same task twice (one container per runtime).
+declare global {
+  var __companyRegistry: Map<string, CompanyRuntimeInstance> | undefined;
+  var __companyStartingSet: Set<string> | undefined;
+}
+
+const registry: Map<string, CompanyRuntimeInstance> =
+  globalThis.__companyRegistry ?? (globalThis.__companyRegistry = new Map());
+const startingSet: Set<string> =
+  globalThis.__companyStartingSet ?? (globalThis.__companyStartingSet = new Set());
 
 export function getActiveCompany(slug: string): CompanyRuntimeInstance | undefined {
   return registry.get(slug);
 }
 
+export function isCompanyStarting(slug: string): boolean {
+  return startingSet.has(slug);
+}
+
+export function markCompanyStarting(slug: string) {
+  startingSet.add(slug);
+}
+
+export function clearCompanyStarting(slug: string) {
+  startingSet.delete(slug);
+}
+
 export function registerCompany(slug: string, runtime: CompanyRuntimeInstance) {
+  const existing = registry.get(slug);
+  if (existing && existing !== runtime) {
+    existing.stop().catch(() => {});
+  }
   registry.set(slug, runtime);
 }
 
