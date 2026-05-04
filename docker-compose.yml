@@ -52,6 +52,9 @@ services:
       # informativ; mit Wert wird `<base>/approvals/<id>` als klickbarer Link
       # ergänzt.
       APPROVAL_URL_BASE: ${APPROVAL_URL_BASE:-}
+      # URL des lokalen claude-proxy-Containers. Wenn gesetzt, routen alle
+      # Hermes-Agenten ihre Anthropic-API-Calls darüber (nutzt Claude-Abo-OAuth).
+      COMPANY_CLAUDE_PROXY_URL: http://claude-proxy:8080
     volumes:
       # Source bind mount für HMR.
       - .:/app
@@ -83,6 +86,21 @@ services:
     # UID/GID-Mapping für Bind-Mounts (Linux). Auf macOS/Windows ignoriert Docker das.
     # Falls dein Host-User nicht UID 1000 hat: `UID=$(id -u) GID=$(id -g) docker compose up`
     user: "${UID:-1000}:${GID:-1000}"
+    # Docker-Socket-Gruppe: erlaubt dem node-User im Container, den gemounteten
+    # Docker-Socket zu nutzen. DOCKER_GID auf die Host-GID der docker-Gruppe setzen
+    # (Standard: 999 auf Ubuntu/Debian). `getent group docker | cut -d: -f3` liefert den Wert.
+    group_add:
+      - "${DOCKER_GID:-999}"
+
+  claude-proxy:
+    image: haex-claude-proxy:dev
+    container_name: claude-proxy
+    volumes:
+      - ${HOME}/.claude:/home/node/.claude:ro
+      - ${HOME}/.claude.json:/home/node/.claude.json:ro
+    networks:
+      - companies
+    restart: unless-stopped
 
 networks:
   companies:
@@ -92,3 +110,6 @@ networks:
 # Multi-User-Zukunft: benanntes Volume statt Host-Mount.
 # volumes:
 #   claude_home:
+
+
+

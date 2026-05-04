@@ -4,7 +4,7 @@
 # base: node 22 + pnpm (via corepack) + claude-code CLI + git/bash for the runner
 # ------------------------------------------------------------------------------
 FROM node:22-alpine AS base
-RUN apk add --no-cache bash git tini
+RUN apk add --no-cache bash git tini docker-cli
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 RUN corepack enable && corepack prepare pnpm@latest --activate
@@ -27,6 +27,7 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 FROM base AS dev
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node . .
+RUN mkdir -p /app/.nuxt /app/.output && chown node:node /app/.nuxt /app/.output
 ENV HOST=0.0.0.0 \
     PORT=3000 \
     NODE_ENV=development
