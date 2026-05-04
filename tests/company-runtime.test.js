@@ -132,8 +132,34 @@ test("emits 'task' when a yaml file is dropped into the queue", async () => {
   });
 });
 
-test("rejects start() when constitution.md is missing", async () => {
-  await withTempProject(async ({ proj, queue, queueDirs }) => {
+test("start() proceeds without constitution.md (constitution is optional)", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
+    // Build a minimal orgDir with agents but no constitution.md
+    const orgDir = path.join(proj, "no-constitution-org");
+    const agentsDir = path.join(orgDir, "agents");
+    await fs.mkdir(agentsDir, { recursive: true });
+    // Copy agents from the valid fixture so we have parseable agent specs
+    for (const f of ["ceo.md", "dev.md"]) {
+      const src = path.join(validFixture, "agents", f);
+      await fs.copyFile(src, path.join(agentsDir, f));
+    }
+    // Deliberately do NOT create constitution.md
+
+    const runtime = new CompanyRuntime({
+      projectRoot: proj,
+      orgDir,
+      queueDirs,
+      runnerFactory: () => ({ execute: async () => ({ status: "completed", summary: "", outputs: [] }) }),
+      supervisor: null,
+    });
+    await runtime.start();
+    assert.equal(runtime.getStatus().status, "running");
+    await runtime.stop();
+  });
+});
+
+test("rejects start() when agents dir is empty", async () => {
+  await withTempProject(async ({ proj, queueDirs }) => {
     const orgDir = path.join(proj, "empty-org");
     await fs.mkdir(path.join(orgDir, "agents"), { recursive: true });
     const runtime = new CompanyRuntime({
@@ -142,7 +168,7 @@ test("rejects start() when constitution.md is missing", async () => {
       queueDirs,
       runnerFactory: () => ({ stub: true }),
     });
-    await assert.rejects(() => runtime.start(), /missing constitution/);
+    await assert.rejects(() => runtime.start(), /no agents loaded/);
   });
 });
 

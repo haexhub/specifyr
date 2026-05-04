@@ -20,7 +20,7 @@
  */
 
 import path from "node:path";
-import { mkdir, unlink } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { EventEmitter } from "node:events";
 import { randomBytes } from "node:crypto";
 
@@ -45,6 +45,7 @@ import { Supervisor } from "./supervisor.js";
 export class CompanyRuntime extends EventEmitter {
   constructor({
     projectRoot,
+    hostProjectRoot,
     orgDir,
     queueDirs,
     runnerFactory,
@@ -70,6 +71,11 @@ export class CompanyRuntime extends EventEmitter {
       throw new Error(`CompanyRuntime: queueDirs missing entry for ceoRole '${ceoRole}'`);
     }
     this.projectRoot = projectRoot;
+    // hostProjectRoot: used for file ops on the host filesystem (profile provisioning).
+    // In containerized setups, projectRoot is the container-side path (/data/projects/…)
+    // while the Nitro server process runs on the host where that path doesn't exist.
+    // Falls back to projectRoot for non-containerized setups (tests, local dev).
+    this.hostProjectRoot = hostProjectRoot ?? projectRoot;
     this.orgDir = orgDir;
     this.queueDirs = { ...queueDirs };
     this.catalogDir = catalogDir; // optional; if set, references are resolved & validated
@@ -134,6 +140,9 @@ export class CompanyRuntime extends EventEmitter {
     this._dispatchQueues = new Map(); // role -> [{path, task, role}]
     this._dispatching = new Map(); // role -> boolean
     this._inFlightPaths = new Set(); // dedup re-fires across all roles (paths are unique)
+    // Set on start(), cleared on stop(). The UI uses this to filter "live"
+    // failures (since current session) from the historical event log.
+    this.startedAt = null;
   }
 
   async start() {
@@ -145,9 +154,6 @@ export class CompanyRuntime extends EventEmitter {
     this.eventIndex.rebuildFromDisk(path.join(this.projectRoot, ".specops", this.slug));
 
     this.company = await loadCompany(this.orgDir);
-    if (!this.company.constitution) {
-      throw new Error("CompanyRuntime: missing constitution.md in orgDir");
-    }
     if (this.company.agents.size === 0) {
       throw new Error("CompanyRuntime: no agents loaded");
     }
@@ -177,14 +183,33 @@ export class CompanyRuntime extends EventEmitter {
       }
     }
 
-    // Provision per-agent Hermes profile dirs (lazy-create; Hermes initializes on first use).
-    // The runnerFactory receives runtime-loaded context as its second arg —
-    // currently the catalog, so docker runners can resolve binary wildcards.
-    // Default factories that take only `agent` ignore the second arg safely.
+    // Provision per-agent Hermes profile dirs. Pre-seed config.yaml so the
+    // hermes setup wizard doesn't trigger in non-interactive containers
+    // (older versions exit 1 when no provider is configured and there's no TTY).
+    // Delete auth.json on every start: hermes caches credentials with their own
+    // base_url, which can point to api.anthropic.com instead of the proxy after
+    // a token refresh. Deleting forces hermes to re-read ANTHROPIC_API_KEY and
+    // ANTHROPIC_BASE_URL from env vars and store the proxy URL correctly.
     for (const agent of this.company.agents.values()) {
       const home = hermesHomeForAgent({ projectRoot: this.projectRoot, role: agent.role });
       await mkdir(home, { recursive: true });
-      this.runners.set(agent.role, this.runnerFactory(agent, { catalog: this.catalog }));
+      try {
+        await writeFile(
+          path.join(home, "config.yaml"),
+          "model:\n  provider: anthropic\n",
+          { flag: "wx" }
+        );
+      } catch { /* already exists — preserve existing config */ }
+      try { await unlink(path.join(home, "auth.json")); } catch { /* OK if missing */ }
+      this.runners.set(agent.role, this.runnerFactory(agent, { catalog: this.catalog, slug: this.slug }));
+    }
+
+    // Start persistent containers before polling begins so they are ready
+    // to receive docker exec calls the moment the first task arrives.
+    for (const runner of this.runners.values()) {
+      if (typeof runner.startPersistent === "function") {
+        await runner.startPersistent();
+      }
     }
 
     // One QueuePoller per active agent role. Each poller emits 'task'
@@ -209,6 +234,7 @@ export class CompanyRuntime extends EventEmitter {
     if (this.supervisor) {
       this.supervisor.start();
     }
+    this.startedAt = new Date().toISOString();
     this.emit("started", { agents: [...this.company.agents.keys()] });
   }
 
@@ -239,8 +265,8 @@ export class CompanyRuntime extends EventEmitter {
     const queue = this._dispatchQueues.get(role);
     if (!queue || queue.length === 0) return;
     if (this.pollers.size === 0) return; // stopped
-    this._dispatching.set(role, true);
     const evt = queue.shift();
+    this._dispatching.set(role, evt);
     try {
       await this._dispatchToRole(role, evt);
     } catch (err) {
@@ -326,6 +352,9 @@ export class CompanyRuntime extends EventEmitter {
       recipients,
       status: result?.status ?? "unknown",
       outputs: Array.isArray(result?.outputs) ? result.outputs : [],
+      // Include summary/transcript from runner so failures are visible in the UI.
+      summary: result?.summary ?? null,
+      transcript: result?.transcript ?? null,
     });
 
     if (result?.status === "completed") {
@@ -369,6 +398,11 @@ export class CompanyRuntime extends EventEmitter {
       await poller.stop();
     }
     this.pollers.clear();
+    for (const runner of this.runners.values()) {
+      if (typeof runner.stopPersistent === "function") {
+        await runner.stopPersistent();
+      }
+    }
     this.runners.clear();
     // Close the SQLite handle so temp dirs / fs.rm in tests don't see EBUSY,
     // and so a subsequent start() reopens cleanly with a fresh prepared
@@ -381,6 +415,7 @@ export class CompanyRuntime extends EventEmitter {
     this._dispatchQueues.clear();
     this._dispatching.clear();
     this._inFlightPaths.clear();
+    this.startedAt = null;
     this.emit("stopped");
   }
 
@@ -461,13 +496,26 @@ export class CompanyRuntime extends EventEmitter {
     }
     return {
       status: running ? "running" : "stopped",
-      agents: this.listAgents().map((a) => ({
-        role: a.role,
-        capabilities: a.capabilities,
-        resources: a.resources ?? null,
-        reports_to: a.reports_to ?? null,
-        delivers_to: Array.isArray(a.delivers_to) ? a.delivers_to : [],
-      })),
+      startedAt: this.startedAt,
+      agents: this.listAgents().map((a) => {
+        const dispatchVal = this._dispatching.get(a.role);
+        const activeEvt = dispatchVal && typeof dispatchVal === "object" ? dispatchVal : null;
+        const queued = this._dispatchQueues.get(a.role) ?? [];
+        return {
+          role: a.role,
+          capabilities: a.capabilities,
+          resources: a.resources ?? null,
+          reports_to: a.reports_to ?? null,
+          delivers_to: Array.isArray(a.delivers_to) ? a.delivers_to : [],
+          activeTask: activeEvt
+            ? { path: activeEvt.path, title: activeEvt.task?.title ?? null }
+            : null,
+          queuedTasks: queued.map((e) => ({
+            path: e.path,
+            title: e.task?.title ?? null,
+          })),
+        };
+      }),
       queueDepth,
     };
   }
