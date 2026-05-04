@@ -52,7 +52,7 @@ const artifactReloadToken = ref(0);
 const artifactOpen = ref(true);
 const chatStreamRef = ref<{ insertIntoDraft: (text: string) => void } | null>(null);
 
-const ARTIFACT_WIDTH_KEY = "specops:artifact-sidebar-width";
+const ARTIFACT_WIDTH_KEY = "specifyr:artifact-sidebar-width";
 const ARTIFACT_WIDTH_MIN = 320;
 const ARTIFACT_WIDTH_MAX = 960;
 const ARTIFACT_WIDTH_DEFAULT = 420;
@@ -149,7 +149,7 @@ async function loadSessions() {
 }
 
 function sessionStorageKey(slugVal: string, stepIdVal: string) {
-  return `specops:last-session:${slugVal}:${stepIdVal}`;
+  return `specifyr:last-session:${slugVal}:${stepIdVal}`;
 }
 
 function getStoredSessionId(slugVal: string, stepIdVal: string): string | null {

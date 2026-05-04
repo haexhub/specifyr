@@ -81,7 +81,7 @@ const BASELINE_FLAGS_PERSISTENT = Object.freeze(
  * @param {string} [input.composeProject] When set, emits Docker Compose labels
  *                                     (com.docker.compose.project / .service /
  *                                     .oneoff) so all agents spawned for one
- *                                     haex-corp project appear as a single
+ *                                     specifyr project appear as a single
  *                                     stack in Docker Desktop and `docker
  *                                     compose ls`. The value should be the
  *                                     project slug (already sanitised by the
@@ -142,7 +142,7 @@ export function capabilityFlags({
   if (userId) flags.push("--user", String(userId));
 
   // Compose labels: when composeProject is set, every container we spawn for
-  // a haex-corp project carries the standard `com.docker.compose.*` labels.
+  // a specifyr project carries the standard `com.docker.compose.*` labels.
   // Docker Desktop and `docker compose ls` group containers by these labels,
   // so the agents for one project show up as one stack — no compose.yaml on
   // disk required. The sanitised slug becomes the project name; the role

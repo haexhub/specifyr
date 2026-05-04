@@ -5,7 +5,7 @@
 - **8.1 — Generalize QueuePoller registration: ✅ landed (2026-04-27)**
   - `queueDir` → `queueDirs: { [role]: dir }` (hard rename, no shim)
   - One QueuePoller per role; events tagged with role; `_dispatchToCEO` → `_dispatchToRole`
-  - Per-role queue dir convention: `<root>/.specops/<slug>/queue-<role>/`
+  - Per-role queue dir convention: `<root>/.specifyr/<slug>/queue-<role>/`
   - 6 new tests added; 180/180 baseline green
 - **8.2 — Per-role serial dispatch state: ✅ landed (2026-04-27)**
   - `_dispatchQueue`/`_dispatching` → `Map<role, ...>`; `_inFlightPaths` stays global
@@ -66,7 +66,7 @@ pattern, but today `runners.get('ceo')` is the only path that ever runs.
 ## Goal & Non-Goals
 
 ### In scope (this session)
-- **Per-role queue dirs**: `<projectRoot>/.specops/<slug>/queue-<role>/`
+- **Per-role queue dirs**: `<projectRoot>/.specifyr/<slug>/queue-<role>/`
   with one QueuePoller per role; CEO queue stays at `queue/` for
   backwards-compat
 - **Generalize dispatch loop** in CompanyRuntime: `_dispatchToCEO` becomes
@@ -131,7 +131,7 @@ POST /api/mcp/<slug>/dispatch
 Authorization: Bearer <COMPANY_OPS_TOKEN>
 Body: { worker: "dev", task: { goal: "...", expected_outputs: [...], ... } }
 
-200 → { dispatched: true, role: "dev", path: "<projectRoot>/.specops/<slug>/queue-dev/<id>.yaml" }
+200 → { dispatched: true, role: "dev", path: "<projectRoot>/.specifyr/<slug>/queue-dev/<id>.yaml" }
 400 → unknown role / missing fields
 404 → no active runtime
 ```
@@ -140,7 +140,7 @@ Implementation:
 - Reuse `requireRuntimeAuth`
 - Validate `worker` is a known role in `runtime.listAgents()`
 - Generate task ID (timestamp + random; or hash of body for idempotency)
-- Write YAML to `<projectRoot>/.specops/<slug>/queue-<worker>/<id>.yaml`
+- Write YAML to `<projectRoot>/.specifyr/<slug>/queue-<worker>/<id>.yaml`
 - The per-role QueuePoller picks it up via chokidar — no direct call
   into runtime needed
 
@@ -229,7 +229,7 @@ curl -X POST http://localhost:3000/api/mcp/myproject/dispatch \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"worker":"dev","task":{"goal":"write hello","expected_outputs":["x.md"]}}'
-ls -la projects/myproject/.specops/myproject/queue-dev/
+ls -la projects/myproject/.specifyr/myproject/queue-dev/
 ```
 
 ## Critical Files Reference

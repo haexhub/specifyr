@@ -50,8 +50,8 @@ const VALID_FIXTURE = path.join(
 
 test("multi-agent smoketest: CEO delegates to dev via dispatch helpers", async () => {
   const proj = await fs.mkdtemp(path.join(os.tmpdir(), "ma-smoke-"));
-  const queueCeo = path.join(proj, ".specops", "ma", "queue-ceo");
-  const queueDev = path.join(proj, ".specops", "ma", "queue-dev");
+  const queueCeo = path.join(proj, ".specifyr", "ma", "queue-ceo");
+  const queueDev = path.join(proj, ".specifyr", "ma", "queue-dev");
   await fs.mkdir(queueCeo, { recursive: true });
   await fs.mkdir(queueDev, { recursive: true });
 
@@ -365,8 +365,8 @@ const { skip: skipE2E } = gateE2E();
 test("E2E: CEO delegates to dev via dispatch endpoint (live LLM)", { skip: skipE2E, timeout: 240_000 }, async (t) => {
   const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "haex-ma-e2e-"));
   const slug = "e2e-ma";
-  const queueCeo = path.join(projectRoot, ".specops", slug, "queue-ceo");
-  const queueDev = path.join(projectRoot, ".specops", slug, "queue-dev");
+  const queueCeo = path.join(projectRoot, ".specifyr", slug, "queue-ceo");
+  const queueDev = path.join(projectRoot, ".specifyr", slug, "queue-dev");
   await fs.mkdir(queueCeo, { recursive: true });
   await fs.mkdir(queueDev, { recursive: true });
 

@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { dataDir } from "@su/data-dirs";
-import { projectCwd, loadEventStore } from "@su/specops-stores";
+import { projectCwd, loadEventStore } from "@su/specifyr-stores";
 
 interface ExtensionInstallRecord {
   slug: string;
@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug/extSlug" });
   }
 
-  const manifestPath = path.join(dataDir(), ".specops", slug, "extensions.json");
+  const manifestPath = path.join(dataDir(), ".specifyr", slug, "extensions.json");
   let manifest: ExtensionsManifest;
   try {
     manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as ExtensionsManifest;

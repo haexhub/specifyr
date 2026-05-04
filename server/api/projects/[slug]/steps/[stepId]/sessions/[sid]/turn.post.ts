@@ -5,7 +5,7 @@ import {
   loadTurnBroker,
   projectCwd,
   assertProjectExists
-} from "@su/specops-stores";
+} from "@su/specifyr-stores";
 import { getProjectStepIds, getProjectWorkflowId } from "@su/workflows";
 import {
   SPEC_KIT_WORKFLOW,
@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
       const total = workflow.steps.length;
       const nextStep = stepIndex + 1 < total ? workflow.steps[stepIndex + 1] : null;
       const workflowCtx = [
-        `SPECOPS WORKFLOW CONTEXT:`,
+        `SPECIFYR WORKFLOW CONTEXT:`,
         `You are in step ${stepIndex + 1} of ${total} ("${stepDef.label}") of the "${workflow.label}" workflow.`,
         nextStep ? `The next step is "${nextStep.label}".` : `This is the final step.`,
         `Focus exclusively on this step. Do not suggest actions from later steps or start the company runtime.`,

@@ -7,7 +7,7 @@ const CONTEXT_MESSAGES_ON_RESET = 10;
  *
  * Design contract:
  *   - The DISK is the single source of truth. Every event the runner emits is
- *     written to `.specops/<slug>/steps/<stepId>/sessions/<sid>.events.jsonl`.
+ *     written to `.specifyr/<slug>/steps/<stepId>/sessions/<sid>.events.jsonl`.
  *   - The broker holds only two things in memory:
  *       1. `running`: a Map of sessionKey → live runner handle (so we can cancel)
  *       2. `emitters`: a Map of sessionKey → EventEmitter (notification only —

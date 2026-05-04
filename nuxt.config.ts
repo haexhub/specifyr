@@ -24,11 +24,11 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     companyClaudeProxyUrl: process.env.COMPANY_CLAUDE_PROXY_URL ?? "",
-    companyOpsUrlBase: process.env.COMPANY_OPS_URL_BASE ?? "http://haex-corp:3000/mcp",
+    companyOpsUrlBase: process.env.COMPANY_OPS_URL_BASE ?? "http://specifyr:3000/mcp",
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
     anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL ?? "",
     public: {
-      appName: "speculoss"
+      appName: "specifyr"
     }
   },
   i18n: {

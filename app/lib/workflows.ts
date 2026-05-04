@@ -66,7 +66,7 @@ export const SPEC_KIT_WORKFLOW: Workflow = {
       summary: "Ausführbare Aufgaben mit Abhängigkeiten.",
       description: "Zerlege den Plan in konkrete Aufgaben mit ID, Dependencies, Akzeptanzkriterien.",
       tips: [],
-      artifacts: [".specify/specs/<feature>/tasks.md", ".specops/<slug>/tasks.graph.json"]
+      artifacts: [".specify/specs/<feature>/tasks.md", ".specifyr/<slug>/tasks.graph.json"]
     },
     {
       id: "implement",

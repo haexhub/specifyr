@@ -1,9 +1,9 @@
 import path from "node:path";
-import { projectCwd, assertProjectExists } from "@su/specops-stores";
+import { projectCwd, assertProjectExists } from "@su/specifyr-stores";
 
 /**
  * Server-Sent Events stream that emits whenever a file inside the project's
- * `.specify/` or `.specops/` directories changes. Client-side ArtifactViewer
+ * `.specify/` or `.specifyr/` directories changes. Client-side ArtifactViewer
  * listens and triggers a refetch so the pane stays in sync with external edits.
  *
  * Events:
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const projectDir = projectCwd(slug);
 
   // Watch the project root so the watcher is always anchored to an existing directory.
-  // Filtering to .specify/ and .specops/ avoids noise from unrelated files (git, code, etc.).
+  // Filtering to .specify/ and .specifyr/ avoids noise from unrelated files (git, code, etc.).
   // Without this, chokidar on Linux (inotify) silently fails when .specify/ doesn't exist yet.
   const watcher = chokidar.watch(projectDir, {
     ignoreInitial: true,
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     ignored: (filePath: string) => {
       if (filePath === projectDir) return false;
       const rel = path.relative(projectDir, filePath);
-      return !rel.startsWith(".specify") && !rel.startsWith(".specops");
+      return !rel.startsWith(".specify") && !rel.startsWith(".specifyr");
     }
   });
 

@@ -1,8 +1,8 @@
 # Company runtime — multi-agent orchestration
 
-The company runtime extends speculoss into a spec-driven multi-agent system. The user declares a "company" once (CEO + workers, hierarchy, capabilities, budget) and then drops tasks into a queue for the company to execute autonomously.
+The company runtime extends specifyr into a spec-driven multi-agent system. The user declares a "company" once (CEO + workers, hierarchy, capabilities, budget) and then drops tasks into a queue for the company to execute autonomously.
 
-This document describes the **runtime side** living in speculoss. The user-facing slash commands (`/speckit.company.init`, `/speckit.company.hire`, …) and templates live in the separate [speckit-company](https://github.com/haex/speckit-company) extension repo.
+This document describes the **runtime side** living in specifyr. The user-facing slash commands (`/speckit.company.init`, `/speckit.company.hire`, …) and templates live in the separate [speckit-company](https://github.com/haex/speckit-company) extension repo.
 
 ## Architecture
 
@@ -14,7 +14,7 @@ This document describes the **runtime side** living in speculoss. The user-facin
                 └─────────────┬─────────────────────┘
                               │
                               ▼
-              .specops/<company>/queue/<task>.yaml
+              .specifyr/<company>/queue/<task>.yaml
                               │
                               ▼
               ┌─────────────────────────────┐
@@ -68,7 +68,7 @@ Tasks with `isolation: shared` (research, monitoring, trading) skip the worktree
 ## Queue lifecycle
 
 ```
-.specops/<company>/queue/<task-slug>.yaml   ← user drops here
+.specifyr/<company>/queue/<task-slug>.yaml   ← user drops here
 
       ↓ chokidar 'add' event
 
@@ -77,7 +77,7 @@ CompanyRuntime emits 'task' event
 
       ↓ CEO triages → dispatch_to_agent(role, sub_task)
 
-Sub-task lifecycle managed via existing speculoss stages:
+Sub-task lifecycle managed via existing specifyr stages:
   draft → triaged_by_ceo → dispatched → in_progress → result_returned
         → ceo_review → (next_dispatch | completed | escalated_to_user)
 ```
@@ -94,7 +94,7 @@ Lives in the `speckit-company` repo (`mcp-server/company-ops/`). The CEO connect
 - `escalate(reason)` — halt with user-approval request (used for sensitive capabilities or when stuck)
 - `query_org_chart()` — introspect the live org
 
-When `COMPANY_OPS_BASE_URL` is set, company-ops POSTs back to this speculoss instance via:
+When `COMPANY_OPS_BASE_URL` is set, company-ops POSTs back to this specifyr instance via:
 
 - `POST /api/projects/<slug>/company/dispatch`
 - `POST /api/projects/<slug>/company/ask-user`

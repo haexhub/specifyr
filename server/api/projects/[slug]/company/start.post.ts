@@ -10,11 +10,11 @@
  *
  * Lifecycle: one CompanyRuntime per slug for the process lifetime. Calling
  * start twice on the same slug returns 409. Stop endpoint not yet
- * implemented — restart requires `docker compose restart haex-corp`.
+ * implemented — restart requires `docker compose restart specifyr`.
  *
  * Path layout convention (matches existing endpoints):
  *   <projectCwd>/.specify/org/                  org dir (constitution + agents)
- *   <projectCwd>/.specops/<slug>/queue-<role>/  per-role task queues
+ *   <projectCwd>/.specifyr/<slug>/queue-<role>/  per-role task queues
  *   <repo-root>/catalog/                        global catalog (shared)
  */
 
@@ -24,7 +24,7 @@ import {
   projectCwd,
   projectHostCwd,
   assertProjectExists,
-} from "@su/specops-stores";
+} from "@su/specifyr-stores";
 import {
   getCompanyRuntimeModule,
   getDockerRunnerFactoryModule,
@@ -111,7 +111,7 @@ export default defineEventHandler(async (event) => {
     try {
       const pCwd = projectCwd(slug);
       const orgDir = path.join(pCwd, ".specify", "org");
-      const specopsBase = path.join(dataDir(), ".specops", slug);
+      const specifyrBase = path.join(dataDir(), ".specifyr", slug);
       const catalogDir = path.join(process.cwd(), "catalog");
       const pHostCwd = projectHostCwd(slug);
 
@@ -147,7 +147,7 @@ export default defineEventHandler(async (event) => {
 
       const queueDirs: Record<string, string> = {};
       for (const role of roles) {
-        queueDirs[role] = path.join(specopsBase, `queue-${role}`);
+        queueDirs[role] = path.join(specifyrBase, `queue-${role}`);
       }
 
       const agentImages = new Map<string, string>();
@@ -163,8 +163,8 @@ export default defineEventHandler(async (event) => {
           const image = await buildAgentImage({
             nix_packages,
             // Docker bind mounts are resolved by the HOST daemon; use the host-side
-            // equivalent of process.cwd() when speculoss runs in a container.
-            projectRoot: process.env.SPECULOSS_HOST_PROJECT_ROOT || process.cwd(),
+            // equivalent of process.cwd() when specifyr runs in a container.
+            projectRoot: process.env.SPECIFYR_HOST_PROJECT_ROOT || process.cwd(),
             onLog: (line: string) => { push("build_log", { role, line }); },
           });
           agentImages.set(role, image);

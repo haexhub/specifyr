@@ -1,4 +1,4 @@
-import { assertProjectExists } from "@su/specops-stores";
+import { assertProjectExists } from "@su/specifyr-stores";
 import { listSecretKeys } from "@su/secrets-store";
 
 export default defineEventHandler(async (event) => {

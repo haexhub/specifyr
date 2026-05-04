@@ -2,13 +2,13 @@
 
 ## Context
 
-haex-corp's runtime data currently lives **inside** the code checkout:
+specifyr's runtime data currently lives **inside** the code checkout:
 
 ```
-/home/haex/Projekte/haex-corp/      ← git repo (code)
+/home/haex/Projekte/specifyr/      ← git repo (code)
 ├── projects/                       ← user sandboxes (live data)
 │   ├── asas/  fwbg/  hh/  test/
-└── .specops/                       ← per-project state (queue, events, runs)
+└── .specifyr/                       ← per-project state (queue, events, runs)
     ├── asas/  hh/  ...
 ```
 
@@ -31,16 +31,16 @@ tree, code becomes safely deletable/replaceable.
 ### In scope
 - A single canonical `dataRoot()` function — every store anchors there,
   not at `process.cwd()`
-- Configurable via `HAEX_CORP_DATA_DIR` env, default
-  `${XDG_DATA_HOME:-$HOME/.local/share}/haex-corp/`
+- Configurable via `SPECIFYR_DATA_DIR` env, default
+  `${XDG_DATA_HOME:-$HOME/.local/share}/specifyr/`
 - Migrate **all** cwd-rooted data writes (queues, events, runs, manifests,
   task graphs, sessions, step-state, artefacts, project sandboxes)
 - Dual-path support during migration: existing data in `<cwd>/projects/`
-  and `<cwd>/.specops/` keeps working; an explicit migration helper
+  and `<cwd>/.specifyr/` keeps working; an explicit migration helper
   moves it on demand
 - Update `docker-compose.yml` to mount a named volume (or bind mount) for
   data, separate from the source bind mount
-- Update `HAEX_CORP_HOST_PROJECT_ROOT` translation in dockerRunnerFactory
+- Update `SPECIFYR_HOST_PROJECT_ROOT` translation in dockerRunnerFactory
   to reflect the new layout
 
 ### Out of scope (stay in cwd)
@@ -48,7 +48,7 @@ tree, code becomes safely deletable/replaceable.
 - `extensions/` (community catalog cache — derivable, not user-data)
 - `tests/fixtures/` (test code)
 - `docs/`, `src/`, `server/`, `app/`, `components/`, `pages/`
-- App config (`.specops/config.json`-equivalents) **may** stay in cwd or
+- App config (`.specifyr/config.json`-equivalents) **may** stay in cwd or
   move — see Open Question 1
 - Test harness changes (most tests already use tempdirs, no migration
   needed)
@@ -58,18 +58,18 @@ tree, code becomes safely deletable/replaceable.
 ### Path layout after migration
 
 ```
-$HAEX_CORP_DATA_DIR/                  default: ~/.local/share/haex-corp/
+$SPECIFYR_DATA_DIR/                  default: ~/.local/share/specifyr/
 ├── projects/                         user-checked-out spec-kit projects
 │   └── <slug>/                       (was: <cwd>/projects/<slug>/)
 └── runtime/                          per-project orchestrator state
-    └── <slug>/                       (was: <cwd>/.specops/<slug>/)
+    └── <slug>/                       (was: <cwd>/.specifyr/<slug>/)
         ├── queue/   events/   runs/
         ├── tasks.graph.json
         ├── extensions.json
         └── ...
 ```
 
-Renaming `.specops/` → `runtime/` is optional but cleaner — the dotted
+Renaming `.specifyr/` → `runtime/` is optional but cleaner — the dotted
 form was a hidden-dir convention from when it was *inside* a user
 project. In its own data tree, we don't need to hide it. Decide in 9.1.
 
@@ -79,9 +79,9 @@ Lives in `src/core/data-root.js` (testable from `node --test`):
 
 ```js
 export function dataRoot() {
-  if (process.env.HAEX_CORP_DATA_DIR) return process.env.HAEX_CORP_DATA_DIR;
+  if (process.env.SPECIFYR_DATA_DIR) return process.env.SPECIFYR_DATA_DIR;
   const xdg = process.env.XDG_DATA_HOME ?? path.join(os.homedir(), ".local/share");
-  return path.join(xdg, "haex-corp");
+  return path.join(xdg, "specifyr");
 }
 
 export function projectsRoot()  { return path.join(dataRoot(), "projects"); }
@@ -98,21 +98,21 @@ helpers (Nuxt-bundle constraint, mirrors `mcp-auth.ts` pattern).
 ### 9.1 — Foundations
 
 - Create `src/core/data-root.js` with `dataRoot/projectsRoot/runtimeRoot`
-- Decide: rename `.specops/` → `runtime/` (recommended) vs. keep
-- Add unit tests for env precedence (HAEX_CORP_DATA_DIR > XDG_DATA_HOME
+- Decide: rename `.specifyr/` → `runtime/` (recommended) vs. keep
+- Add unit tests for env precedence (SPECIFYR_DATA_DIR > XDG_DATA_HOME
   > $HOME/.local/share)
 - Add `server/utils/data-paths.ts` thin wrapper
 
 ### 9.2 — Migrate the Nitro server side
 
-`server/utils/specops-stores.ts`:
+`server/utils/specifyr-stores.ts`:
 - `projectCwd(slug)` → `projectDir(slug)` (uses dataRoot)
 - `hostProjectRoot()` / `projectHostCwd(slug)` — these are about the
   Docker-out-of-Docker host path; with data outside cwd, the host path
-  becomes `${HAEX_CORP_HOST_DATA_DIR}/projects/<slug>`. Update env name.
+  becomes `${SPECIFYR_HOST_DATA_DIR}/projects/<slug>`. Update env name.
 - `loadEventStore(slug)` — base dir becomes `projectRuntimeDir(slug)`
 
-Endpoints to fix (search for `path.join(process.cwd(), ".specops"...)`):
+Endpoints to fix (search for `path.join(process.cwd(), ".specifyr"...)`):
 - [server/api/projects/[slug]/run/start.post.ts](../../server/api/projects/[slug]/run/start.post.ts)
 - [server/api/projects/[slug]/run/status.get.ts](../../server/api/projects/[slug]/run/status.get.ts)
 - [server/api/projects/[slug]/run/tasks/[tid]/log.get.ts](../../server/api/projects/[slug]/run/tasks/[tid]/log.get.ts)
@@ -123,7 +123,7 @@ Endpoints to fix (search for `path.join(process.cwd(), ".specops"...)`):
 - [server/api/projects/[slug]/company/start.post.ts](../../server/api/projects/[slug]/company/start.post.ts)
 - [server/utils/extension-install.ts](../../server/utils/extension-install.ts)
 
-Pattern: replace `path.join(process.cwd(), ".specops", slug, ...)` with
+Pattern: replace `path.join(process.cwd(), ".specifyr", slug, ...)` with
 `path.join(projectRuntimeDir(slug), ...)`.
 
 ### 9.3 — Migrate the src/core stores
@@ -148,34 +148,34 @@ dir". Only the wiring changes.
 
 ```yaml
 services:
-  haex-corp:
+  specifyr:
     environment:
-      HAEX_CORP_DATA_DIR: /data                # container-side
-      HAEX_CORP_HOST_DATA_DIR: ${HAEX_CORP_HOST_DATA_DIR:-${HOME}/.local/share/haex-corp}
+      SPECIFYR_DATA_DIR: /data                # container-side
+      SPECIFYR_HOST_DATA_DIR: ${SPECIFYR_HOST_DATA_DIR:-${HOME}/.local/share/specifyr}
     volumes:
       - .:/app                                  # source (read-mostly for HMR)
-      - haex_corp_data:/data                    # named volume OR
-      # - ${HAEX_CORP_HOST_DATA_DIR}:/data       # bind mount to host XDG dir
+      - specifyr_data:/data                    # named volume OR
+      # - ${SPECIFYR_HOST_DATA_DIR}:/data       # bind mount to host XDG dir
 
 volumes:
-  haex_corp_data:
+  specifyr_data:
 ```
 
-Bind-mount variant (recommended): user can `ls ~/.local/share/haex-corp/`
+Bind-mount variant (recommended): user can `ls ~/.local/share/specifyr/`
 and inspect their data without `docker exec`. Named-volume variant is
 more portable but opaque.
 
-`HAEX_CORP_HOST_PROJECT_ROOT` (introduced in inkrement 6.2) gets
-replaced by `HAEX_CORP_HOST_DATA_DIR` because the bind-mount source for
+`SPECIFYR_HOST_PROJECT_ROOT` (introduced in inkrement 6.2) gets
+replaced by `SPECIFYR_HOST_DATA_DIR` because the bind-mount source for
 sibling agent-containers now anchors at the data dir, not at the code
 dir. dockerRunnerFactory's `projectRoot` argument receives
-`${HAEX_CORP_HOST_DATA_DIR}/projects/<slug>` instead of
-`${HAEX_CORP_HOST_PROJECT_ROOT}/projects/<slug>`.
+`${SPECIFYR_HOST_DATA_DIR}/projects/<slug>` instead of
+`${SPECIFYR_HOST_PROJECT_ROOT}/projects/<slug>`.
 
 ### 9.5 — Migration helper
 
 One-time move for users with existing data in `<repo>/projects/` and
-`<repo>/.specops/`. Two options:
+`<repo>/.specifyr/`. Two options:
 
 **A) `pnpm migrate:data` script** — explicit user action. Reads source
 paths, dataRoot, mv with rsync. Safe, auditable.
@@ -201,9 +201,9 @@ no-op (source paths absent).
 
 ## Open Questions
 
-1. **Where does `.specops/config.json` live?** It holds `localExtensions`
+1. **Where does `.specifyr/config.json` live?** It holds `localExtensions`
    (filesystem paths to extension repos). Two reads:
-   - **(a) Stay in `<cwd>/.specops/config.json`** — it's per-installation
+   - **(a) Stay in `<cwd>/.specifyr/config.json`** — it's per-installation
      code config, not user-data. Move to `<repo>/config/app.json` or
      keep at current path.
    - **(b) Move to `${dataRoot}/config.json`** — it's user state (which
@@ -211,18 +211,18 @@ no-op (source paths absent).
    Lean toward (b) for consistency, but (a) is defensible. Pick early
    in 9.1.
 
-2. **Rename `.specops/` to `runtime/`?** Recommended because we no
+2. **Rename `.specifyr/` to `runtime/`?** Recommended because we no
    longer need a hidden dir (it's its own tree now). But it's a doc /
    plan / commit-message search-and-replace job in addition to the move.
 
-3. **Backwards-compat for path env vars?** Should `HAEX_CORP_DATA_DIR`
-   fall back to reading the OLD `HAEX_CORP_HOST_PROJECT_ROOT` if the
+3. **Backwards-compat for path env vars?** Should `SPECIFYR_DATA_DIR`
+   fall back to reading the OLD `SPECIFYR_HOST_PROJECT_ROOT` if the
    new one isn't set? Probably no — clean break is simpler; the
    migration helper documents the swap.
 
 4. **Tests under tempdirs vs. the new dataRoot?** Tests should NOT touch
-   `~/.local/share/haex-corp/`. Easiest: the test setup forces
-   `HAEX_CORP_DATA_DIR=<tempdir>` for every test via a `beforeEach` or
+   `~/.local/share/specifyr/`. Easiest: the test setup forces
+   `SPECIFYR_DATA_DIR=<tempdir>` for every test via a `beforeEach` or
    per-test env override. Document in the test README.
 
 ## Verification
@@ -232,20 +232,20 @@ no-op (source paths absent).
 node --test tests/data-root.test.js
 
 # Smoke: data lands in the right place
-HAEX_CORP_DATA_DIR=/tmp/haex-data-test pnpm dev   # start nuxt
+SPECIFYR_DATA_DIR=/tmp/haex-data-test pnpm dev   # start nuxt
 curl -X POST http://localhost:3000/api/projects/foo/...
 ls /tmp/haex-data-test/  # → projects/foo/  runtime/foo/
 
 # Migration
 mkdir -p projects/legacy-test/.specify
-mkdir -p .specops/legacy-test/queue
+mkdir -p .specifyr/legacy-test/queue
 node scripts/migrate-data-to-xdg.mjs --dry-run
 node scripts/migrate-data-to-xdg.mjs
-ls ~/.local/share/haex-corp/projects/   # → legacy-test/
-ls ~/.local/share/haex-corp/runtime/    # → legacy-test/
+ls ~/.local/share/specifyr/projects/   # → legacy-test/
+ls ~/.local/share/specifyr/runtime/    # → legacy-test/
 
 # E2E
-HAEX_CORP_DATA_DIR=$(mktemp -d) RUN_E2E_TESTS=1 \
+SPECIFYR_DATA_DIR=$(mktemp -d) RUN_E2E_TESTS=1 \
   ANTHROPIC_API_KEY=... \
   node --test tests/integration/company-e2e.test.js
 ```
@@ -257,12 +257,12 @@ Reads/writes that need rerouting (pre-migration; survey via
 
 | File | Concern |
 |---|---|
-| [server/utils/specops-stores.ts](../../server/utils/specops-stores.ts) | `projectCwd`, `hostProjectRoot`, `loadEventStore` — main entry points |
-| [server/utils/extension-install.ts](../../server/utils/extension-install.ts) | `manifestPathFor` builds `<cwd>/.specops/<slug>/extensions.json` |
+| [server/utils/specifyr-stores.ts](../../server/utils/specifyr-stores.ts) | `projectCwd`, `hostProjectRoot`, `loadEventStore` — main entry points |
+| [server/utils/extension-install.ts](../../server/utils/extension-install.ts) | `manifestPathFor` builds `<cwd>/.specifyr/<slug>/extensions.json` |
 | [server/utils/run-manager.ts](../../server/utils/run-manager.ts) | scheduler base dir |
-| [server/api/projects/[slug]/...] | every endpoint that builds `<cwd>/.specops/<slug>/...` paths |
+| [server/api/projects/[slug]/...] | every endpoint that builds `<cwd>/.specifyr/<slug>/...` paths |
 | [src/core/run-store.js](../../src/core/run-store.js), [session-store.js](../../src/core/session-store.js), [event-store.js](../../src/core/event-store.js), [step-state.js](../../src/core/step-state.js), [artifact-store.js](../../src/core/artifact-store.js), [task-graph.js](../../src/core/task-graph.js) | already accept cwd-param; only wiring at call sites |
-| [docker-compose.yml](../../docker-compose.yml) | new volume + env, `HAEX_CORP_HOST_PROJECT_ROOT` → `HAEX_CORP_HOST_DATA_DIR` |
+| [docker-compose.yml](../../docker-compose.yml) | new volume + env, `SPECIFYR_HOST_PROJECT_ROOT` → `SPECIFYR_HOST_DATA_DIR` |
 | [src/runners/hermes-docker.js](../../src/runners/hermes-docker.js) | dockerRunnerFactory consumes the new host-side data path |
 
 ## Out of Inkrement-9 (defer further)
@@ -275,13 +275,13 @@ Reads/writes that need rerouting (pre-migration; survey via
 
 ## Pre-flight checklist
 
-- [ ] Decide Open Question 1 (`.specops/config.json` location) — affects
+- [ ] Decide Open Question 1 (`.specifyr/config.json` location) — affects
       9.2 wiring scope
-- [ ] Decide Open Question 2 (`.specops/` → `runtime/` rename) — affects
+- [ ] Decide Open Question 2 (`.specifyr/` → `runtime/` rename) — affects
       grep/replace scope
 - [ ] Confirm a baseline backup of `~/.local/share/` exists before running
       the migration script for the first time
-- [ ] Stash or commit any pending work in `.specops/<slug>/run/` —
+- [ ] Stash or commit any pending work in `.specifyr/<slug>/run/` —
       migration moves files, in-flight runs would be interrupted
 
 ## Estimated effort

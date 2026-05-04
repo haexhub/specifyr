@@ -12,7 +12,7 @@
  *
  * Outbound only in v1: notifications go OUT, but reply-routing (Approve/Deny
  * via tap) requires a webhook or polling — separate inkrement. The user
- * resolves the request via the speculoss UI for now; Telegram is the wake-up
+ * resolves the request via the specifyr UI for now; Telegram is the wake-up
  * channel that tells them a request is waiting.
  *
  * Implementation note on approvalUrlBase: we don't always know the base URL

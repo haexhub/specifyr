@@ -1,11 +1,11 @@
 import path from "node:path";
 import { readJson, writeJson, readText, writeText, ensureDir } from "../utils/fs.js";
-import { SPECOPS_DIR } from "./constants.js";
+import { SPECIFYR_DIR } from "./constants.js";
 
 /**
  * Persistence for the Implement run.
  *
- * Directory layout under `.specops/<slug>/run/`:
+ * Directory layout under `.specifyr/<slug>/run/`:
  *   - current.json      : high-level run state (status, task statuses, pointers)
  *   - tasks/<tid>.log   : append-only per-task transcript (user prompt + assistant output)
  */
@@ -22,7 +22,7 @@ export const TASK_STATUSES = [
 ];
 
 function runDir(cwd, slug) {
-  return path.join(cwd, SPECOPS_DIR, slug, "run");
+  return path.join(cwd, SPECIFYR_DIR, slug, "run");
 }
 function currentPath(cwd, slug) {
   return path.join(runDir(cwd, slug), "current.json");

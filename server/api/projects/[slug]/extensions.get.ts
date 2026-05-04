@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { dataDir } from "@su/data-dirs";
-import { projectCwd } from "@su/specops-stores";
+import { projectCwd } from "@su/specifyr-stores";
 
 interface ExtensionInstallRecord {
   slug: string;
@@ -27,8 +27,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
-  // Primary source: haex-corp's own manifest written by installExtensionsInProject.
-  const manifestPath = path.join(dataDir(), ".specops", slug, "extensions.json");
+  // Primary source: specifyr's own manifest written by installExtensionsInProject.
+  const manifestPath = path.join(dataDir(), ".specifyr", slug, "extensions.json");
   try {
     const content = await fs.readFile(manifestPath, "utf8");
     const manifest = JSON.parse(content) as ExtensionsManifest;
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
 
   // Fallback: spec-kit's own .registry (authoritative source for what's physically installed).
   // This covers projects created or extensions installed directly via the specify CLI without
-  // going through haex-corp's installExtensionsInProject.
+  // going through specifyr's installExtensionsInProject.
   const registryPath = path.join(projectCwd(slug), ".specify", "extensions", ".registry");
   try {
     const content = await fs.readFile(registryPath, "utf8");

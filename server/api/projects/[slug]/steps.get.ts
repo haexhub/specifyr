@@ -1,4 +1,4 @@
-import { loadStepStateStore } from "@su/specops-stores";
+import { loadStepStateStore } from "@su/specifyr-stores";
 import { getProjectStepIds } from "@su/workflows";
 
 export default defineEventHandler(async (event) => {

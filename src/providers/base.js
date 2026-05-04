@@ -51,7 +51,7 @@ export class LocalTemplateProvider extends ModelProvider {
           title: phase.name,
           goal: phase.objective,
           inputs: ["spec.md", "plan.md"],
-          scope: [".specops", "src", "public", "tests"],
+          scope: [".specifyr", "src", "public", "tests"],
           allowedCapabilities: ["read_repo", "write_repo", "run_checks"],
           successCriteria: [`Completed objective: ${phase.objective}`],
           expectedOutputs: [`result-${index + 1}.md`],

@@ -28,7 +28,7 @@ export default defineEventHandler(async () => {
     }
   ];
 
-  // Local extensions from .specops/config.json are checked first: they are always
+  // Local extensions from .specifyr/config.json are checked first: they are always
   // reachable (no network), may be private, and shadow any same-id community entry.
   try {
     const { loadAppConfig } = await getAppConfigModule();

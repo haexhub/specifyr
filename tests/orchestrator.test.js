@@ -11,7 +11,7 @@ import { createUiHandler } from "../src/server/app.js";
 import { ConfigStore } from "../src/core/config.js";
 
 async function createWorkspace() {
-  return fs.mkdtemp(path.join(os.tmpdir(), "specops-"));
+  return fs.mkdtemp(path.join(os.tmpdir(), "specifyr-"));
 }
 
 test("full lifecycle moves from draft to completed with approvals and events", async () => {

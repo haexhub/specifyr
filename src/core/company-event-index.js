@@ -185,7 +185,7 @@ export class CompanyEventIndex {
    * Synchronous because we use sync sqlite + sync fs APIs throughout — keeps
    * the contract simple ("rebuild() returned" = "index is consistent").
    *
-   * @param {string} baseDir   the company's `.specops/<slug>/` dir; we read
+   * @param {string} baseDir   the company's `.specifyr/<slug>/` dir; we read
    *                           `<baseDir>/events/*.jsonl`.
    */
   rebuildFromDisk(baseDir) {

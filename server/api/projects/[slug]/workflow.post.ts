@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { dataDir } from "@su/data-dirs";
-import { assertProjectExists } from "@su/specops-stores";
+import { assertProjectExists } from "@su/specifyr-stores";
 import { listProjectWorkflows } from "@su/workflow-discovery";
 
 export default defineEventHandler(async (event) => {
@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const metaPath = path.join(dataDir(), ".specops", slug, "meta.json");
+  const metaPath = path.join(dataDir(), ".specifyr", slug, "meta.json");
   let meta: Record<string, unknown> = {};
   try {
     meta = JSON.parse(await fs.readFile(metaPath, "utf8"));

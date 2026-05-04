@@ -9,7 +9,7 @@ export const DEFAULT_WORKFLOW_ID = "spec-kit";
 
 // Read the workflow id stored in a project's meta.json (no extension-availability check yet).
 export async function getProjectWorkflowId(slug: string): Promise<string> {
-  const metaPath = path.join(dataDir(), ".specops", slug, "meta.json");
+  const metaPath = path.join(dataDir(), ".specifyr", slug, "meta.json");
   try {
     const content = await fs.readFile(metaPath, "utf8");
     const meta = JSON.parse(content) as { workflow?: string };

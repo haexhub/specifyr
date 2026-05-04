@@ -3,7 +3,7 @@ import {
   projectCwd,
   assertProjectExists,
   loadEventStore,
-} from "@su/specops-stores";
+} from "@su/specifyr-stores";
 import {
   getSchedulerModule,
   getTaskGraphModule,

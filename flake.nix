@@ -1,10 +1,10 @@
 {
-  description = "SpecOps haex-corp — multi-agent orchestration platform";
+  description = "Specifyr specifyr — multi-agent orchestration platform";
 
   inputs = {
     nixpkgs.url      = "github:NixOS/nixpkgs/nixos-unstable";
     hermes-agent.url = "github:NousResearch/hermes-agent";
-    # Share nixpkgs between haex-corp and hermes-agent to avoid duplicate
+    # Share nixpkgs between specifyr and hermes-agent to avoid duplicate
     # store paths and halve first-build download time.
     hermes-agent.inputs.nixpkgs.follows = "nixpkgs";
   };
@@ -14,7 +14,7 @@
       systems     = [ "x86_64-linux" "aarch64-linux" ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems f;
     in {
-      # Dev shell for working on haex-corp itself.
+      # Dev shell for working on specifyr itself.
       devShells = forAllSystems (system:
         let pkgs = nixpkgs.legacyPackages.${system};
         in {
@@ -33,7 +33,7 @@
       #       pkgs   = flake.inputs.nixpkgs.legacyPackages.<system>;
       #       hermes = flake.inputs.hermes-agent.packages.<system>.default;
       #     in pkgs.dockerTools.buildLayeredImage {
-      #       name     = "specops-agent";
+      #       name     = "specifyr-agent";
       #       tag      = "<content-hash>";
       #       contents = with pkgs; [ hermes <packages...> ];
       #     }

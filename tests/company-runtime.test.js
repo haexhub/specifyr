@@ -14,8 +14,8 @@ async function withTempProject(fn) {
   const proj = await fs.mkdtemp(path.join(os.tmpdir(), "cr-"));
   // The valid fixture has two active roles (ceo + dev). Provision a
   // queue-<role>/ for each so the runtime's start-time validation passes.
-  const queueCeo = path.join(proj, ".specops", "demo", "queue-ceo");
-  const queueDev = path.join(proj, ".specops", "demo", "queue-dev");
+  const queueCeo = path.join(proj, ".specifyr", "demo", "queue-ceo");
+  const queueDev = path.join(proj, ".specifyr", "demo", "queue-dev");
   await fs.mkdir(queueCeo, { recursive: true });
   await fs.mkdir(queueDev, { recursive: true });
   const queueDirs = { ceo: queueCeo, dev: queueDev };
@@ -847,7 +847,7 @@ test("event log: non-ceo dispatch → recipients includes ceo + delivers_to peer
     await fs.writeFile(path.join(orgDir, "agents", "dev.md"), devSpec);
     await fs.writeFile(path.join(orgDir, "agents", "qa.md"), qaSpec);
 
-    const queueQa = path.join(proj, ".specops", "demo", "queue-qa");
+    const queueQa = path.join(proj, ".specifyr", "demo", "queue-qa");
     await fs.mkdir(queueQa, { recursive: true });
     const allQueueDirs = { ...queueDirs, qa: queueQa };
 

@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import YAML from "yaml";
-import { projectCwd } from "./specops-stores";
+import { projectCwd } from "./specifyr-stores";
 
 // Shape of .specify/extensions/.registry (spec-kit CLI's install-state file).
 interface ExtensionRegistryEntry {
@@ -266,7 +266,7 @@ export const SPEC_KIT_WORKFLOW: WorkflowDefinition = {
         "Tasks sollen so klein sein, dass ein Agent sie in einer Session erledigen kann.",
         "Wenn Abhängigkeiten fehlen, fährt der Scheduler später sequenziell."
       ],
-      artifacts: [".specify/specs/<feature>/tasks.md", ".specops/<slug>/tasks.graph.json"]
+      artifacts: [".specify/specs/<feature>/tasks.md", ".specifyr/<slug>/tasks.graph.json"]
     },
     {
       id: "implement",

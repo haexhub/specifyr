@@ -1,4 +1,4 @@
-export const SPECOPS_DIR = ".specops";
+export const SPECIFYR_DIR = ".specifyr";
 export const SPECIFY_DIR = ".specify";
 
 export const RUN_STATUSES = [

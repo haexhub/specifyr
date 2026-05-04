@@ -8,13 +8,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
-  const specopsDir = path.join(dataDir(), ".specops", slug);
+  const specifyrDir = path.join(dataDir(), ".specifyr", slug);
   const projectDir = path.join(projectsDir(), slug);
 
   const removed: string[] = [];
   const failures: string[] = [];
 
-  for (const target of [specopsDir, projectDir]) {
+  for (const target of [specifyrDir, projectDir]) {
     try {
       await fs.rm(target, { recursive: true, force: true });
       removed.push(target);

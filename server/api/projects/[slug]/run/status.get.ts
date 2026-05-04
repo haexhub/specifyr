@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
-  const base = path.join(dataDir(), ".specops", slug);
+  const base = path.join(dataDir(), ".specifyr", slug);
   const currentPath = path.join(base, "run", "current.json");
   const graphPath = path.join(base, "tasks.graph.json");
 

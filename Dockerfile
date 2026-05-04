@@ -46,7 +46,7 @@ RUN pnpm build
 
 # ------------------------------------------------------------------------------
 # prod: minimal runtime. Ships .output/ AND src/ — the server dynamically imports
-# src/core/*.js at runtime (see server/utils/specops-stores.ts loadModule()), so
+# src/core/*.js at runtime (see server/utils/specifyr-stores.ts loadModule()), so
 # Nitro's bundle alone is not self-contained.
 # ------------------------------------------------------------------------------
 FROM base AS prod
@@ -54,7 +54,7 @@ COPY --chown=node:node --from=builder /app/.output ./.output
 COPY --chown=node:node --from=builder /app/src ./src
 COPY --chown=node:node --from=builder /app/package.json ./package.json
 # Mountpoints für Bind-Volumes vorab als node anlegen, falls der Host-Pfad noch leer ist.
-RUN mkdir -p /app/projects /app/.specops && chown -R node:node /app/projects /app/.specops
+RUN mkdir -p /app/projects /app/.specifyr && chown -R node:node /app/projects /app/.specifyr
 ENV HOST=0.0.0.0 \
     PORT=3000 \
     NODE_ENV=production

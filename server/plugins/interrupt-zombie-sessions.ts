@@ -1,4 +1,4 @@
-import { loadSessionStore } from "../utils/specops-stores";
+import { loadSessionStore } from "../utils/specifyr-stores";
 
 /**
  * Nitro startup plugin. Walks every persisted session whose status was "running" at

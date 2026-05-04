@@ -57,7 +57,7 @@ let cached:
 let inflight: Promise<CatalogExtension[]> | null = null;
 
 async function extractBuildId(): Promise<string> {
-  const res = await fetch(ALL_EXTENSIONS_URL, { headers: { "user-agent": "speculoss/0.1" } });
+  const res = await fetch(ALL_EXTENSIONS_URL, { headers: { "user-agent": "specifyr/0.1" } });
   if (!res.ok) {
     throw new Error(`Failed to fetch ${ALL_EXTENSIONS_URL}: ${res.status} ${res.statusText}`);
   }
@@ -80,7 +80,7 @@ async function extractBuildId(): Promise<string> {
 async function loadFresh(): Promise<CatalogExtension[]> {
   const buildId = await extractBuildId();
   const url = `${CATALOG_BASE}/_next/data/${buildId}/all-extensions.json`;
-  const res = await fetch(url, { headers: { "user-agent": "speculoss/0.1" } });
+  const res = await fetch(url, { headers: { "user-agent": "specifyr/0.1" } });
   if (!res.ok) {
     throw new Error(`Failed to fetch catalog JSON: ${res.status} ${res.statusText}`);
   }

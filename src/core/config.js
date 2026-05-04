@@ -1,5 +1,5 @@
 import path from "node:path";
-import { DEFAULT_CONFIG, SPECOPS_DIR } from "./constants.js";
+import { DEFAULT_CONFIG, SPECIFYR_DIR } from "./constants.js";
 import { readJson, writeJson } from "../utils/fs.js";
 
 function mergeConfig(base, override) {
@@ -29,7 +29,7 @@ function mergeConfig(base, override) {
 export class ConfigStore {
   constructor(cwd = process.cwd()) {
     this.cwd = cwd;
-    this.filePath = path.join(cwd, SPECOPS_DIR, "config.json");
+    this.filePath = path.join(cwd, SPECIFYR_DIR, "config.json");
   }
 
   async load() {

@@ -2,8 +2,8 @@
  * Per-project encrypted secrets store.
  *
  * Secrets are AES-256-GCM encrypted and stored in
- * <dataDir>/.specops/<slug>/secrets.json. The master key is read from
- * SPECULOOS_SECRET_KEY (64-char hex = 32 bytes). If unset, a random key is
+ * <dataDir>/.specifyr/<slug>/secrets.json. The master key is read from
+ * SPECIFYR_SECRET_KEY (64-char hex = 32 bytes). If unset, a random key is
  * auto-generated and persisted in <dataDir>/master.key on first use.
  *
  * Threat model: secrets must not appear in git, specs, or AI chat.
@@ -30,13 +30,13 @@ type EncryptedEntry = { iv: string; tag: string; data: string };
 type SecretsFile = Record<string, EncryptedEntry>;
 
 function secretsFilePath(slug: string): string {
-  return path.join(dataDir(), ".specops", slug, "secrets.json");
+  return path.join(dataDir(), ".specifyr", slug, "secrets.json");
 }
 
 async function masterKey(): Promise<Buffer> {
-  if (process.env.SPECULOOS_SECRET_KEY) {
-    const key = Buffer.from(process.env.SPECULOOS_SECRET_KEY, "hex");
-    if (key.length !== 32) throw new Error("SPECULOOS_SECRET_KEY must be 64 hex chars (32 bytes)");
+  if (process.env.SPECIFYR_SECRET_KEY) {
+    const key = Buffer.from(process.env.SPECIFYR_SECRET_KEY, "hex");
+    if (key.length !== 32) throw new Error("SPECIFYR_SECRET_KEY must be 64 hex chars (32 bytes)");
     return key;
   }
   const keyPath = path.join(dataDir(), "master.key");

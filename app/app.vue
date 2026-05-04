@@ -1,7 +1,7 @@
 <script setup lang="ts">
 useHead({
-  title: "speculoss",
-  link: [{ rel: "icon", type: "image/png", href: "/speculoss-logo.png" }]
+  title: "specifyr",
+  link: [{ rel: "icon", type: "image/png", href: "/specifyr-logo.png" }]
 });
 </script>
 

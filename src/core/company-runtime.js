@@ -81,7 +81,7 @@ export class CompanyRuntime extends EventEmitter {
     this.catalogDir = catalogDir; // optional; if set, references are resolved & validated
     this.hermesBinary = hermesBinary;
     // slug for runtimeContext; defaults to CEO queue's grandparent dir —
-    // convention is `<root>/.specops/<slug>/queue-<role>/`.
+    // convention is `<root>/.specifyr/<slug>/queue-<role>/`.
     this.slug = slug ?? path.basename(path.dirname(queueDirs[ceoRole]));
     this.ceoRole = ceoRole;
     this.runnerFactory =
@@ -104,20 +104,20 @@ export class CompanyRuntime extends EventEmitter {
     // tests.
     this.opsToken = opsToken ?? randomBytes(32).toString("hex");
     // Per-runtime SQLite read-index for the event log. Lives at
-    // `<projectRoot>/.specops/<slug>/state.db`. JSONL is the canonical
+    // `<projectRoot>/.specifyr/<slug>/state.db`. JSONL is the canonical
     // source of truth; this index is rebuildable from it (see
     // architecture_decisions.md §3). Opened in start(), closed in stop().
-    const specopsDir = path.join(projectRoot, ".specops", this.slug);
+    const specifyrDir = path.join(projectRoot, ".specifyr", this.slug);
     this.eventIndex = new CompanyEventIndex({
-      dbPath: path.join(specopsDir, "state.db"),
+      dbPath: path.join(specifyrDir, "state.db"),
     });
     // Per-runtime event log (JSONL, per-day rotation). Default writes under
-    // `<projectRoot>/.specops/<slug>/events/`. Write-through into eventIndex
+    // `<projectRoot>/.specifyr/<slug>/events/`. Write-through into eventIndex
     // for fast queries; tests can inject a stub log.
     this.eventLog =
       eventLog ??
       new CompanyEventLog({
-        baseDir: specopsDir,
+        baseDir: specifyrDir,
         index: this.eventIndex,
       });
     // Supervisor is the deterministic watchdog that consumes the event
@@ -151,7 +151,7 @@ export class CompanyRuntime extends EventEmitter {
     // a prior run, replay them so the index is consistent before any new
     // event lands. rebuildFromDisk is idempotent (INSERT OR IGNORE on id).
     this.eventIndex.open();
-    this.eventIndex.rebuildFromDisk(path.join(this.projectRoot, ".specops", this.slug));
+    this.eventIndex.rebuildFromDisk(path.join(this.projectRoot, ".specifyr", this.slug));
 
     this.company = await loadCompany(this.orgDir);
     if (this.company.agents.size === 0) {

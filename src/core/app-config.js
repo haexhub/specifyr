@@ -1,6 +1,6 @@
 import path from "node:path";
 import { ensureDir, readJson, writeJson } from "../utils/fs.js";
-import { SPECOPS_DIR } from "./constants.js";
+import { SPECIFYR_DIR } from "./constants.js";
 
 const DEFAULT_APP_CONFIG = {
   standardExtensions: ["superpowers-bridge"],
@@ -18,7 +18,7 @@ const DEFAULT_APP_CONFIG = {
 };
 
 function configPath(cwd) {
-  return path.join(cwd, SPECOPS_DIR, "config.json");
+  return path.join(cwd, SPECIFYR_DIR, "config.json");
 }
 
 export async function loadAppConfig(cwd = process.cwd()) {

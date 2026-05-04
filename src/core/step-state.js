@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { ensureDir, exists, readJson, writeJson } from "../utils/fs.js";
-import { SPECOPS_DIR } from "./constants.js";
+import { SPECIFYR_DIR } from "./constants.js";
 
 // Default order for projects without an explicit workflow (back-compat with pre-workflow data).
 // Workflow-aware callers should pass their own `stepIds` array to listSteps/markDownstreamStale.
@@ -22,7 +22,7 @@ function defaultStepState(stepId) {
 
 export class StepStateStore {
   constructor(cwd = process.cwd()) {
-    this.rootDir = path.join(cwd, SPECOPS_DIR);
+    this.rootDir = path.join(cwd, SPECIFYR_DIR);
   }
 
   stepFilePath(slug, stepId) {

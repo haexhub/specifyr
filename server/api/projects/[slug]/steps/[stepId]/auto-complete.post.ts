@@ -5,7 +5,7 @@ import {
   loadEventStore,
   projectCwd,
   assertProjectExists
-} from "@su/specops-stores";
+} from "@su/specifyr-stores";
 import { getProjectWorkflowId } from "@su/workflows";
 import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "@su/workflow-discovery";
 

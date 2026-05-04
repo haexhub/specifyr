@@ -7,10 +7,10 @@ dispatch to the CEO container, the runtime owns a CapabilityApprovalService,
 and `authorizeWithApproval()` blocks on user decisions when sensitive
 capabilities are flagged. **What's still missing is the channel by which
 worker containers actually reach those services.** Today they run in
-isolated hermes-agent containers with no callback path back to haex-corp.
+isolated hermes-agent containers with no callback path back to specifyr.
 
 This inkrement closes that gap: a `company-ops` MCP server exposed by
-haex-corp that workers connect to from inside their containers.
+specifyr that workers connect to from inside their containers.
 
 ## Open issues this addresses
 
@@ -23,13 +23,13 @@ haex-corp that workers connect to from inside their containers.
 ## Goal & Non-Goals
 
 ### In scope
-- A minimal HTTP-based MCP server inside haex-corp (Nuxt route or Nitro
+- A minimal HTTP-based MCP server inside specifyr (Nuxt route or Nitro
   plugin) that exposes:
   - `authorize` — wraps `runtime.authorizeWithApproval(...)`
   - `getAgent` — read-only spec lookup for `getResolvedTools/Skills/Binaries`
   - `dispatchTask` — CEO drops a sub-task into a worker queue
 - Container reachability: workers join the `companies` network and call
-  `http://haex-corp:3000/mcp/<slug>/...`
+  `http://specifyr:3000/mcp/<slug>/...`
 - Per-slug routing — the URL path scopes all calls to one company runtime
 - Auth: a per-runtime bearer token generated at `start()` and injected
   into worker containers via `secretsResolver` as `COMPANY_OPS_TOKEN`
@@ -48,12 +48,12 @@ haex-corp that workers connect to from inside their containers.
 
 ### 1. MCP transport: HTTP/SSE vs. stdio
 
-**HTTP/SSE** — single haex-corp endpoint, all workers in the network
+**HTTP/SSE** — single specifyr endpoint, all workers in the network
 hit it. Auth via bearer token. Simple to debug (curl works).
 Recommended.
 
 **stdio with sidecar** — a per-container stdio bridge that proxies to
-haex-corp. Matches "official" MCP shape but adds a sidecar process per
+specifyr. Matches "official" MCP shape but adds a sidecar process per
 agent. Higher infrastructure cost, no observable benefit for this
 single-orchestrator setup.
 
@@ -72,7 +72,7 @@ the docker socket).
 
 The CEO calls `dispatchTask({worker: "dev", task: {...}})`. Two options:
 
-**(a) Drop YAML in `<projectRoot>/.specops/<slug>/queue-<role>/`** — a
+**(a) Drop YAML in `<projectRoot>/.specifyr/<slug>/queue-<role>/`** — a
   per-role queue dir picked up by per-role QueuePoller instances.
   Reuses the dispatch loop we just built.
 
@@ -89,7 +89,7 @@ loops stay symmetric (CEO queue and worker queue both file-watched).
 - Generate `COMPANY_OPS_TOKEN` in CompanyRuntime.start()
 - Expose via `runtime.opsToken`
 - start.post.ts wraps the existing secretsResolver to also inject
-  `COMPANY_OPS_TOKEN` and `COMPANY_OPS_URL=http://haex-corp:3000/mcp/<slug>`
+  `COMPANY_OPS_TOKEN` and `COMPANY_OPS_URL=http://specifyr:3000/mcp/<slug>`
 
 ### 7.2 — Nuxt route(s)
 - `server/api/mcp/[slug]/authorize.post.ts` — POST {role, capability,
@@ -103,7 +103,7 @@ loops stay symmetric (CEO queue and worker queue both file-watched).
 
 ### 7.3 — Per-role queue dirs + dispatch loop
 - Convert single QueuePoller into a Map<role, QueuePoller>
-- Per role: `<projectRoot>/.specops/<slug>/queue-<role>/`
+- Per role: `<projectRoot>/.specifyr/<slug>/queue-<role>/`
 - CEO queue stays at `queue/` (or rename to `queue-ceo/` for symmetry —
   decide and migrate)
 - Each role's poller calls `runners.get(role).execute(...)` on its

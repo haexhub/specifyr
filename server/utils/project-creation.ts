@@ -40,7 +40,7 @@ export async function createProjectRecord(options: {
   // `specify init` is interactive by default (arrow-key menu for AI selection, git-init prompt).
   // --ai claude and --no-git make it fully non-interactive so spawn() from Nuxt can succeed.
   // We run git init separately below so each project has its own repo boundary — this prevents
-  // Claude Code from walking up to the haex-corp root and loading its CLAUDE.md context.
+  // Claude Code from walking up to the specifyr root and loading its CLAUDE.md context.
   const initArgs = ["init", slug, "--ai", "claude", "--no-git"];
   const initResult = await runCommand("specify", initArgs, { cwd: projectsRoot });
   const workflow = options.workflow ?? "spec-kit";
@@ -63,14 +63,14 @@ export async function createProjectRecord(options: {
   }
 
   // Initialize a git repository in the project directory so Claude Code treats it as an
-  // independent project root — preventing context bleed from the haex-corp parent CLAUDE.md.
-  // (haex-corp/.gitignore already excludes projects/, so there's no nested-repo issue.)
+  // independent project root — preventing context bleed from the specifyr parent CLAUDE.md.
+  // (specifyr/.gitignore already excludes projects/, so there's no nested-repo issue.)
   await runCommand("git", ["init", "-b", "main"], { cwd: projectRoot });
-  await runCommand("git", ["config", "user.email", "agent@haex-corp.local"], { cwd: projectRoot });
-  await runCommand("git", ["config", "user.name", "haex-corp"], { cwd: projectRoot });
+  await runCommand("git", ["config", "user.email", "agent@specifyr.local"], { cwd: projectRoot });
+  await runCommand("git", ["config", "user.name", "specifyr"], { cwd: projectRoot });
 
   // Write a project-scoped CLAUDE.md that establishes company workflow context and prevents
-  // Claude from pulling in haex-corp platform knowledge.
+  // Claude from pulling in specifyr platform knowledge.
   const fs = await import("node:fs/promises");
   const claudeMd = [
     `# ${title} — Company Workspace`,

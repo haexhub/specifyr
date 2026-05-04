@@ -23,13 +23,13 @@ const sizeClasses = {
 <template>
   <span class="inline-flex min-w-0 items-center gap-2">
     <img
-      src="/speculoss-logo.png"
-      alt="speculoss Gewuerzspekulatius mit Speckit-Spross"
+      src="/specifyr-logo.png"
+      alt="specifyr Gewuerzspekulatius mit Speckit-Spross"
       class="shrink-0 object-contain"
       :class="compact ? sizeClasses.sm : sizeClasses[size]"
     >
     <span v-if="showText && !compact" class="truncate text-sm font-semibold tracking-tight">
-      speculoss
+      specifyr
     </span>
   </span>
 </template>

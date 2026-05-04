@@ -136,7 +136,7 @@ const { skip } = gate();
 test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, async (t) => {
   const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), "haex-e2e-"));
   const slug = "e2e";
-  const ceoQueueDir = path.join(projectRoot, ".specops", slug, "queue-ceo");
+  const ceoQueueDir = path.join(projectRoot, ".specifyr", slug, "queue-ceo");
   await fs.mkdir(ceoQueueDir, { recursive: true });
   await writeMinimalOrg(projectRoot);
 

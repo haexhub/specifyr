@@ -6,16 +6,16 @@
 #
 # Unterschied zu dev:
 #   - Image-Target `prod` statt `dev` (kein pnpm dev, kein HMR).
-#   - Kein Source-Bind-Mount; nur Runtime-Daten (projects/, .specops/, Credentials) werden
+#   - Kein Source-Bind-Mount; nur Runtime-Daten (projects/, .specifyr/, Credentials) werden
 #     reingereicht. Alles andere ist in der Image-Schicht eingefroren.
 
 services:
-  speculoss:
+  specifyr:
     build:
       context: .
       target: prod
-    image: speculoss:prod
-    container_name: speculoss-prod
+    image: specifyr:prod
+    container_name: specifyr-prod
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -39,7 +39,7 @@ services:
       # halten willst.
       - ./projects:/app/projects
       # Event-/Session-State soll persistieren, ohne den Host zu verschmutzen.
-      - speculoss_state:/app/.specops
+      - specifyr_state:/app/.specifyr
       # Host-Login wiederverwenden (Solo-Tool-Default). Für Multi-User später:
       #   - claude_home:/home/node/.claude
       - ${HOME}/.claude:/home/node/.claude
@@ -50,8 +50,7 @@ services:
     networks:
       companies:
         aliases:
-          - speculoss
-          - haex-corp
+          - specifyr
     user: "${UID:-1000}:${GID:-1000}"
 
 networks:
@@ -60,6 +59,6 @@ networks:
     driver: bridge
 
 volumes:
-  speculoss_state:
+  specifyr_state:
   # Multi-User-Zukunft:
   # claude_home:

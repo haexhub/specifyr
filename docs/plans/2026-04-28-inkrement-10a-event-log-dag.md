@@ -6,7 +6,7 @@
 
 **Architecture:**
 1. **Spec-Validierung** — pure function in `spec-loader.js`. DAG-Cycle-Detection nur auf `reports_to` (Hierarchie). Existenz-Check auf `reports_to` und `delivers_to`. `delivers_to`-Zykel sind erlaubt (Refinement-Loops).
-2. **JSONL Event Log** — neue `CompanyEventLog`-Klasse, schreibt `<projectRoot>/.specops/<slug>/events/YYYY-MM-DD.jsonl` via `await fs.appendFile`. Bewusst getrennt von der bestehenden `EventStore` (die spec-kit's Run-Orchestrator dient).
+2. **JSONL Event Log** — neue `CompanyEventLog`-Klasse, schreibt `<projectRoot>/.specifyr/<slug>/events/YYYY-MM-DD.jsonl` via `await fs.appendFile`. Bewusst getrennt von der bestehenden `EventStore` (die spec-kit's Run-Orchestrator dient).
 3. **Lifecycle-Events** — `CompanyRuntime` emittiert `dispatch-started`, `dispatch-completed`, `dispatch-failed`, `dispatch-error` ins Event Log. Completion-Events enthalten `recipients: [ceo, ...delivers_to]` als denormalisiertes Feld, damit Log self-contained ist. Optional: `parent_task_id` wird durchgereicht von `dispatch.post.ts` falls gesetzt — macht Iterations-Ketten rekonstruierbar.
 4. **Keine Auto-Tickets, kein Inbox.** Reports sind reine Events. Konsumenten (Supervisor in 10c, UI in 13) lesen das Log direkt.
 
@@ -687,7 +687,7 @@ constructor({
 } = {}) {
   // ... existing body
   this.eventLog = eventLog ?? new CompanyEventLog({
-    baseDir: path.join(projectRoot, ".specops", this.slug),
+    baseDir: path.join(projectRoot, ".specifyr", this.slug),
   });
 }
 ```
@@ -898,7 +898,7 @@ git commit -am "test(company-runtime): thrown runner error produces dispatch-err
 ### Task 14: Memory + Roadmap Update
 
 **Files:**
-- Modify: `~/.claude/projects/-home-haex-Projekte-haex-corp/memory/architecture_decisions.md`
+- Modify: `~/.claude/projects/-home-haex-Projekte-specifyr/memory/architecture_decisions.md`
 - Modify: `docs/plans/2026-04-27-roadmap.md`
 
 **Step 1:** Memory `architecture_decisions.md` §1 reformulieren — Kernchanges:
@@ -967,7 +967,7 @@ Expected: all green. Pre-existing 200 + ~15 new = ~215 tests.
 **Step 2:** Manueller Smoke (optional aber empfehlenswert):
 - Frische Company starten
 - Task in queue-ceo droppen
-- Prüfen: `<projectRoot>/.specops/<slug>/events/YYYY-MM-DD.jsonl` enthält dispatch-started + dispatch-completed
+- Prüfen: `<projectRoot>/.specifyr/<slug>/events/YYYY-MM-DD.jsonl` enthält dispatch-started + dispatch-completed
 - Prüfen: kein neues Ticket in queue-ceo/ (nur das Ursprungs-Task wird unlinked)
 
 **Step 3:** No commit needed unless smoke turns up issues.

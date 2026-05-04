@@ -1,5 +1,5 @@
 import { installExtensionsInProject } from "@su/extension-install";
-import { assertProjectExists } from "@su/specops-stores";
+import { assertProjectExists } from "@su/specifyr-stores";
 
 interface InstallBody {
   slugs?: string[];

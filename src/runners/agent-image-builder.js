@@ -10,7 +10,7 @@
  * Caching: in-process Set + `docker image inspect`. Nix itself is also
  * idempotent — a second build of an already-realised derivation is instant.
  *
- * Image tag: <SPECOPS_AGENT_IMAGE_PREFIX>:<12-char sha256 of sorted package list>
+ * Image tag: <SPECIFYR_AGENT_IMAGE_PREFIX>:<12-char sha256 of sorted package list>
  */
 
 import crypto from "node:crypto";
@@ -19,7 +19,7 @@ import { readFile } from "node:fs/promises";
 import { runCommand, runPipeCommand } from "../utils/process.js";
 
 const _built = new Set();
-const IMAGE_PREFIX = process.env.SPECOPS_AGENT_IMAGE_PREFIX ?? "specops-agent";
+const IMAGE_PREFIX = process.env.SPECIFYR_AGENT_IMAGE_PREFIX ?? "specifyr-agent";
 
 // Baseline packages always present in every agent image. coreutils provides
 // `sleep` (used by HermesDockerRunner.startPersistent to keep the container
@@ -59,11 +59,11 @@ pkgs.dockerTools.buildLayeredImage {
  *
  * @param {object}   opts
  * @param {string[]} opts.nix_packages    nixpkgs attribute names declared in the agent spec
- * @param {string}   opts.projectRoot     absolute path to haex-corp root (contains flake.nix)
+ * @param {string}   opts.projectRoot     absolute path to specifyr root (contains flake.nix)
  * @param {string}   [opts.dockerCommand]
  * @returns {Promise<string>}             image tag to pass to `docker run`
  */
-const NIX_DOCKER_IMAGE = process.env.SPECOPS_NIX_IMAGE ?? "nixos/nix";
+const NIX_DOCKER_IMAGE = process.env.SPECIFYR_NIX_IMAGE ?? "nixos/nix";
 
 export async function buildAgentImage({
   nix_packages = [],
@@ -109,7 +109,7 @@ export async function buildAgentImage({
 
 async function _buildWithDockerNix({ sorted, hash, tag, nixSystem, projectRoot, dockerCommand, onLog }) {
   // Base64-encode the Nix expression so it can be passed as an env var — this
-  // avoids mounting a workdir bind path that only exists in the speculoss
+  // avoids mounting a workdir bind path that only exists in the specifyr
   // container (DinD-socket: sibling containers resolve bind mounts on the HOST).
   const expr = buildNixExpr({ nixPackages: sorted, tag: hash, nixSystem, projectRoot: "/project" });
   const exprB64 = Buffer.from(expr).toString("base64");

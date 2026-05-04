@@ -1,4 +1,4 @@
-.specops/
+.specifyr/
 .DS_Store
 node_modules/
 
@@ -9,7 +9,7 @@ node_modules/
 
 # Runtime user-data: spec-kit projects live under projects/<slug>/ at runtime.
 # Each project is its own user-owned sandbox (its own .specify/, .claude/, etc.)
-# and changes independently of haex-corp's code. Tracking them produced 200+
+# and changes independently of specifyr's code. Tracking them produced 200+
 # noise lines in `git status`. Test fixtures live under tests/fixtures/ — not
 # here.
 /projects/

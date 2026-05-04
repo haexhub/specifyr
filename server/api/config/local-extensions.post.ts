@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
       statusMessage: "Body must contain { path: string }"
     });
   }
-  // Resolve relative paths against the app's CWD (where .specops/ lives).
+  // Resolve relative paths against the app's CWD (where .specifyr/ lives).
   const resolved = path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
 
   // Parse the manifest; this validates the path is a dir, extension.yml exists and is

@@ -1,4 +1,4 @@
-import { loadSessionStore, loadStepStateStore } from "@su/specops-stores";
+import { loadSessionStore, loadStepStateStore } from "@su/specifyr-stores";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");

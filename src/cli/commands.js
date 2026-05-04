@@ -4,18 +4,18 @@ import { spawnPassthrough } from "../utils/process.js";
 
 function usage() {
   return `Usage:
-  speculoss init
-  speculoss config show
-  speculoss config set <path> <json-value>
-  speculoss spec create <title> [problem statement]
-  speculoss spec sync <slug>
-  speculoss spec refine <slug>
-  speculoss plan generate <slug>
-  speculoss tasks generate <slug>
-  speculoss approve <slug> <spec|plan|task_batch>
-  speculoss run start <slug>
-  speculoss run status <slug>
-  speculoss ui [port]`;
+  specifyr init
+  specifyr config show
+  specifyr config set <path> <json-value>
+  specifyr spec create <title> [problem statement]
+  specifyr spec sync <slug>
+  specifyr spec refine <slug>
+  specifyr plan generate <slug>
+  specifyr tasks generate <slug>
+  specifyr approve <slug> <spec|plan|task_batch>
+  specifyr run start <slug>
+  specifyr run status <slug>
+  specifyr ui [port]`;
 }
 
 function print(value) {
@@ -33,7 +33,7 @@ export async function main(args, options = {}) {
 
   if (command === "init") {
     const root = await orchestrator.init();
-    print(`Initialized speculoss in ${root}`);
+    print(`Initialized specifyr in ${root}`);
     return;
   }
 

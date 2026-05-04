@@ -1,11 +1,11 @@
 import path from "node:path";
-import { SPECOPS_DIR } from "./constants.js";
+import { SPECIFYR_DIR } from "./constants.js";
 import { ensureDir, exists, readJson, readText, resolveFromCwd, writeJson, writeText } from "../utils/fs.js";
 
 export class ArtifactStore {
   constructor(cwd = process.cwd()) {
     this.cwd = cwd;
-    this.rootDir = resolveFromCwd(cwd, SPECOPS_DIR);
+    this.rootDir = resolveFromCwd(cwd, SPECIFYR_DIR);
   }
 
   async initRoot() {

@@ -2,7 +2,7 @@ import {
   loadSessionStore,
   loadTurnBroker,
   assertProjectExists
-} from "@su/specops-stores";
+} from "@su/specifyr-stores";
 
 interface StoredEvent {
   seq: number;

@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { ensureDir, exists, readJson, writeJson } from "../utils/fs.js";
-import { SPECIFY_DIR, SPECOPS_DIR } from "./constants.js";
+import { SPECIFY_DIR, SPECIFYR_DIR } from "./constants.js";
 import { ClaudeCodeRunner } from "../runners/claude-code.js";
 
 /**
@@ -94,7 +94,7 @@ async function extractGraphViaClaude(projectCwd, tasksMdPath) {
 }
 
 function graphFilePath(cwd, slug) {
-  return path.join(cwd, SPECOPS_DIR, slug, "tasks.graph.json");
+  return path.join(cwd, SPECIFYR_DIR, slug, "tasks.graph.json");
 }
 
 /**

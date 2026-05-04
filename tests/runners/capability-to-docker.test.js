@@ -145,11 +145,11 @@ test("default image tag is hermes-agent:dev", () => {
 
 test("containerName produces --name flag", () => {
   const input = baseInput();
-  input.containerName = "haex-corp_company_test_ceo";
+  input.containerName = "specifyr_company_test_ceo";
   const args = capabilityFlags(input);
   const i = args.indexOf("--name");
   assert.ok(i >= 0);
-  assert.equal(args[i + 1], "haex-corp_company_test_ceo");
+  assert.equal(args[i + 1], "specifyr_company_test_ceo");
 });
 
 test("refuses projectRoot === '/' (would mount host root)", () => {

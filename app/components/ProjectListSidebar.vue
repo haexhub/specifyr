@@ -83,7 +83,7 @@ async function confirmDelete() {
         class="min-w-0"
         :class="compact ? 'sr-only' : ''"
       >
-        <SpeculossLogo />
+        <SpecifyrLogo />
       </NuxtLink>
       <NuxtLink
         v-if="compact"
@@ -92,7 +92,7 @@ async function confirmDelete() {
         :class="route.path === '/' ? 'bg-primary/15' : 'hover:bg-accent'"
         :title="$t('sidebar.homepage')"
       >
-        <SpeculossLogo compact :show-text="false" />
+        <SpecifyrLogo compact :show-text="false" />
       </NuxtLink>
       <button
         v-if="!compact"

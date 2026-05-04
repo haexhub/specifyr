@@ -1,6 +1,6 @@
-# Build the haex-corp main image and push it to GitHub Container Registry.
+# Build the specifyr main image and push it to GitHub Container Registry.
 #
-# Image is consumed by the production Ansible deployment (roles/haex-corp/
+# Image is consumed by the production Ansible deployment (roles/specifyr/
 # in the ansible repo) which `docker compose pull`s the tag specified in
 # its docker-compose.yml.j2 template (default: `:latest` on default branch,
 # or a pinned `:sha-<short>` for reproducible deploys).
@@ -11,10 +11,10 @@
 #   - manual dispatch (for cutting tagged releases)
 #
 # Tags applied (via docker/metadata-action):
-#   - ghcr.io/<owner>/haex-corp:latest        (only on default branch)
-#   - ghcr.io/<owner>/haex-corp:<branch>      (e.g. main, feature/x)
-#   - ghcr.io/<owner>/haex-corp:sha-<short>   (always)
-#   - ghcr.io/<owner>/haex-corp:<git-tag>     (only on tag refs)
+#   - ghcr.io/<owner>/specifyr:latest        (only on default branch)
+#   - ghcr.io/<owner>/specifyr:<branch>      (e.g. main, feature/x)
+#   - ghcr.io/<owner>/specifyr:sha-<short>   (always)
+#   - ghcr.io/<owner>/specifyr:<git-tag>     (only on tag refs)
 #
 # Security note: this workflow uses only github-native context vars
 # (repository_owner, actor, GITHUB_TOKEN) and outputs from the trusted
@@ -24,7 +24,7 @@
 # https://github.blog/security/vulnerability-research/how-to-catch-github-actions-workflow-injections-before-attackers-do/
 # does not apply.
 
-name: Build haex-corp image
+name: Build specifyr image
 
 on:
   push:
@@ -34,7 +34,7 @@ on:
       # explicitly so the workflow runs before that work merges into main.
       - feature/speckit-company-extension
     tags:
-      - "haex-corp-v*"
+      - "specifyr-v*"
     paths:
       - "Dockerfile"
       - "src/**"
@@ -44,7 +44,7 @@ on:
       - "pnpm-lock.yaml"
       - "nuxt.config.ts"
       - "tsconfig.json"
-      - ".github/workflows/build-haex-corp-image.yml"
+      - ".github/workflows/build-specifyr-image.yml"
   workflow_dispatch:
 
 jobs:
@@ -73,7 +73,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/haex-corp
+          images: ghcr.io/${{ github.repository_owner }}/specifyr
           tags: |
             type=ref,event=branch
             type=ref,event=tag

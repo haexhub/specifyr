@@ -1,8 +1,8 @@
-# SpecOps Frontend Redesign — Design Document
+# Specifyr Frontend Redesign — Design Document
 
 **Date:** 2026-04-24
 **Status:** Draft — in validation with user
-**Scope:** Complete frontend overhaul of haex-corp to operationally drive spec-kit
+**Scope:** Complete frontend overhaul of specifyr to operationally drive spec-kit
 
 ---
 
@@ -141,10 +141,10 @@ Each index entry already includes `name`, `id`, `description`, `author`, `versio
 Clicking **Install** on the catalog opens a modal:
 
 - Multi-select of all existing projects
-- Checkbox "Always install on newly created projects" (persisted in `.specops/config.json`)
+- Checkbox "Always install on newly created projects" (persisted in `.specifyr/config.json`)
 - Checkbox "Apply to all existing projects"
 
-On submit, the server runs `specify extension add <slug>` in each selected `projects/<slug>/` and records in `.specops/<slug>/extensions.json` which extensions are installed. If an extension is being auto-installed (via the global default), it's recorded with source `auto`.
+On submit, the server runs `specify extension add <slug>` in each selected `projects/<slug>/` and records in `.specifyr/<slug>/extensions.json` which extensions are installed. If an extension is being auto-installed (via the global default), it's recorded with source `auto`.
 
 ### Default extensions
 
@@ -152,7 +152,7 @@ On submit, the server runs `specify extension add <slug>` in each selected `proj
 
 ### Extension-provided commands & hooks
 
-When an extension is installed in a project, the server fetches its detail page once and stores `{commands: [...], hooks: [...]}` in `.specops/<slug>/extensions.json`. The step UI reads this to (a) add extension commands to the command palette contextually and (b) render hook-gates in the stepper.
+When an extension is installed in a project, the server fetches its detail page once and stores `{commands: [...], hooks: [...]}` in `.specifyr/<slug>/extensions.json`. The step UI reads this to (a) add extension commands to the command palette contextually and (b) render hook-gates in the stepper.
 
 Example: with `red-team` installed, Step `plan` shows a gate panel above the chat: "Red Team review required before plan can run" with a button to start the gate session. The gate runs `/speckit.red-team.run` and must reach `completed` status before `/speckit.plan` sessions can be submitted.
 
@@ -192,7 +192,7 @@ The graph is invalidated whenever `tasks.md` mtime changes.
 
 ### Runner selection
 
-Hermes is the **default** runner. Configuration in `.specops/config.json`:
+Hermes is the **default** runner. Configuration in `.specifyr/config.json`:
 
 ```json
 {
@@ -242,7 +242,7 @@ projects/
     .hermes/memory/                    ← per-project Hermes memory
     src/ ...                           ← whatever the project actually builds
 
-.specops/
+.specifyr/
   config.json                          ← global config (runner default, auto-install extensions)
   <slug>/
     project.json                       ← slug, title, description, createdAt
@@ -265,10 +265,10 @@ projects/
 
 ### Why this layout
 
-- **Git-friendly.** All state is plain files. Users can version-control `.specops/` alongside their project if desired.
+- **Git-friendly.** All state is plain files. Users can version-control `.specifyr/` alongside their project if desired.
 - **Inspectable.** Same philosophy as spec-kit itself.
 - **Append-only where possible.** JSONL for messages and events means easy recovery and no corruption on crash.
-- **Matches existing store.** `src/core/artifact-store.js` and `src/core/event-store.js` already work on flat files under `.specops/`; we extend, not replace.
+- **Matches existing store.** `src/core/artifact-store.js` and `src/core/event-store.js` already work on flat files under `.specifyr/`; we extend, not replace.
 
 ### Watcher layer
 
@@ -435,7 +435,7 @@ app/lib/
 
 ### Deferred
 
-- Git integration for artifact version history (today: timestamped copies in `.specops/<slug>/artifacts/history/`)
+- Git integration for artifact version history (today: timestamped copies in `.specifyr/<slug>/artifacts/history/`)
 - Multi-user / auth
 - Global notifications across all projects (only per-project in v1)
 - Manual drag/drop reordering of tasks

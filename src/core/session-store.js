@@ -2,7 +2,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { ensureDir, exists, readJson, readText, writeJson, writeText } from "../utils/fs.js";
-import { SPECOPS_DIR } from "./constants.js";
+import { SPECIFYR_DIR } from "./constants.js";
 
 function titleFromPrompt(prompt, max = 60) {
   const firstLine = prompt.trim().split("\n")[0] ?? "";
@@ -17,7 +17,7 @@ function titleFromPrompt(prompt, max = 60) {
 
 export class SessionStore {
   constructor(cwd = process.cwd()) {
-    this.rootDir = path.join(cwd, SPECOPS_DIR);
+    this.rootDir = path.join(cwd, SPECIFYR_DIR);
   }
 
   stepDir(slug, stepId) {
@@ -178,7 +178,7 @@ export class SessionStore {
     return out;
   }
 
-  // Walk every session under .specops/<*>/steps/<*>/sessions/ and transition any whose
+  // Walk every session under .specifyr/<*>/steps/<*>/sessions/ and transition any whose
   // status was "running" at process death to "interrupted". Called once at server start
   // so the UI never sees a permanently-stuck "running" session after a crash/restart.
   async interruptRunningSessions() {

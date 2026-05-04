@@ -8,11 +8,11 @@
  * src/runners/ are pure ESM JS modules outside Nitro's bundle — same reason
  * that run-manager.ts uses loadEsm() for the scheduler / task-graph modules.
  *
- * Known limitation (deferred): when speculoss itself runs inside a container,
+ * Known limitation (deferred): when specifyr itself runs inside a container,
  * `process.cwd()` is /app, but the Hermes-Agent containers spawned via
  * docker.sock need HOST paths in their bind mounts (the docker daemon
- * resolves bind sources host-side, not against speculoss' container fs).
- * Fix planned for the next iteration via a SPECULOSS_HOST_PROJECT_ROOT env
+ * resolves bind sources host-side, not against specifyr' container fs).
+ * Fix planned for the next iteration via a SPECIFYR_HOST_PROJECT_ROOT env
  * var that translates /app/projects/<slug> → <host-path>/projects/<slug>.
  */
 

@@ -14,7 +14,7 @@ the UI".
 2. No E2E test of the full `task → CEO container → worker container → artefact` flow
 3. CompanyRuntime can be started but never stopped (no stop/status endpoints)
 4. ApprovalService is a placeholder; no user-notification channel
-5. `process.cwd()` ≠ host path when haex-corp itself runs in Docker
+5. `process.cwd()` ≠ host path when specifyr itself runs in Docker
 
 ## Goal & Non-Goals
 
@@ -55,7 +55,7 @@ the UI".
 
 ### 6.2 — Path translation for in-container orchestrator
 
-When haex-corp runs in Docker (`docker compose up`), `process.cwd()` is
+When specifyr runs in Docker (`docker compose up`), `process.cwd()` is
 `/app`. But bind mounts spawned via the docker-out-of-docker socket need
 HOST paths. Currently `server/api/projects/[slug]/company/start.post.ts`
 passes `projectCwd(slug)` = `/app/projects/<slug>` to dockerRunnerFactory,
@@ -63,17 +63,17 @@ which would mount **a path that doesn't exist on the host**.
 
 Two options:
 
-1. **Env-var-based translation:** add `HAEX_CORP_HOST_PROJECT_ROOT` to compose.
+1. **Env-var-based translation:** add `SPECIFYR_HOST_PROJECT_ROOT` to compose.
    `company-manager.ts` reads it at endpoint-call time and rewrites
    `/app/projects/X` → `<host-path>/projects/X`. Simple, explicit, opt-in.
 
-2. **Fully host-mode:** require haex-corp to run with `--network=host`
+2. **Fully host-mode:** require specifyr to run with `--network=host`
    plus a bind-mount of `/var/run/docker.sock` AND a matching host path.
    More setup but fewer moving parts at runtime.
 
 Recommend (1). Implementation:
 
-- Read `HAEX_CORP_HOST_PROJECT_ROOT` in `start.post.ts`
+- Read `SPECIFYR_HOST_PROJECT_ROOT` in `start.post.ts`
 - Pass translated path to dockerRunnerFactory
 - Document the required env var in `docker-compose.yml`
 - Test: unit-test the translation function in isolation
@@ -136,7 +136,7 @@ Flow:
 1. Set up a temp project with a minimal `.specify/org/{constitution.md, agents/ceo.md}`
 2. Hit `POST /api/projects/<slug>/company/start` (or instantiate CompanyRuntime
    directly to skip the endpoint layer for the first test version)
-3. Drop `<projectRoot>/.specops/<slug>/queue/echo.yaml` with a trivial goal
+3. Drop `<projectRoot>/.specifyr/<slug>/queue/echo.yaml` with a trivial goal
    (e.g. `goal: "write 'hello' to result.md"`)
 4. Wait up to 60s for `<projectRoot>/result.md` to appear
 5. Assert content contains "hello"
@@ -191,8 +191,8 @@ correctly under the agent's `approval.timeout` setting.
 ## Open Questions
 
 1. **MCP server lifecycle**: `company-ops` is referenced as the MCP server
-   that worker containers call back to. Does it run in haex-corp itself,
-   or as a separate sidecar? Current design assumes haex-corp.
+   that worker containers call back to. Does it run in specifyr itself,
+   or as a separate sidecar? Current design assumes specifyr.
 
 2. **Approval-decision-source diversity**: when CEO notifies user via two
    channels (signal + email) and user replies on Signal, do we need to
@@ -219,7 +219,7 @@ docker run --rm hermes-agent:dev hermes --version
 node --test tests/integration/docker-runner-smoke.test.js
 
 # 6.2
-HAEX_CORP_HOST_PROJECT_ROOT=/home/haex/Projekte/haex-corp docker compose up -d
+SPECIFYR_HOST_PROJECT_ROOT=/home/haex/Projekte/specifyr docker compose up -d
 curl -X POST http://localhost:3000/api/projects/test/company/start
 docker inspect hermes-agent_test_ceo | jq '.[0].Mounts'
 

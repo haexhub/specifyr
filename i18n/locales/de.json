@@ -43,8 +43,8 @@
     "homepage": "Startseite",
     "deleteProject": "Projekt löschen",
     "deleteProjectTitle": "Projekt '{title}' löschen?",
-    "deleteProjectMessage": "Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle SpecOps-Metadaten.",
-    "deleteProjectDetails": "Betroffen: projects/{slug}/ und .specops/{slug}/"
+    "deleteProjectMessage": "Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle Specifyr-Metadaten.",
+    "deleteProjectDetails": "Betroffen: projects/{slug}/ und .specifyr/{slug}/"
   },
 
   "extensions": {
@@ -274,8 +274,8 @@
     "workflowTitle": "Workflow",
     "confirmWorkflowSwitch": "Workflow zu \"{id}\" wechseln?\n\nBestehende Step-States bleiben erhalten, sind aber evtl. nicht mehr auf das neue Workflow anwendbar.",
     "deleteTitle": "Projekt '{title}' löschen?",
-    "deleteMessage": "Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle SpecOps-Metadaten.",
-    "deleteDetails": "Betroffen: projects/{slug}/ und .specops/{slug}/",
+    "deleteMessage": "Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle Specifyr-Metadaten.",
+    "deleteDetails": "Betroffen: projects/{slug}/ und .specifyr/{slug}/",
     "deleteConfirm": "Endgültig löschen",
     "eventsLabel": "Events gesammelt",
     "workflowChangeFailed": "Workflow-Wechsel fehlgeschlagen.",

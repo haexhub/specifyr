@@ -1,7 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { projectCwd, loadEventStore } from "./specops-stores";
+import { projectCwd, loadEventStore } from "./specifyr-stores";
 import { dataDir, extensionsDir } from "./data-dirs";
 import { getAppConfigModule } from "./app-config";
 
@@ -31,7 +31,7 @@ async function loadRunCommand() {
 }
 
 function manifestPathFor(projectSlug: string): string {
-  return path.join(dataDir(), ".specops", projectSlug, "extensions.json");
+  return path.join(dataDir(), ".specifyr", projectSlug, "extensions.json");
 }
 
 export async function readManifest(projectSlug: string): Promise<ExtensionsManifest> {
