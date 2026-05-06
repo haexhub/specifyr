@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0](https://github.com/haexhub/specifyr/compare/v0.2.0...v0.3.0) (2026-05-06)
+
+
+### Features
+
+* **auth:** phase 1 — users table + Authelia header middleware ([b3134a9](https://github.com/haexhub/specifyr/commit/b3134a93f4516e06329e60cb59f0f9689308011b))
+* **db:** phase 0 — Drizzle/Postgres skeleton, optional at runtime ([c9ce21b](https://github.com/haexhub/specifyr/commit/c9ce21b632fa763af2738a3fae903b2bb8669453))
+* **orgs:** phase 3 — orgs, memberships, invitations + settings UI ([777ca80](https://github.com/haexhub/specifyr/commit/777ca804018df790547645e62221b9c8ea227b30))
+* **projects:** phase 2 — DB-tracked project ownership ([7ee0c73](https://github.com/haexhub/specifyr/commit/7ee0c73fc6ceff5e50ea8654c536a9410ec80aa3))
+
+
+### Bug Fixes
+
+* **layout:** keep global sidebar (compact) inside project view ([0f67388](https://github.com/haexhub/specifyr/commit/0f673880a368d3c7604af0cda3a4c1c10262d9ea))
+
 ## [0.2.0](https://github.com/haexhub/specifyr/compare/v0.1.0...v0.2.0) (2026-05-06)
 
 
