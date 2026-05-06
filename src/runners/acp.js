@@ -1,0 +1,109 @@
+import { spawn } from "node:child_process";
+import { Readable, Writable } from "node:stream";
+import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+
+/**
+ * Speak ACP to a child agent over stdio. Forwards `session/update` notifications
+ * verbatim through onEvent — TurnBroker handles them as native ACP shapes.
+ *
+ * Drop-in compatible with the `{ run, cancel }` shape that TurnBroker
+ * (turn-broker.js:104) and RunScheduler (run-scheduler.js:64) expect.
+ */
+export class AcpRunner {
+  constructor({ binary, args = [], cwd = process.cwd(), env, memoryRoot, onEvent, approvalService, slug, agent } = {}) {
+    if (!binary) throw new Error("AcpRunner: binary is required");
+    this.binary = binary;
+    this.args = args;
+    this.cwd = cwd;
+    this.env = env;
+    this.memoryRoot = memoryRoot;
+    this.onEvent = onEvent;
+    this.approvalService = approvalService;
+    this.slug = slug;
+    this.agent = agent;
+    this.child = null;
+  }
+
+  async run({ prompt, signal } = {}) {
+    if (!prompt?.trim()) throw new Error("AcpRunner: prompt must be non-empty");
+
+    const child = spawn(this.binary, this.args, {
+      cwd: this.cwd,
+      env: {
+        ...process.env,
+        ...(this.memoryRoot ? { HERMES_HOME: this.memoryRoot } : {}),
+        ...(this.env ?? {})
+      },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    this.child = child;
+    let stderr = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (c) => { stderr += c; });
+
+    const onEvent = this.onEvent;
+    const stream = ndJsonStream(
+      Writable.toWeb(child.stdin),
+      Readable.toWeb(child.stdout)
+    );
+
+    const conn = new ClientSideConnection(
+      () => ({
+        async sessionUpdate({ update }) {
+          // Identity: TurnBroker speaks ACP natively — no translation here.
+          onEvent?.(update);
+        },
+        async requestPermission(req) {
+          // Filled in Task 2.3 — for now safe-deny.
+          const reject = req.options.find((o) => o.optionId === "reject_once") ?? req.options[0];
+          return { outcome: { outcome: "selected", optionId: reject.optionId } };
+        },
+        async readTextFile() { throw new Error("fs/read_text_file not implemented yet (Task 2.2)"); },
+        async writeTextFile() { throw new Error("fs/write_text_file not implemented yet (Task 2.2)"); }
+      }),
+      stream
+    );
+
+    const onAbort = () => { if (this.child && !this.child.killed) this.child.kill("SIGTERM"); };
+    if (signal) {
+      if (signal.aborted) onAbort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    try {
+      await conn.initialize({
+        protocolVersion: 1,
+        clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false }
+      });
+      const newSession = await conn.newSession({ cwd: this.cwd, mcpServers: [] });
+      const promptResult = await conn.prompt({
+        sessionId: newSession.sessionId,
+        prompt: [{ type: "text", text: prompt }]
+      });
+      child.kill();
+      return {
+        claudeSessionId: null,
+        result: {
+          type: "result",
+          subtype: promptResult.stopReason === "end_turn" ? "success" : "error",
+          result: ""
+        },
+        exitCode: 0,
+        stderr
+      };
+    } catch (err) {
+      if (signal?.aborted) {
+        const e = new Error("Aborted");
+        e.aborted = true;
+        throw e;
+      }
+      throw err;
+    } finally {
+      this.child = null;
+    }
+  }
+
+  cancel() {
+    if (this.child && !this.child.killed) this.child.kill("SIGTERM");
+  }
+}
