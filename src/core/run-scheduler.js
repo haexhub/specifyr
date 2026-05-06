@@ -1,4 +1,6 @@
+import path from "node:path";
 import { EventEmitter } from "node:events";
+import { AcpRunner } from "../runners/acp.js";
 import { ClaudeCodeRunner } from "../runners/claude-code.js";
 import { HermesStreamingRunner } from "../runners/hermes-streaming.js";
 import { RunStore } from "./run-store.js";
@@ -29,7 +31,8 @@ export class RunScheduler extends EventEmitter {
     projectCwd,
     graph,
     runStore = new RunStore(cwd),
-    maxParallel = 3
+    maxParallel = 3,
+    appConfig = null
   } = {}) {
     super();
     this.cwd = cwd;
@@ -40,6 +43,7 @@ export class RunScheduler extends EventEmitter {
     this.maxParallel = Math.max(1, maxParallel);
     this.abort = false;
     this.inFlight = new Map(); // taskId -> { runner, promise }
+    this._injectedAppConfig = appConfig;
   }
 
   get byId() {
@@ -51,9 +55,24 @@ export class RunScheduler extends EventEmitter {
 
   async pickRunner() {
     if (this._runnerFactory) return this._runnerFactory;
-    const config = await loadAppConfig(this.cwd);
+    const config = this._injectedAppConfig ?? (await loadAppConfig(this.cwd));
     const chain = config.runner?.fallbackChain ?? ["hermes", "claude"];
     for (const candidate of chain) {
+      if (candidate.startsWith("acp:")) {
+        const acpKey = candidate.slice("acp:".length);
+        const cfg = config.acp?.[acpKey];
+        if (!cfg?.binary) continue;
+        // v1: no PATH probe — fail-fast at spawn time if binary is missing.
+        this._runnerName = `acp:${acpKey}`;
+        this._runnerFactory = (opts) =>
+          new AcpRunner({
+            ...opts,
+            binary: cfg.binary,
+            args: cfg.args ?? [],
+            memoryRoot: path.join(this.projectCwd, ".specifyr", this.slug, "agent-memory")
+          });
+        return this._runnerFactory;
+      }
       if (candidate === "hermes") {
         const available = await HermesStreamingRunner.isAvailable(config.hermes?.binary);
         if (available) {

@@ -7,13 +7,16 @@ const DEFAULT_APP_CONFIG = {
   localExtensions: [],
   runner: {
     default: "hermes",
-    fallbackChain: ["hermes", "superpowers", "claude"]
+    fallbackChain: ["acp:gemini", "hermes", "superpowers", "claude"]
   },
   claude: {
     binary: "claude"
   },
   hermes: {
     binary: "hermes"
+  },
+  acp: {
+    gemini: { binary: "gemini", args: ["--experimental-acp"] }
   }
 };
 
@@ -32,7 +35,8 @@ export async function loadAppConfig(cwd = process.cwd()) {
     ...saved,
     runner: { ...DEFAULT_APP_CONFIG.runner, ...(saved.runner ?? {}) },
     claude: { ...DEFAULT_APP_CONFIG.claude, ...(saved.claude ?? {}) },
-    hermes: { ...DEFAULT_APP_CONFIG.hermes, ...(saved.hermes ?? {}) }
+    hermes: { ...DEFAULT_APP_CONFIG.hermes, ...(saved.hermes ?? {}) },
+    acp: { ...DEFAULT_APP_CONFIG.acp, ...(saved.acp ?? {}) }
   };
 }
 
