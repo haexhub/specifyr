@@ -5,8 +5,10 @@
  *
  * Bindings map slug -> ACP sessionId so concurrent sessions for different
  * slugs route to the right permission UI. When no session is bound for the
- * caller's slug we safe-deny — the agent must have a live ACP session to
- * receive interactive permission prompts.
+ * caller's slug we return undefined — the CAS-side wiring treats that as
+ * "this transport has no opinion" and falls through to the timeout / other
+ * transports, instead of denying every request just because one transport is
+ * unbound.
  */
 export class AcpApprovalTransport {
   constructor({ client }) {
@@ -24,12 +26,13 @@ export class AcpApprovalTransport {
   }
 
   /**
-   * Called by CapabilityApprovalService. Resolves to "approved" or "denied".
-   * Safe-denies when no ACP session is bound for the slug.
+   * Called by CapabilityApprovalService. Resolves to "approved" or "denied"
+   * if a session is bound and the SDK answers; resolves to undefined when no
+   * session is bound (CAS treats undefined as "no opinion").
    */
   async notify({ slug, capability, requestPayload }) {
     const sessionId = this.bindings.get(slug);
-    if (!sessionId) return "denied";
+    if (!sessionId) return undefined;
     const toolCall = requestPayload?.toolCall ?? {
       title: capability,
       toolCallId: `cap-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`

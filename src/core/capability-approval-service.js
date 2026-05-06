@@ -128,6 +128,20 @@ export class CapabilityApprovalService extends EventEmitter {
         .catch((err) => this.emit("transport-error", { channel, err, requestId }));
     }
 
+    // New transports (e.g. AcpApprovalTransport) return a synchronous decision.
+    // Race them against the timeout — first decision wins via this.resolve().
+    for (const tx of this.transports) {
+      Promise.resolve(
+        tx.notify({ slug, requestId, capability, requestPayload })
+      )
+        .then((decision) => {
+          if (decision === "approved" || decision === "denied") {
+            this.resolve(requestId, { decision, by: "acp" });
+          }
+        })
+        .catch((err) => this.emit("transport-error", { err, requestId }));
+    }
+
     return new Promise((resolve) => {
       const timer = setTimeout(() => {
         if (!this.pending.has(requestId)) return;
