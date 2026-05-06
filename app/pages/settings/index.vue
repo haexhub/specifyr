@@ -1,28 +1,30 @@
 <script setup lang="ts">
-import { Building2, KeyRound, User as UserIcon } from "lucide-vue-next";
+import { Building2, KeyRound, LogOut, User as UserIcon } from "lucide-vue-next";
 
-interface Me {
-  id: string;
-  email: string;
-  displayName: string | null;
-  createdAt: string;
-}
-
-const { data: me } = await useFetch<Me>("/api/me", {
-  default: () => null,
-});
+const { me, logoutUrl } = useMe();
 </script>
 
 <template>
   <div class="mx-auto w-full max-w-3xl px-6 py-8">
-    <h1 class="text-2xl font-semibold">Settings</h1>
-    <p v-if="me" class="mt-1 text-sm text-muted-foreground">
-      Logged in as <span class="font-mono">{{ me.email }}</span>
-    </p>
-    <p v-else class="mt-1 text-sm text-destructive">
-      Not authenticated. Settings require Authelia login (or
-      <span class="font-mono">SPECIFYR_DEV_USER_EMAIL</span> in dev).
-    </p>
+    <div class="flex items-start justify-between gap-4">
+      <div>
+        <h1 class="text-2xl font-semibold">Settings</h1>
+        <p v-if="me" class="mt-1 text-sm text-muted-foreground">
+          Logged in as <span class="font-mono">{{ me.email }}</span>
+        </p>
+        <p v-else class="mt-1 text-sm text-destructive">
+          Not authenticated. Settings require an IDP login (or
+          <span class="font-mono">SPECIFYR_DEV_USER_EMAIL</span> in dev).
+        </p>
+      </div>
+      <a
+        v-if="me && logoutUrl !== '#'"
+        :href="logoutUrl"
+        class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
+      >
+        <LogOut class="size-4" /> Logout
+      </a>
+    </div>
 
     <ul class="mt-8 grid gap-3 sm:grid-cols-1">
       <li>

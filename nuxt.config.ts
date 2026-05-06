@@ -28,7 +28,11 @@ export default defineNuxtConfig({
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
     anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL ?? "",
     public: {
-      appName: "specifyr"
+      appName: "specifyr",
+      // Public so the Logout link can point at it. Set per-deployment
+      // (in ansible's .env.j2 → AUTHENTIK_HOST). Empty string disables
+      // the Logout link (dev mode w/o IDP).
+      authHost: process.env.AUTHENTIK_HOST ?? ""
     }
   },
   i18n: {

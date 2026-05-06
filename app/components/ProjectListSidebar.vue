@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, FolderOpen, Puzzle, Settings, Trash2 } from "lucide-vue-next";
+import { LogOut, Plus, FolderOpen, Puzzle, Settings, Trash2 } from "lucide-vue-next";
 import ProjectCreateDialog from "~/components/ProjectCreateDialog.vue";
 import ConfirmDialog from "~/components/ConfirmDialog.vue";
 import type { ProjectListItem } from "~/lib/types";
@@ -16,6 +16,8 @@ const dialogOpen = ref(false);
 const deleteTarget = ref<ProjectListItem | null>(null);
 const deleting = ref(false);
 const refreshProjects = inject<() => Promise<void>>("refreshProjects", async () => {});
+
+const { me, logoutUrl } = useMe();
 
 const activeSlug = computed(() => {
   if (typeof route.params.slug === "string") {
@@ -192,6 +194,22 @@ async function confirmDelete() {
         <Settings class="size-4 opacity-70" />
         <span v-if="!compact">Settings</span>
       </NuxtLink>
+
+      <!-- User identity + logout. Hidden when no user resolved
+           (unauth) or no logoutUrl configured (dev w/o IDP). -->
+      <a
+        v-if="me && logoutUrl !== '#'"
+        :href="logoutUrl"
+        class="flex items-center gap-2 rounded-md text-sm transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
+        :class="compact ? 'size-10 justify-center p-0' : 'px-2 py-2'"
+        :title="compact ? `Logout (${me.email})` : 'Logout'"
+      >
+        <LogOut class="size-4 opacity-70" />
+        <span v-if="!compact" class="flex min-w-0 flex-col items-start leading-tight">
+          <span class="truncate text-xs">Logout</span>
+          <span class="truncate text-[10px] opacity-60">{{ me.email }}</span>
+        </span>
+      </a>
     </div>
 
     <ProjectCreateDialog v-model:open="dialogOpen" @created="handleCreated" />
