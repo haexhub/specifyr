@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { makeFsHandlers } from "../acp/fs-handlers.js";
+import { acpPermissionToCapability, capabilityDecisionToAcpOutcome } from "../acp/permission-bridge.js";
 
 /**
  * Speak ACP to a child agent over stdio. Forwards `session/update` notifications
@@ -43,6 +44,7 @@ export class AcpRunner {
     child.stderr.on("data", (c) => { stderr += c; });
 
     const onEvent = this.onEvent;
+    const { approvalService, slug, agent } = this;
     const stream = ndJsonStream(
       Writable.toWeb(child.stdin),
       Readable.toWeb(child.stdout)
@@ -56,10 +58,23 @@ export class AcpRunner {
           // Identity: TurnBroker speaks ACP natively — no translation here.
           onEvent?.(update);
         },
-        async requestPermission(req) {
-          // Filled in Task 2.3 — for now safe-deny.
-          const reject = req.options.find((o) => o.optionId === "reject_once") ?? req.options[0];
-          return { outcome: { outcome: "selected", optionId: reject.optionId } };
+        async requestPermission({ sessionId, toolCall, options }) {
+          // No approval service wired (or no agent context) — safe-deny.
+          if (!approvalService || !agent) {
+            const reject = options.find((o) => o.optionId === "reject_once") ?? options[0];
+            return { outcome: { outcome: "selected", optionId: reject.optionId } };
+          }
+          const capability = acpPermissionToCapability({ title: toolCall.title });
+          const result = await approvalService.requestApproval({
+            slug,
+            agent,
+            capability,
+            requestPayload: { toolCall, sessionId }
+          });
+          // requestApproval resolves to { decision, ... }; "escalated" is
+          // treated as not-approved for ACP purposes (deny path).
+          const decision = result?.decision === "approved" ? "approved" : "denied";
+          return { outcome: capabilityDecisionToAcpOutcome(decision, options) };
         },
         async readTextFile(req) { return fsHandlers.readTextFile(req); },
         async writeTextFile(req) { return fsHandlers.writeTextFile(req); }
