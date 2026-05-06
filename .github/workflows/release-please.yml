@@ -24,13 +24,31 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  # workflow_dispatch from this job needs `actions: write` so the build
+  # workflow gets re-triggered on the new tag. GITHUB_TOKEN does not chain
+  # `push: tags` events through to other workflows (anti-recursion guard);
+  # only workflow_dispatch and repository_dispatch are exempt.
+  actions: write
 
 jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
       - uses: googleapis/release-please-action@v4
+        id: release
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           config-file: .release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      # When a release is cut, dispatch the image build against the new tag
+      # so :latest + :vX.Y.Z get published. Without this, the prod deploy
+      # path stays one release behind (manual workflow_dispatch needed).
+      - name: Trigger image build for the new tag
+        if: ${{ steps.release.outputs.release_created }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh workflow run "Build specifyr image" \
+            --ref "${{ steps.release.outputs.tag_name }}" \
+            --repo "${{ github.repository }}"
