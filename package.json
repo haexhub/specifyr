@@ -4,7 +4,8 @@
   "description": "Spec-driven multi-agent builder with a local timeline UI.",
   "type": "module",
   "bin": {
-    "specifyr": "./src/index.js"
+    "specifyr": "./src/index.js",
+    "specifyr-acp": "./bin/specifyr-acp.js"
   },
   "scripts": {
     "start": "node ./src/index.js",
