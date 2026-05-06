@@ -31,13 +31,25 @@ export default defineEventHandler(async (event) => {
   const db = getDb();
   if (!db) return;
 
-  const headerEmail = getHeader(event, "remote-email")?.trim().toLowerCase();
+  // Authentik's proxy outpost forwards X-authentik-email / X-authentik-name.
+  // Authelia's forward-auth forwards Remote-Email / Remote-Name.
+  // Read both so a deploy can swap IDPs without code changes; specific
+  // provider's headers win when both are present (shouldn't happen).
+  const headerEmail = (
+    getHeader(event, "x-authentik-email") ||
+    getHeader(event, "remote-email") ||
+    ""
+  )
+    .trim()
+    .toLowerCase();
   const devEmail = process.env.SPECIFYR_DEV_USER_EMAIL?.trim().toLowerCase();
   const email = headerEmail || devEmail;
   if (!email) return;
 
   const displayName =
+    getHeader(event, "x-authentik-name")?.trim() ||
     getHeader(event, "remote-name")?.trim() ||
+    getHeader(event, "x-authentik-username")?.trim() ||
     getHeader(event, "remote-user")?.trim() ||
     null;
 
