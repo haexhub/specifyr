@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { Building2, KeyRound, LogOut, User as UserIcon } from "lucide-vue-next";
+import { Building2, KeyRound, LogIn, LogOut, User as UserIcon } from "lucide-vue-next";
 
-const { me, logoutUrl } = useMe();
+const { me, isDevAuth, logout, devLogin } = useMe();
 </script>
 
 <template>
@@ -17,13 +17,22 @@ const { me, logoutUrl } = useMe();
           <span class="font-mono">SPECIFYR_DEV_USER_EMAIL</span> in dev).
         </p>
       </div>
-      <a
-        v-if="me && logoutUrl !== '#'"
-        :href="logoutUrl"
+      <button
+        v-if="me"
+        type="button"
         class="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm text-muted-foreground transition hover:bg-accent hover:text-foreground"
+        @click="logout()"
       >
         <LogOut class="size-4" /> Logout
-      </a>
+      </button>
+      <button
+        v-else-if="isDevAuth"
+        type="button"
+        class="inline-flex items-center gap-2 rounded-md border border-primary/30 bg-primary/5 px-3 py-2 text-sm transition hover:bg-primary/10"
+        @click="devLogin()"
+      >
+        <LogIn class="size-4" /> Sign in (dev)
+      </button>
     </div>
 
     <ul class="mt-8 grid gap-3 sm:grid-cols-1">

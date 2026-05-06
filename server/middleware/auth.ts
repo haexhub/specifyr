@@ -42,7 +42,16 @@ export default defineEventHandler(async (event) => {
   )
     .trim()
     .toLowerCase();
-  const devEmail = process.env.SPECIFYR_DEV_USER_EMAIL?.trim().toLowerCase();
+
+  // Dev-mode logout: when SPECIFYR_DEV_USER_EMAIL is set, the env-var
+  // would otherwise auto-login the dev user on every request. The
+  // `specifyr-dev-loggedout` cookie suppresses that fallback so the
+  // Logout button is testable without spinning up Authentik locally.
+  const devLoggedOut = getCookie(event, "specifyr-dev-loggedout") === "1";
+  const devEmail = devLoggedOut
+    ? undefined
+    : process.env.SPECIFYR_DEV_USER_EMAIL?.trim().toLowerCase();
+
   const email = headerEmail || devEmail;
   if (!email) return;
 

@@ -11,9 +11,13 @@ interface Me {
  * request. Returns `me: null` when not authenticated — components decide
  * whether to render fallback.
  *
- * The logout URL routes through Authentik's default invalidation flow,
- * which clears the .haex.cloud session cookie. Forward-auth then
- * intercepts the next protected request and bounces the user to login.
+ * `logout()` works in two modes:
+ *   - production (authHost set): redirects to Authentik's default
+ *     invalidation flow, which clears the .haex.cloud session cookie.
+ *     Forward-auth then bounces the next protected request to login.
+ *   - dev (authHost empty): POSTs /api/dev/logout, which sets a
+ *     suppression cookie so the SPECIFYR_DEV_USER_EMAIL env-fallback
+ *     stops auto-logging-in. Reload reflects the unauth state.
  */
 export function useMe() {
   const config = useRuntimeConfig();
@@ -28,17 +32,29 @@ export function useMe() {
     },
   });
 
-  const logoutUrl = computed(() => {
-    const authHost = config.public.authHost as string | undefined;
-    if (!authHost) {
-      return "#";
-    }
-    const next =
-      typeof window !== "undefined"
-        ? encodeURIComponent(window.location.origin + "/")
-        : "";
-    return `${authHost}/if/flow/default-invalidation-flow/?next=${next}`;
-  });
+  const authHost = computed(
+    () => (config.public.authHost as string | undefined) ?? "",
+  );
+  const isDevAuth = computed(() => !authHost.value);
 
-  return { me, refresh, logoutUrl };
+  async function logout() {
+    if (isDevAuth.value) {
+      await $fetch("/api/dev/logout", { method: "POST" });
+      // Reload so /api/me re-fetches and the auth middleware re-evaluates
+      // with the suppression cookie now in place.
+      if (typeof window !== "undefined") window.location.href = "/";
+      return;
+    }
+    if (typeof window === "undefined") return;
+    const next = encodeURIComponent(window.location.origin + "/");
+    window.location.href = `${authHost.value}/if/flow/default-invalidation-flow/?next=${next}`;
+  }
+
+  async function devLogin() {
+    if (!isDevAuth.value) return;
+    await $fetch("/api/dev/login", { method: "POST" });
+    if (typeof window !== "undefined") window.location.href = "/";
+  }
+
+  return { me, refresh, logout, devLogin, isDevAuth };
 }
