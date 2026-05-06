@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { Readable, Writable } from "node:stream";
 import { ClientSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
+import { makeFsHandlers } from "../acp/fs-handlers.js";
 
 /**
  * Speak ACP to a child agent over stdio. Forwards `session/update` notifications
@@ -47,6 +48,8 @@ export class AcpRunner {
       Readable.toWeb(child.stdout)
     );
 
+    const fsHandlers = makeFsHandlers({ cwd: this.cwd });
+
     const conn = new ClientSideConnection(
       () => ({
         async sessionUpdate({ update }) {
@@ -58,8 +61,8 @@ export class AcpRunner {
           const reject = req.options.find((o) => o.optionId === "reject_once") ?? req.options[0];
           return { outcome: { outcome: "selected", optionId: reject.optionId } };
         },
-        async readTextFile() { throw new Error("fs/read_text_file not implemented yet (Task 2.2)"); },
-        async writeTextFile() { throw new Error("fs/write_text_file not implemented yet (Task 2.2)"); }
+        async readTextFile(req) { return fsHandlers.readTextFile(req); },
+        async writeTextFile(req) { return fsHandlers.writeTextFile(req); }
       }),
       stream
     );
