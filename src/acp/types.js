@@ -17,6 +17,10 @@
  * @property {string} title
  * @property {"pending"|"in_progress"|"completed"|"failed"} status
  * @property {AcpContentBlock[]} [content]
+ * @property {string} [kind]
+ * @property {unknown} [rawInput]
+ * @property {unknown} [rawOutput]
+ * @property {Array<{path: string, line?: number}>} [locations]
  *
  * @typedef {"end_turn"|"max_tokens"|"refusal"|"cancelled"|"max_turn_requests"} AcpStopReason
  */
