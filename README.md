@@ -49,6 +49,15 @@ node ./src/index.js ui
 - If `fabric` or `hermes` are installed locally, you can enable them via `config set` and specifyr will use them opportunistically.
 - The UI runs through Nuxt. For local development use `pnpm dev` or `node ./src/index.js ui`.
 
+## ACP (Agent Client Protocol)
+
+specifyr speaks the [Agent Client Protocol](https://agentclientprotocol.com) in two directions:
+
+- **As a client** (input): any ACP-speaking coding agent (Gemini CLI, hermes-acp, claude-code-acp, …) can be a backend. Configure under `runner.fallbackChain` with `acp:<name>` entries plus an `acp.<name>` block specifying `binary` and `args`. See [src/core/app-config.js](src/core/app-config.js).
+- **As a server** (output): `bin/specifyr-acp` is a stdio agent that external editors like Zed and AionUi can spawn to drive specifyr runs. See [docs/acp-integration.md](docs/acp-integration.md).
+
+Internally specifyr uses ACP `SessionUpdate` shapes as the lingua franca for all runner output, persisted disk events, and SSE stream payloads. Old runners (Claude / Hermes stream-json) are translated at the runner boundary via [src/runners/claude-stream-to-acp.js](src/runners/claude-stream-to-acp.js); ACP-native runners pass through verbatim.
+
 ## Company runtime (multi-agent)
 
 The company runtime turns specifyr into a multi-agent orchestrator. A "company" is declared via the [speckit-company](https://github.com/haex/speckit-company) extension and consists of a CEO agent (single point of contact) and worker agents in a reports-to graph. Each agent is a separate Hermes-Agent profile with its own `HERMES_HOME`, accumulating role-specific skills over time.
@@ -59,8 +68,8 @@ Components (in `src/`):
 - `core/capability-gate.js` — default-deny permission layer; sensitive grants always require user approval
 - `core/queue-poller.js` — chokidar watcher for `.specifyr/<company>/queue/<task>.yaml`
 - `core/worktree-manager.js` — per-task `git worktree` for isolated FS mutations
-- `core/company-runtime.js` — facade composing the above + per-agent `HermesCliRunner`
+- `core/company-runtime.js` — facade composing the above + per-agent runner factory (typically `HermesStreamingRunner` or a Docker-isolated runner)
 - `runners/hermes-paths.js` — deterministic `<project>/.hermes/<role>` path
-- `runners/hermes-cli.js` (patched) — passes `HERMES_HOME` via env per agent
+- `runners/hermes-streaming.js` — streams `hermes chat -q` stdout, translates to ACP SessionUpdate, passes `HERMES_HOME` via env per agent
 
 See [docs/company.md](docs/company.md) for the full integration model.
