@@ -1,0 +1,36 @@
+# Automated semver releases driven by Conventional Commits.
+#
+# Flow:
+#   1. Push to main with feat:/fix:/etc. → release-please opens a "Release vX.Y.Z" PR
+#      that bumps package.json + updates CHANGELOG.md.
+#   2. Merge the release PR → release-please creates the git tag vX.Y.Z and a
+#      GitHub Release.
+#   3. The tag push triggers build-specifyr-image.yml which publishes
+#      ghcr.io/haexhub/specifyr:vX.Y.Z + :latest. Watchtower on haex.cloud
+#      polls :latest every 5 min and rolls out the new image.
+#
+# Bump rules (Conventional Commits):
+#   - fix:           → patch
+#   - feat:          → minor
+#   - feat!: / BREAKING CHANGE: → major
+
+name: Release Please
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          config-file: .release-please-config.json
+          manifest-file: .release-please-manifest.json

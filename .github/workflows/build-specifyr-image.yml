@@ -1,20 +1,26 @@
 # Build the specifyr main image and push it to GitHub Container Registry.
 #
 # Image is consumed by the production Ansible deployment (roles/specifyr/
-# in the ansible repo) which `docker compose pull`s the tag specified in
-# its docker-compose.yml.j2 template (default: `:latest` on default branch,
-# or a pinned `:sha-<short>` for reproducible deploys).
+# in the ansible repo) which pulls `ghcr.io/<owner>/specifyr:latest`. The
+# `haex-watchtower` role re-pulls labeled containers every 5 min, so any
+# advance of `:latest` rolls out automatically on haex.cloud.
 #
 # Triggers:
 #   - push to main that touches the application image inputs (src/, server/,
-#     app/, package.json, Dockerfile)
-#   - manual dispatch (for cutting tagged releases)
+#     app/, package.json, Dockerfile) → builds & publishes :main + :sha-<x>
+#     for verification. Does NOT advance :latest, so prod is unaffected.
+#   - tag push `v*` (cut by release-please when a Release-PR is merged) →
+#     builds & publishes :vX.Y.Z, :X.Y.Z, :X.Y, :X, AND advances :latest →
+#     watchtower picks it up on the next 5-min poll and rolls out.
+#   - manual dispatch (escape hatch)
 #
 # Tags applied (via docker/metadata-action):
-#   - ghcr.io/<owner>/specifyr:latest        (only on default branch)
-#   - ghcr.io/<owner>/specifyr:<branch>      (e.g. main, feature/x)
+#   - ghcr.io/<owner>/specifyr:latest        (release tag only)
+#   - ghcr.io/<owner>/specifyr:main          (push to main)
 #   - ghcr.io/<owner>/specifyr:sha-<short>   (always)
-#   - ghcr.io/<owner>/specifyr:<git-tag>     (only on tag refs)
+#   - ghcr.io/<owner>/specifyr:vX.Y.Z        (tag refs, raw)
+#   - ghcr.io/<owner>/specifyr:X.Y.Z         (tag refs, semver)
+#   - ghcr.io/<owner>/specifyr:X.Y / :X      (tag refs, semver)
 #
 # Security note: this workflow uses only github-native context vars
 # (repository_owner, actor, GITHUB_TOKEN) and outputs from the trusted
@@ -30,11 +36,12 @@ on:
   push:
     branches:
       - main
-      # Default branch today is feature/speckit-company-extension. Listed
-      # explicitly so the workflow runs before that work merges into main.
-      - feature/speckit-company-extension
+    # Tags are produced by release-please (see release-please.yml) once a
+    # Release-PR is merged. Pattern matches release-please's default
+    # `v<MAJOR>.<MINOR>.<PATCH>` (release-please-config.json sets
+    # include-v-in-tag: true, include-component-in-tag: false).
     tags:
-      - "specifyr-v*"
+      - "v*"
     paths:
       - "Dockerfile"
       - "src/**"
@@ -74,11 +81,21 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ghcr.io/${{ github.repository_owner }}/specifyr
+          # `:latest` advances ONLY on a release tag (`v*`). Pushes to main
+          # build & publish `:main` + `:sha-<short>` for verification but
+          # explicitly do NOT move `:latest` — Watchtower on haex.cloud polls
+          # `:latest`, so prod stays pinned to the last cut release until
+          # release-please's PR is merged and a `vX.Y.Z` tag is pushed.
+          # `type=semver` extracts the bare version from `v1.2.3` tags so
+          # consumers can pin :1, :1.2, or :1.2.3.
           tags: |
             type=ref,event=branch
             type=ref,event=tag
             type=sha,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push (prod target)
         uses: docker/build-push-action@v6
