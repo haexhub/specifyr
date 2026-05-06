@@ -80,23 +80,23 @@ export class TurnBroker {
     let toolUseSinceLastText = false;
     const toolUses = [];
 
-    const onEvent = async (claudeEvent) => {
-      if (claudeEvent?.type === "assistant" && Array.isArray(claudeEvent.message?.content)) {
-        for (const block of claudeEvent.message.content) {
-          if (block?.type === "text" && typeof block.text === "string") {
-            if (toolUseSinceLastText && assistantText) {
-              assistantText += `\n\n${block.text}`;
-            } else {
-              assistantText += block.text;
-            }
-            toolUseSinceLastText = false;
-          } else if (block?.type === "tool_use" && block.name) {
-            toolUses.push({ name: block.name, input: block.input });
-            toolUseSinceLastText = true;
-          }
+    const onEvent = async (update) => {
+      if (
+        update?.sessionUpdate === "agent_message_chunk" &&
+        update.content?.type === "text" &&
+        typeof update.content.text === "string"
+      ) {
+        if (toolUseSinceLastText && assistantText) {
+          assistantText += `\n\n${update.content.text}`;
+        } else {
+          assistantText += update.content.text;
         }
+        toolUseSinceLastText = false;
+      } else if (update?.sessionUpdate === "tool_call") {
+        toolUses.push({ name: update.title, input: update.rawInput });
+        toolUseSinceLastText = true;
       }
-      await append("claude", claudeEvent);
+      await append("session_update", update);
     };
 
     // Mutable ref so cancel() always targets the currently-running child process,
