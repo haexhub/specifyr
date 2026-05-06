@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, FolderOpen, Puzzle, Trash2 } from "lucide-vue-next";
+import { Plus, FolderOpen, Puzzle, Settings, Trash2 } from "lucide-vue-next";
 import ProjectCreateDialog from "~/components/ProjectCreateDialog.vue";
 import ConfirmDialog from "~/components/ConfirmDialog.vue";
 import type { ProjectListItem } from "~/lib/types";
@@ -167,7 +167,7 @@ async function confirmDelete() {
       </p>
     </nav>
 
-    <div class="border-t border-border py-3" :class="compact ? 'px-2' : 'px-2'">
+    <div class="space-y-1 border-t border-border py-3" :class="compact ? 'px-2' : 'px-2'">
       <NuxtLink
         to="/extensions"
         class="flex items-center gap-2 rounded-md text-sm transition"
@@ -179,6 +179,18 @@ async function confirmDelete() {
       >
         <Puzzle class="size-4 opacity-70" />
         <span v-if="!compact">{{ $t("sidebar.extensions") }}</span>
+      </NuxtLink>
+      <NuxtLink
+        to="/settings"
+        class="flex items-center gap-2 rounded-md text-sm transition"
+        :class="[
+          route.path.startsWith('/settings') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+          compact ? 'size-10 justify-center p-0' : 'px-2 py-2'
+        ]"
+        :title="compact ? 'Settings' : undefined"
+      >
+        <Settings class="size-4 opacity-70" />
+        <span v-if="!compact">Settings</span>
       </NuxtLink>
     </div>
 
