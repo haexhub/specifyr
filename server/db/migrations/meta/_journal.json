@@ -22,6 +22,13 @@
       "when": 1778069000618,
       "tag": "0002_orgs",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778105318917,
+      "tag": "0003_llm_credentials",
+      "breakpoints": true
     }
   ]
 }

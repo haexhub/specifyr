@@ -51,18 +51,19 @@ const { me, isDevAuth, logout, devLogin } = useMe();
         </NuxtLink>
       </li>
       <li>
-        <div
-          class="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-4 opacity-60"
+        <NuxtLink
+          to="/settings/me/llm"
+          class="flex items-start gap-3 rounded-lg border border-border p-4 transition hover:bg-accent/50"
         >
           <KeyRound class="mt-0.5 size-5 shrink-0 opacity-80" />
           <div>
             <div class="font-medium">LLM credentials</div>
             <div class="mt-0.5 text-sm text-muted-foreground">
-              Manage API keys for Anthropic / OpenAI / Google, log in to Claude
-              Pro/Max via OAuth. <span class="italic">Coming in phase 4.</span>
+              Manage API keys for Anthropic / OpenAI / Google. Stored
+              AES-256-GCM encrypted. (Claude OAuth coming in phase 8.)
             </div>
           </div>
-        </div>
+        </NuxtLink>
       </li>
       <li>
         <div

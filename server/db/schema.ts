@@ -1,4 +1,13 @@
-import { index, pgTable, primaryKey, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 // Mirror of Authelia identity. UPSERT'd by the auth middleware on the
 // first request from a previously-unseen email. `email` is the natural
@@ -95,3 +104,64 @@ export const orgInvites = pgTable("org_invites", {
 
 export type OrgInvite = typeof orgInvites.$inferSelect;
 export type NewOrgInvite = typeof orgInvites.$inferInsert;
+
+// LLM provider credentials. Polymorphic owner: user-personal or
+// org-shared (Phase 5 wires the org case into the runner). Encrypted
+// fields use the same AES-256-GCM master key as secrets-store.ts —
+// stored as hex strings (text), not bytea, so the schema stays
+// portable to non-Postgres backends if we ever swap.
+export const llmCredentials = pgTable(
+  "llm_credentials",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerKind: text("owner_kind", { enum: ["user", "org"] }).notNull(),
+    ownerId: uuid("owner_id").notNull(),
+
+    provider: text("provider", {
+      enum: ["anthropic", "openai", "google"],
+    }).notNull(),
+    mode: text("mode", { enum: ["api_key", "oauth_claude"] }).notNull(),
+    displayName: text("display_name").notNull(),
+
+    // api_key mode: encrypted blob. NULL when mode='oauth_claude' (Phase 8).
+    apiKeyIv: text("api_key_iv"),
+    apiKeyTag: text("api_key_tag"),
+    apiKeyData: text("api_key_data"),
+
+    // oauth_claude mode (Phase 8): tokens live in
+    // <dataDir>/credentials/<owner_kind>/<owner_id>/.claude/credentials.json;
+    // this row only tracks the high-level state.
+    oauthStatus: text("oauth_status", {
+      enum: ["pending", "authorized", "expired"],
+    }),
+    oauthAuthorizedAt: timestamp("oauth_authorized_at", { withTimezone: true }),
+
+    baseUrl: text("base_url"),
+    defaultModel: text("default_model"),
+    enabled: boolean("enabled").notNull().default(true),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    ownerIdx: index("llm_credentials_owner_idx").on(
+      t.ownerKind,
+      t.ownerId,
+      t.provider,
+      t.enabled,
+    ),
+    uniqueDisplayName: unique("llm_credentials_owner_provider_name_uq").on(
+      t.ownerKind,
+      t.ownerId,
+      t.provider,
+      t.displayName,
+    ),
+  }),
+);
+
+export type LlmCredential = typeof llmCredentials.$inferSelect;
+export type NewLlmCredential = typeof llmCredentials.$inferInsert;

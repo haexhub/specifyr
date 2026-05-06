@@ -88,6 +88,17 @@ function decrypt(entry: EncryptedEntry, key: Buffer): string {
   return Buffer.concat([decipher.update(Buffer.from(entry.data, "hex")), decipher.final()]).toString("utf8");
 }
 
+// Re-exports so other stores (llm-credentials, future ones) share the
+// same master-key plumbing instead of each rolling its own.
+export { masterKey };
+export async function encryptString(plaintext: string): Promise<EncryptedEntry> {
+  return encrypt(plaintext, await masterKey());
+}
+export async function decryptString(entry: EncryptedEntry): Promise<string> {
+  return decrypt(entry, await masterKey());
+}
+export type { EncryptedEntry };
+
 export async function listSecretKeys(slug: string): Promise<string[]> {
   return Object.keys(await readFile(slug));
 }
