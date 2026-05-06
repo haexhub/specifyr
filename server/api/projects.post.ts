@@ -1,6 +1,7 @@
 import { createProjectRecord } from "@su/project-creation";
 import { getAppConfigModule } from "@su/app-config";
 import { DEFAULT_WORKFLOW_ID } from "@su/workflows";
+import { recordProjectOwnership } from "@su/project-store";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
@@ -33,11 +34,29 @@ export default defineEventHandler(async (event) => {
     extensions = cfg.standardExtensions;
   }
 
+  let record;
   try {
-    return await createProjectRecord({ title, description, extensions, workflow });
+    record = await createProjectRecord({ title, description, extensions, workflow });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Project could not be created.";
     const statusCode = /already exists/i.test(message) ? 409 : 400;
     throw createError({ statusCode, statusMessage: message });
   }
+
+  // If the request was authenticated AND the DB is configured, write
+  // an ownership row. Best-effort: if the DB write fails (e.g. unique
+  // collision because the slug was already claimed), log it but still
+  // return the FS-created record — the FS work is already committed
+  // and rolling it back is more dangerous than a temporary owner-less
+  // project. The org/auth phases will reconcile later.
+  const userId = event.context.userId;
+  if (userId) {
+    try {
+      await recordProjectOwnership(record.slug, { kind: "user", id: userId });
+    } catch (err) {
+      console.warn("[projects.post] DB ownership write failed:", err);
+    }
+  }
+
+  return record;
 });

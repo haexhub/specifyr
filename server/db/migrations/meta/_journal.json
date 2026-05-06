@@ -8,6 +8,13 @@
       "when": 1778068035973,
       "tag": "0000_users",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778068752620,
+      "tag": "0001_projects",
+      "breakpoints": true
     }
   ]
 }
