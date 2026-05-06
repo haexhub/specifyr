@@ -1,0 +1,71 @@
+# Changelog
+
+## [0.2.0](https://github.com/haexhub/specifyr/compare/v0.1.0...v0.2.0) (2026-05-06)
+
+
+### Features
+
+* **acp:** AcpRunner — pass-through SessionUpdates from any ACP agent ([75e0ff0](https://github.com/haexhub/specifyr/commit/75e0ff01976d91ca59187a2d0057a6d53d66cece))
+* **acp:** add @agentclientprotocol/sdk dependency and typedef scaffold ([ccd6287](https://github.com/haexhub/specifyr/commit/ccd6287c584d818e203f18b36f7199a00575a8ae))
+* **acp:** approval transport bridges session/request_permission ([c3e1e79](https://github.com/haexhub/specifyr/commit/c3e1e79043d6a1bee4c1dd86c10df3b657366e02))
+* **acp:** bridge session/request_permission to CapabilityApprovalService ([b50e947](https://github.com/haexhub/specifyr/commit/b50e947f0cfc8220f786bbad65478298133dbc63))
+* **acp:** cwd-scoped fs/read_text_file and fs/write_text_file ([b92769c](https://github.com/haexhub/specifyr/commit/b92769c1d1cb64cdf0ef42e4235da1d33f76a45e))
+* **acp:** encode/decode composite session-id ([adb6442](https://github.com/haexhub/specifyr/commit/adb6442f51b4ae906b85054ab3097c736507ac7c))
+* **acp:** session/new resolves slug from cwd; session/load validates existence ([fa4fb42](https://github.com/haexhub/specifyr/commit/fa4fb42c114a6d18cbcbfaf744613367de60551f))
+* **acp:** session/prompt bridges TurnBroker SessionUpdate to client; cancel forwards ([037efaf](https://github.com/haexhub/specifyr/commit/037efaf72162bddc2f120067763361f69a4ff9a7))
+* **acp:** specifyr-acp stdio entrypoint with initialize handshake ([711cfb0](https://github.com/haexhub/specifyr/commit/711cfb0a8f1edf0cac605549c03e2c56b1ce7b91))
+* **acp:** wire AcpRunner into RunScheduler fallback chain (acp:gemini default head) ([a725d94](https://github.com/haexhub/specifyr/commit/a725d949462746b49696f779c3c0853bd07c7d7d))
+* **acp:** wire real TurnBroker + runner factory into stdio entrypoint ([4087143](https://github.com/haexhub/specifyr/commit/4087143a166a1863a77ba1373b6c00051553f7c5))
+* **agents:** Nix-based per-agent Docker images and project secrets ([#7](https://github.com/haexhub/specifyr/issues/7)) ([73cd982](https://github.com/haexhub/specifyr/commit/73cd982c54bfd56b49728ae445b7a085205f3abb))
+* **artifact-viewer:** mermaid rendering, dir file picker, Select component; fix gitignore for projects/ path ([65d2602](https://github.com/haexhub/specifyr/commit/65d26026c60ce027666a461e41d22bb01b1cc42b))
+* **chat:** markdown rendering, stop button, loading indicator, 409 error + session fixes ([#1](https://github.com/haexhub/specifyr/issues/1)) ([abf0ba7](https://github.com/haexhub/specifyr/commit/abf0ba71695e9944a09e7d09d353dc50a7a3ce4d))
+* **chat:** reasoning display, copy button, animation fix ([137c47a](https://github.com/haexhub/specifyr/commit/137c47a14a6f77cb8e3e62c7473ceb1b2244aacf))
+* **chat:** session reset retry, auto-complete step, workflow context injection ([62c83b5](https://github.com/haexhub/specifyr/commit/62c83b5e990baf26e8b3f7d7fbd281f30e7e0957))
+* **chat:** session reset retry, workflow context injection, localStorage session persistence ([#6](https://github.com/haexhub/specifyr/issues/6)) ([5b84e9f](https://github.com/haexhub/specifyr/commit/5b84e9fdf5b96ecd4e57a535ed58b7beaeccf726))
+* **claude-code:** translate stream-json to SessionUpdate at the runner boundary ([3a0bfe7](https://github.com/haexhub/specifyr/commit/3a0bfe7602da8eda10b728a01204c37184bc041b))
+* **data-dirs:** configurable data directories via env vars ([3ab98e2](https://github.com/haexhub/specifyr/commit/3ab98e24c70ebe156314138ba028fd6ef9bcddbc))
+* **data-dirs:** configurable data directories, artifact viewer improvements, step UI cleanup ([e1c3975](https://github.com/haexhub/specifyr/commit/e1c39755eb0e8c97a3ae31d5e66055185ae67bfe))
+* **extensions:** split hidden commands into separate Utility Commands section ([f36db81](https://github.com/haexhub/specifyr/commit/f36db8195cebba9a41af745fc9650eb201cfac93))
+* **hermes-streaming:** emit ACP SessionUpdate via shared adapter ([b03dcfa](https://github.com/haexhub/specifyr/commit/b03dcfa0483c5a51f4c69c71b74360e1f53f772d))
+* **i18n:** internationalize UI, rename favorites, deselect by default ([#4](https://github.com/haexhub/specifyr/issues/4)) ([f132004](https://github.com/haexhub/specifyr/commit/f1320041898179b1098f8c43478edcf46c1b32c4))
+* **logo:** add SpeculossLogo component ([747976f](https://github.com/haexhub/specifyr/commit/747976f81e8da8b64cd6426768c65e0829a34b64))
+* **logo:** use SpeculossLogo on index page, add large variant ([d5e181a](https://github.com/haexhub/specifyr/commit/d5e181a0c2f69a28f326841c047a8107359a0437))
+* **rebrand:** rename haex-corp → speculoss ([#5](https://github.com/haexhub/specifyr/issues/5)) ([eb4395c](https://github.com/haexhub/specifyr/commit/eb4395c3e67b00d21eaf0f09960d4f1396f31aaf))
+* **rebrand:** rename haex-corp → speculoss across all files ([4f5fc4e](https://github.com/haexhub/specifyr/commit/4f5fc4e7294666b9fedfe5259847bba6b1b95639))
+* **runners:** group per-project agents as a Docker compose stack via labels ([9a3a050](https://github.com/haexhub/specifyr/commit/9a3a0509b2d388a3c1f592fcc561ee7dc2acd190))
+* **runners:** output adapter from Claude stream-json to ACP SessionUpdate ([3cdcd5a](https://github.com/haexhub/specifyr/commit/3cdcd5af59b3460c9db1a172ff323fa14e9ab9a3))
+* **runners:** remove HermesCliRunner — superseded by streaming + ACP ([c754f92](https://github.com/haexhub/specifyr/commit/c754f929ed544d3ca4601c0c98c8a909a791c7d6))
+* **runtime:** persistent containers, live agent activity, hostProjectRoot, profile seeding ([66504e1](https://github.com/haexhub/specifyr/commit/66504e10bfafd9f806683dbf45d06882335bb92f))
+* **server:** SSE streaming for company start, claude-proxy routing, HMR-safe registry ([7cfb530](https://github.com/haexhub/specifyr/commit/7cfb530184de29d68652c5a15ba699c3328a9abf))
+* **session:** persist last active session per step in localStorage ([d53ed23](https://github.com/haexhub/specifyr/commit/d53ed23d18f9c99fbb9122b5f00933953b577ae4))
+* **speckit-company:** SPECULOOS_HOME runtime separation, agent workspace skill ([438f605](https://github.com/haexhub/specifyr/commit/438f6054560ce83f6c611e08c933bd4afbb4eb86))
+* **steps:** remove step locking, StepInfoBanner, manual complete button, and artifact auto-complete ([53129a9](https://github.com/haexhub/specifyr/commit/53129a9246757b97d79c63ff9cfbbeb7ea92bd9b))
+* **turn-broker:** persist runner output as ACP SessionUpdate (event:'session_update') ([2d76331](https://github.com/haexhub/specifyr/commit/2d763317ae5d2683f0507322abe56f084772b0e8))
+* **turn-broker:** replay last 10 messages when retrying after expired session ([01cfb14](https://github.com/haexhub/specifyr/commit/01cfb14cbff0c892cf6e4300a7d0652a889c7fe4))
+* **ui:** consume ACP SessionUpdate over SSE; adapter translates thinking → agent_thought_chunk ([a2366d4](https://github.com/haexhub/specifyr/commit/a2366d4b692da06e5ec5bcf6ba6d9d789abb7351))
+* **ui:** runtime task dispatch, agent task board, history view; remove step locking ([efc15dc](https://github.com/haexhub/specifyr/commit/efc15dcac2f25ebfe35c21997546e1a0fde9fe5a))
+* **workflow-discovery:** support hidden:true on extension commands ([ea3b6b6](https://github.com/haexhub/specifyr/commit/ea3b6b6a189b51109d276a3b87f7713d9b1d4a81))
+
+
+### Bug Fixes
+
+* **acp:** include optional kind/rawInput/rawOutput/locations on AcpToolCall typedef ([bd9c5f4](https://github.com/haexhub/specifyr/commit/bd9c5f43c57715544e1fce272f1909452fdf2de0))
+* **acp:** wire CAS.transports[] into decision flow; unbound notify returns undefined ([6cafa83](https://github.com/haexhub/specifyr/commit/6cafa83ae2fa45ca555e94396a0d1008d37d0ce4))
+* **alias:** use absolute path for #su Nitro alias, add TS path mapping ([7d1bba1](https://github.com/haexhub/specifyr/commit/7d1bba118badd2502c50e6b7ee31a038b7bdd171))
+* **extensions:** fall back to spec-kit .registry when extensions.json missing ([4dfeaff](https://github.com/haexhub/specifyr/commit/4dfeaff275dae5ab4c6c7fb610e32bebc276313d))
+* **extensions:** fall back to spec-kit .registry when extensions.json missing ([77a550e](https://github.com/haexhub/specifyr/commit/77a550ecd827f5c27e99a1e90d3f2be66566500e))
+* **logo:** restore PNG logo and public directory ([b3df790](https://github.com/haexhub/specifyr/commit/b3df790e189449148089a346826261cddc1d37c8))
+* **logo:** use spekulatius cookie SVG from favicon ([92bbfe2](https://github.com/haexhub/specifyr/commit/92bbfe2249004e4691e8167b3b739f943d35104a))
+* **orchestrator:** pass dataDir() instead of process.cwd() to SpecOrchestrator ([de94b51](https://github.com/haexhub/specifyr/commit/de94b51ca9d1db94bafcf8acd346460c07174b1f))
+* **runner:** allow Bash tool in headless project sessions ([eb4bd9b](https://github.com/haexhub/specifyr/commit/eb4bd9b5f00899b47a1e20b1fcfd506fe73fefbd))
+* **server:** restore data-dir imports broken by specops-stores re-export removal ([3b5426a](https://github.com/haexhub/specifyr/commit/3b5426af35931db91e7c7a14d86e968878dd1bbf))
+* **turn-broker:** surface resume failures as errors and clear expired session IDs ([0438e59](https://github.com/haexhub/specifyr/commit/0438e5998f88e8e4c29377938eb298f7025c020e))
+* **types:** resolve TS errors introduced during branch merge ([7dd54e6](https://github.com/haexhub/specifyr/commit/7dd54e6a6dc431d156dc5b76bfc0db63acb6d4fd))
+* **ui:** scaffold missing shadcn Input component ([0f93ec4](https://github.com/haexhub/specifyr/commit/0f93ec4fd53e13bff12618d7ec2385d42cdf4a76))
+* **watch:** anchor chokidar to project root to detect new .specify/ dirs ([0c3dd57](https://github.com/haexhub/specifyr/commit/0c3dd579f6411c5d6a1992ab191d8a8c643812cb))
+* **watch:** anchor chokidar to project root to detect new .specify/ dirs ([a963151](https://github.com/haexhub/specifyr/commit/a96315100b76a69fe3f51e662708825583abf387))
+
+
+### Reverts
+
+* remove hidden command machinery — not needed, use provides.commands as workflow step list ([a0ff35d](https://github.com/haexhub/specifyr/commit/a0ff35d5bda2fa5cff1ed389af7629c442fe92ec))
