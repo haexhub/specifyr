@@ -1,6 +1,5 @@
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 import { getDb } from "../db/client";
 
 /**
@@ -9,6 +8,12 @@ import { getDb } from "../db/client";
  *
  * No-op when DATABASE_URL is unset — keeps the dev/test setup
  * runnable without postgres. Production deploys must set DATABASE_URL.
+ *
+ * Path resolution: migrations live at <cwd>/server/db/migrations. In
+ * dev, `pnpm dev` runs from the project root. In production, the
+ * Dockerfile sets WORKDIR=/app and copies `server/db/migrations` so
+ * the same relative path resolves. `import.meta.url` is unreliable
+ * after Nitro bundles into chunks, so we don't use it.
  */
 export default defineNitroPlugin(async () => {
   const db = getDb();
@@ -17,10 +22,7 @@ export default defineNitroPlugin(async () => {
     return;
   }
 
-  const migrationsFolder = resolve(
-    dirname(fileURLToPath(import.meta.url)),
-    "../db/migrations",
-  );
+  const migrationsFolder = resolve(process.cwd(), "server/db/migrations");
 
   try {
     await migrate(db, { migrationsFolder });

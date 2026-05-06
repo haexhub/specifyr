@@ -1,12 +1,15 @@
-// Drizzle schema. Tables are added phase-by-phase per the plan in
-// docs/plans/2026-05-06-llm-provider-settings.md.
-//
-// Phase 1 will introduce `users`. Phase 2 adds `projects`. Phase 3 adds
-// `orgs` + `org_memberships`. Phase 4 adds `llm_credentials`. Phase 6
-// adds `runner_sessions`.
-//
-// Keep this file as the single source of truth — drizzle-kit generates
-// migrations from the diff between schema.ts and the latest applied
-// migration. Do not hand-edit the generated SQL.
+import { pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
 
-export {};
+// Mirror of Authelia identity. UPSERT'd by the auth middleware on the
+// first request from a previously-unseen email. `email` is the natural
+// key — Authelia is the source of truth for who has what address.
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull().unique(),
+  displayName: text("display_name"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;

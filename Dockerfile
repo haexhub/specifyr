@@ -53,6 +53,10 @@ FROM base AS prod
 COPY --chown=node:node --from=builder /app/.output ./.output
 COPY --chown=node:node --from=builder /app/src ./src
 COPY --chown=node:node --from=builder /app/package.json ./package.json
+# Drizzle's runtime migrator (server/plugins/db.ts) reads SQL files from
+# disk at boot. Nitro doesn't bundle them, so we copy them explicitly.
+# The plugin resolves them relative to process.cwd() = /app.
+COPY --chown=node:node --from=builder /app/server/db/migrations ./server/db/migrations
 # Mountpoints für Bind-Volumes vorab als node anlegen, falls der Host-Pfad noch leer ist.
 RUN mkdir -p /app/projects /app/.specifyr && chown -R node:node /app/projects /app/.specifyr
 ENV HOST=0.0.0.0 \
