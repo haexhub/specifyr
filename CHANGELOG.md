@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/haexhub/specifyr/compare/v0.3.0...v0.4.0) (2026-05-06)
+
+
+### Features
+
+* **auth:** support both Authentik and Authelia forward-auth headers ([41a3c4f](https://github.com/haexhub/specifyr/commit/41a3c4fdae33b24a0d9a8895857167149a39bd7c))
+
 ## [0.3.0](https://github.com/haexhub/specifyr/compare/v0.2.0...v0.3.0) (2026-05-06)
 
 
