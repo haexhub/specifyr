@@ -49,6 +49,9 @@ function blockToUpdate(block) {
   if (block.type === "text") {
     return { sessionUpdate: "agent_message_chunk", content: { type: "text", text: block.text } };
   }
+  if (block.type === "thinking" && typeof block.thinking === "string") {
+    return { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: block.thinking } };
+  }
   if (block.type === "tool_use") {
     return {
       sessionUpdate: "tool_call",

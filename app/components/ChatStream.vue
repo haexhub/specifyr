@@ -35,7 +35,7 @@ type SessionDetail = SessionMetadata & {
 const sessionView = ref<SessionDetail | null>(null);
 
 const streamingMessage = ref<ChatMessageType | null>(null);
-const currentToolUses = ref<{ name: string; input: unknown }[]>([]);
+const currentToolUses = ref<{ name: string; input: unknown; id?: string; status?: string }[]>([]);
 const toolUseSinceLastText = ref(false);
 const lastSeenSeq = ref(0);
 const sessionResetNotice = ref(false);
@@ -137,29 +137,37 @@ function appendThinkingToStreamingMessage(text: string) {
   }
 }
 
-function handleClaudeEvent(payload: any) {
-  if (payload?.type === "assistant" && Array.isArray(payload.message?.content)) {
-    for (const block of payload.message.content) {
-      if (block?.type === "thinking" && typeof block.thinking === "string") {
-        waitingForFirstToken.value = false;
-        appendThinkingToStreamingMessage(block.thinking);
-      } else if (block?.type === "text" && typeof block.text === "string") {
-        waitingForFirstToken.value = false;
-        const text = block.text;
-        if (toolUseSinceLastText.value && streamingMessage.value?.content) {
-          appendTextToStreamingMessage(`\n\n${text}`);
-        } else {
-          appendTextToStreamingMessage(text);
-        }
-        toolUseSinceLastText.value = false;
-      } else if (block?.type === "tool_use" && block.name) {
-        waitingForFirstToken.value = false;
-        currentToolUses.value = [...currentToolUses.value, { name: block.name, input: block.input }];
-        toolUseSinceLastText.value = true;
-      }
+function handleSessionUpdate(update: any) {
+  if (!update || typeof update.sessionUpdate !== "string") return;
+
+  if (update.sessionUpdate === "agent_message_chunk" && update.content?.type === "text") {
+    waitingForFirstToken.value = false;
+    const text = update.content.text;
+    if (toolUseSinceLastText.value && streamingMessage.value?.content) {
+      appendTextToStreamingMessage(`\n\n${text}`);
+    } else {
+      appendTextToStreamingMessage(text);
     }
+    toolUseSinceLastText.value = false;
     scrollToBottom();
+  } else if (update.sessionUpdate === "agent_thought_chunk" && update.content?.type === "text") {
+    waitingForFirstToken.value = false;
+    appendThinkingToStreamingMessage(update.content.text);
+    scrollToBottom();
+  } else if (update.sessionUpdate === "tool_call") {
+    waitingForFirstToken.value = false;
+    currentToolUses.value = [
+      ...currentToolUses.value,
+      { name: update.title, input: update.rawInput, id: update.toolCallId, status: update.status ?? "in_progress" }
+    ];
+    toolUseSinceLastText.value = true;
+    scrollToBottom();
+  } else if (update.sessionUpdate === "tool_call_update") {
+    currentToolUses.value = currentToolUses.value.map((t: any) =>
+      t.id === update.toolCallId ? { ...t, status: update.status ?? t.status } : t
+    );
   }
+  // plan, current_mode_update, available_commands_update etc. — dropped silently for v1
 }
 
 function openStream(sid: string, since: number) {
@@ -186,9 +194,9 @@ function openStream(sid: string, since: number) {
     }
   };
 
-  es.addEventListener("claude", (ev: MessageEvent) => {
+  es.addEventListener("session_update", (ev: MessageEvent) => {
     const data = updateSeq(ev.data);
-    if (data) handleClaudeEvent(data);
+    if (data) handleSessionUpdate(data);
   });
 
   es.addEventListener("assistant_message", (ev: MessageEvent) => {

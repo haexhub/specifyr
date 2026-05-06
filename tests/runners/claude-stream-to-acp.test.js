@@ -80,3 +80,28 @@ test("inferToolKind covers common tools", () => {
   assert.equal(get("WebFetch"), "fetch");
   assert.equal(get("Mystery"), "other");
 });
+
+test("thinking block becomes agent_thought_chunk", () => {
+  const out = translateStreamEvent({
+    type: "assistant",
+    message: { content: [{ type: "thinking", thinking: "let me consider..." }] }
+  });
+  assert.deepEqual(out, [
+    { sessionUpdate: "agent_thought_chunk", content: { type: "text", text: "let me consider..." } }
+  ]);
+});
+
+test("thinking interleaves with text in fan-out", () => {
+  const out = translateStreamEvent({
+    type: "assistant",
+    message: {
+      content: [
+        { type: "thinking", thinking: "hmm" },
+        { type: "text", text: "answer" }
+      ]
+    }
+  });
+  assert.equal(out.length, 2);
+  assert.equal(out[0].sessionUpdate, "agent_thought_chunk");
+  assert.equal(out[1].sessionUpdate, "agent_message_chunk");
+});

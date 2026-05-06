@@ -6,7 +6,7 @@ import type { RunTaskRow } from "~/components/RunTaskList.vue";
 
 export interface TaskLogEntry {
   ts: string | null;
-  kind: "start" | "chunk" | "tool_use" | "complete" | "failed";
+  kind: "start" | "chunk" | "tool_call" | "complete" | "failed";
   title?: string;
   description?: string;
   text?: string;
@@ -113,7 +113,7 @@ const canSkip = computed(() => {
             <p v-if="entry.description" class="mt-1 whitespace-pre-wrap text-muted-foreground">{{ entry.description }}</p>
           </div>
           <pre v-else-if="entry.kind === 'chunk'" class="whitespace-pre-wrap wrap-break-word font-mono leading-5">{{ entry.text }}</pre>
-          <div v-else-if="entry.kind === 'tool_use'" class="inline-flex items-center gap-1.5 rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+          <div v-else-if="entry.kind === 'tool_call'" class="inline-flex items-center gap-1.5 rounded bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
             <Wrench class="size-3" />
             <code>{{ entry.name }}</code>
           </div>

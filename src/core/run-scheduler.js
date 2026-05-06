@@ -232,7 +232,7 @@ export class RunScheduler extends EventEmitter {
                   taskId: task.id,
                   raw: { type: "tool_use", name: block.name, input: block.input }
                 });
-                this.runStore.appendTaskLog(this.slug, task.id, { kind: "tool_use", name: block.name });
+                this.runStore.appendTaskLog(this.slug, task.id, { kind: "tool_call", name: block.name });
               }
             }
           }
