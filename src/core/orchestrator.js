@@ -9,7 +9,6 @@ import { createPlanMarkdown, createSpecTemplate, createTasksMarkdown, extractJso
 import { LocalTemplateProvider, OpenAICompatibleProvider } from "../providers/base.js";
 import { HermesAgentRunner } from "../runners/base.js";
 import { FabricCliProvider } from "../providers/fabric.js";
-import { HermesCliRunner } from "../runners/hermes-cli.js";
 import { slugify } from "../utils/fs.js";
 
 function assertStatus(status) {
@@ -384,14 +383,7 @@ export class SpecOrchestrator {
           : this.providers.local;
     }
     if (!this.runner) {
-      this.runner =
-        config.integrations.hermes.enabled
-          ? new HermesCliRunner({
-              command: config.integrations.hermes.command,
-              commandRunner: this.commandRunner,
-              fallback: new HermesAgentRunner()
-            })
-          : new HermesAgentRunner();
+      this.runner = new HermesAgentRunner();
     }
   }
 

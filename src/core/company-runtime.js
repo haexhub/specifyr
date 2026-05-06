@@ -27,7 +27,7 @@ import { randomBytes } from "node:crypto";
 import { loadCompany } from "../agents/spec-loader.js";
 import { QueuePoller } from "./queue-poller.js";
 import { WorktreeManager } from "./worktree-manager.js";
-import { HermesCliRunner } from "../runners/hermes-cli.js";
+import { HermesAgentRunner } from "../runners/base.js";
 import { hermesHomeForAgent } from "../runners/hermes-paths.js";
 import { checkCapability } from "./capability-gate.js";
 import { CapabilityApprovalService } from "./capability-approval-service.js";
@@ -564,12 +564,12 @@ export class CompanyRuntime extends EventEmitter {
   }
 }
 
-function defaultRunnerFactory({ projectRoot, hermesBinary }) {
-  return (agent) =>
-    new HermesCliRunner({
-      command: hermesBinary,
-      memoryRoot: hermesHomeForAgent({ projectRoot, role: agent.role }),
-    });
+function defaultRunnerFactory(_unused) {
+  // Default factory returns a stub runner that satisfies the
+  // `runner.execute(workItem, runtimeContext)` contract. Real deployments
+  // inject `dockerRunnerFactory(...)` (HermesDockerRunner) at construction;
+  // the host-side one-shot hermes path is no longer supported.
+  return () => new HermesAgentRunner();
 }
 
 /**

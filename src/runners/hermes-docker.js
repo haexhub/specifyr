@@ -1,15 +1,15 @@
 /**
  * Hermes-Docker runner — spawns each agent in its own hermes-agent container.
  *
- * Mirrors HermesCliRunner's `execute(workItem, runtimeContext)` interface.
- * The difference: instead of `hermes chat -q` on the host, this runs
+ * Implements the HermesAgentRunner `execute(workItem, runtimeContext)` interface.
+ * Instead of running `hermes chat -q` on the host, this runs
  *   `docker run [capability flags...] hermes-agent:dev`
  * The image's ENTRYPOINT (hermes-agent-entrypoint) selects whitelisted
  * binaries based on BINARY_WHITELIST and execs `hermes chat -q` inside.
  *
- * This runner is bound to a single agent at construction time (parallel to
- * HermesCliRunner's memoryRoot binding). The CompanyRuntime factory creates
- * one runner per agent at start().
+ * This runner is bound to a single agent at construction time (memoryRoot
+ * is per-agent via the profileDir HERMES_HOME). The CompanyRuntime factory
+ * creates one runner per agent at start().
  *
  * Capability-mapping errors (e.g. agent grants `docker:privileged` or caller
  * passes secrets without secrets:read_env) THROW rather than silently
