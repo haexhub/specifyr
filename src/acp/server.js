@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { encodeSessionId, decodeSessionId } from "./session-id.js";
+import { AcpApprovalTransport } from "./approval-transport.js";
 
 async function resolveSlugFromCwd(projectRoot, cwd) {
   const root = path.resolve(projectRoot);
@@ -19,6 +20,10 @@ async function resolveSlugFromCwd(projectRoot, cwd) {
 }
 
 export function createSpecifyrAcpAgent({ client, projectRoot, turnBroker, approvalService } = {}) {
+  const approvalTransport = (approvalService && client) ? new AcpApprovalTransport({ client }) : null;
+  if (approvalTransport && typeof approvalService.addTransport === "function") {
+    approvalService.addTransport(approvalTransport);
+  }
   return {
     async initialize() {
       return {
@@ -48,7 +53,9 @@ export function createSpecifyrAcpAgent({ client, projectRoot, turnBroker, approv
           2
         )
       );
-      return { sessionId: encodeSessionId({ slug, stepId, sid }) };
+      const sessionId = encodeSessionId({ slug, stepId, sid });
+      approvalTransport?.bindSession({ slug, stepId, sid }, sessionId);
+      return { sessionId };
     },
 
     async loadSession({ sessionId }) {

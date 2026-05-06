@@ -58,6 +58,23 @@ export class CapabilityApprovalService extends EventEmitter {
     this.defaultTimeoutMs = options.defaultTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     /** @type {Map<string, {resolve: Function, timer: NodeJS.Timeout, slug: string, agent: string, capability: string}>} */
     this.pending = new Map();
+    /**
+     * Additional transports registered post-construction. Reserved for
+     * connection-scoped routing (e.g. AcpApprovalTransport). Not yet wired into
+     * decision flow — added as a registration point so the ACP server can
+     * attach its transport at session-bind time.
+     * @type {Array<{ notify: Function, bindSession?: Function, unbind?: Function }>}
+     */
+    this.transports = [];
+  }
+
+  /**
+   * Register an additional transport (in addition to the constructor-provided
+   * one). Connection-scoped transports — e.g. AcpApprovalTransport — attach
+   * here. The decision-routing wiring lives in a follow-up task.
+   */
+  addTransport(transport) {
+    this.transports.push(transport);
   }
 
   /**

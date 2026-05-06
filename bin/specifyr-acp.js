@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import path from "node:path";
 import { Readable, Writable } from "node:stream";
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk";
 import { createSpecifyrAcpAgent } from "../src/acp/server.js";
@@ -8,10 +9,14 @@ import { ClaudeCodeRunner } from "../src/runners/claude-code.js";
 import { HermesStreamingRunner } from "../src/runners/hermes-streaming.js";
 import { AcpRunner } from "../src/runners/acp.js";
 import { loadAppConfig } from "../src/core/app-config.js";
+import { CapabilityApprovalService } from "../src/core/capability-approval-service.js";
+import { EventStore } from "../src/core/event-store.js";
 
 const projectRoot = process.cwd();
 const appConfig = await loadAppConfig(projectRoot);
 const sessionStore = new SessionStore(projectRoot);
+const eventStore = new EventStore(path.join(projectRoot, ".specifyr"));
+const approvalService = new CapabilityApprovalService({ eventStore });
 
 function pickRunnerFactory() {
   for (const name of appConfig.runner.fallbackChain) {
@@ -40,6 +45,6 @@ const stream = ndJsonStream(
 );
 
 new AgentSideConnection(
-  (client) => createSpecifyrAcpAgent({ client, projectRoot, turnBroker }),
+  (client) => createSpecifyrAcpAgent({ client, projectRoot, turnBroker, approvalService }),
   stream
 );
