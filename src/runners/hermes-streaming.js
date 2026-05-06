@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { access } from "node:fs/promises";
 import fs from "node:fs/promises";
+import { translateStreamEvent } from "./claude-stream-to-acp.js";
 
 /**
  * Streaming runner for the `hermes` CLI.
@@ -65,13 +66,15 @@ export class HermesStreamingRunner {
       let buffer = "";
 
       const emitText = (text) => {
-        try {
-          this.onEvent?.({
-            type: "assistant",
-            message: { role: "assistant", content: [{ type: "text", text }] }
-          });
-        } catch {
-          /* ignore consumer errors */
+        for (const update of translateStreamEvent({
+          type: "assistant",
+          message: { content: [{ type: "text", text }] }
+        })) {
+          try {
+            this.onEvent?.(update);
+          } catch {
+            /* ignore consumer errors */
+          }
         }
       };
 
