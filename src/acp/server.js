@@ -59,7 +59,39 @@ export function createSpecifyrAcpAgent({ client, projectRoot, turnBroker, approv
       return {};
     },
 
-    async prompt() { throw new Error("session/prompt not implemented"); },
-    async cancel() {}
+    async prompt({ sessionId, prompt }) {
+      const { slug, stepId, sid } = decodeSessionId(sessionId);
+      const text = prompt.filter((b) => b.type === "text").map((b) => b.text).join("\n");
+      const cwd = projectRoot;
+      const emitter = turnBroker.emitterFor(slug, stepId, sid);
+      let stopReason = "end_turn";
+
+      const done = new Promise((resolve) => {
+        const onEvent = async (entry) => {
+          if (entry.event === "session_update") {
+            try { await client.sessionUpdate({ sessionId, update: entry.data }); }
+            catch { /* client gone — TurnBroker still persists */ }
+          } else if (entry.event === "turn_failed") {
+            stopReason = "refusal";
+          }
+        };
+        const onEnded = () => {
+          emitter.off("event", onEvent);
+          emitter.off("ended", onEnded);
+          resolve();
+        };
+        emitter.on("event", onEvent);
+        emitter.on("ended", onEnded);
+      });
+
+      await turnBroker.startTurn({ slug, stepId, sid, prompt: text, cwd });
+      await done;
+      return { stopReason };
+    },
+
+    async cancel({ sessionId }) {
+      const { slug, stepId, sid } = decodeSessionId(sessionId);
+      turnBroker.cancel?.(slug, stepId, sid);
+    }
   };
 }
