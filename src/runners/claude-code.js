@@ -1,19 +1,17 @@
 import { spawn } from "node:child_process";
+import { translateStreamEvent } from "./claude-stream-to-acp.js";
 
 /**
  * Runs Claude Code headless (`claude -p`) with stream-json output.
  *
- * Events emitted (via onEvent callback) match Claude Code's stream-json schema:
- *   - {type:"system",subtype:"init",session_id,...}
- *   - {type:"assistant",message:{content:[...]}}
- *   - {type:"user",message:{content:[...]}}   (tool results)
- *   - {type:"result",subtype,result,session_id,total_cost_usd,...}
- *
- * Unknown event types are still forwarded so the UI can inspect/debug.
+ * Stream-json events from the CLI are translated into ACP SessionUpdate objects
+ * via `translateStreamEvent` before being forwarded to onEvent. Raw stream-json
+ * never escapes this runner.
  */
 export class ClaudeCodeRunner {
-  constructor({ binary = "claude", cwd = process.cwd(), onEvent } = {}) {
+  constructor({ binary = "claude", args, cwd = process.cwd(), onEvent } = {}) {
     this.binary = binary;
+    this.args = args ?? null;  // null = use built-in default below
     this.cwd = cwd;
     this.onEvent = onEvent;
     this.child = null;
@@ -33,14 +31,14 @@ export class ClaudeCodeRunner {
       // `acceptEdits` auto-approves Edit/Write/NotebookEdit. `--allowedTools Bash` adds
       // shell access so wizards can run scripts (e.g. `node validate.mjs`) within the
       // project directory without blocking on a TTY approval that never arrives in -p mode.
-      const args = [
+      const args = this.args ?? [
         "-p",
         "--output-format", "stream-json",
         "--verbose",
         "--permission-mode", "acceptEdits",
         "--allowedTools", "Bash"
       ];
-      if (resumeSessionId) {
+      if (resumeSessionId && this.args == null) {
         args.push("--resume", resumeSessionId);
       }
 
@@ -58,7 +56,9 @@ export class ClaudeCodeRunner {
 
       const safeEmit = (event) => {
         try {
-          this.onEvent?.(event);
+          for (const update of translateStreamEvent(event)) {
+            this.onEvent?.(update);
+          }
         } catch (err) {
           // Never let consumer callback errors kill the run
           stderrBuffer += `\n[onEvent error] ${err instanceof Error ? err.message : String(err)}`;
