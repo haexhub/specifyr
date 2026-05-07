@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.5.0](https://github.com/haexhub/specifyr/compare/v0.4.0...v0.5.0) (2026-05-07)
+
+
+### Features
+
+* **auth:** logout button in sidebar + settings page ([cbf929e](https://github.com/haexhub/specifyr/commit/cbf929e428109b694646592ee79be526762cb067))
+* **dev-auth:** testable logout flow without an IDP locally ([9524326](https://github.com/haexhub/specifyr/commit/9524326df3d148179637975455091e21110eba3c))
+* **llm-creds:** drop default_model, add OpenRouter provider ([f61ea12](https://github.com/haexhub/specifyr/commit/f61ea12d16ce8c8d4076680ce062cd95cc5812e6))
+* **llm-creds:** phase 4 — encrypted personal API key store + UI ([6a5deb1](https://github.com/haexhub/specifyr/commit/6a5deb18e8ecf3ea562f5c15a9941cf79672752a))
+* **llm:** multi-tenant LLM credentials + Claude OAuth flow (phases 5/6/8) ([e3aa395](https://github.com/haexhub/specifyr/commit/e3aa3951f97eb2ae3d92be0bd201ce81ac2284ad))
+* **oauth:** org-level Claude OAuth flow (phase 9) ([9882a46](https://github.com/haexhub/specifyr/commit/9882a46a92477220aba6c21b169aa175bff3e914))
+* **runner:** wire personal LLM credentials into agent env injection ([7f15d07](https://github.com/haexhub/specifyr/commit/7f15d078364fb07a519fdce7d7da95b41297407b))
+
+
+### Bug Fixes
+
+* **dev-auth:** hide Sign-in button when SPECIFYR_DEV_USER_EMAIL unset ([b5b252a](https://github.com/haexhub/specifyr/commit/b5b252a42f00eaaa11183b7ce71f98b228805792))
+
 ## [0.4.0](https://github.com/haexhub/specifyr/compare/v0.3.0...v0.4.0) (2026-05-06)
 
 
