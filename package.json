@@ -12,7 +12,8 @@
     "dev": "nuxt dev",
     "build": "nuxt build",
     "preview": "nuxt preview",
-    "test": "node --no-warnings=ExperimentalWarning --test",
+    "test": "node --no-warnings=ExperimentalWarning --import tsx tests/_runner.mjs",
+    "test:e2e": "vitest run --config vitest.config.ts",
     "ui": "nuxt dev"
   },
   "engines": {
@@ -45,10 +46,13 @@
     "yaml": "^2.8.3"
   },
   "devDependencies": {
+    "@nuxt/test-utils": "^4.0.3",
     "@tailwindcss/typography": "^0.5.19",
     "@types/pg": "^8.20.0",
     "@vue/language-core": "^3.2.7",
     "drizzle-kit": "^0.31.10",
+    "tsx": "^4.21.0",
+    "vitest": "^4.1.5",
     "vue-tsc": "^3.2.7"
   }
 }

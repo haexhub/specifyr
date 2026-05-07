@@ -12,9 +12,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 
+// node:test treats `{ skip: null }` as truthy → use `false` to opt-in.
 const skipReason = !process.env.DATABASE_URL
   ? "DATABASE_URL not set — skipping integration test"
-  : null;
+  : false;
 
 test("resolveCredentialForUser: empty → null", { skip: skipReason }, async () => {
   process.env.SPECIFYR_SECRET_KEY ||= crypto.randomBytes(32).toString("hex");
