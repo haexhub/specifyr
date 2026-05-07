@@ -35,13 +35,22 @@ export function useMe() {
   const authHost = computed(
     () => (config.public.authHost as string | undefined) ?? "",
   );
-  const isDevAuth = computed(() => !authHost.value);
+  // Dev-auth round-trip only makes sense when the server actually has
+  // SPECIFYR_DEV_USER_EMAIL set — the /api/dev/* endpoints 404 otherwise.
+  // Without it, we're in plain single-user-no-auth mode and the auth
+  // affordances stay hidden.
+  const isDevAuth = computed(
+    () => !authHost.value && !!config.public.devAuthAvailable,
+  );
 
   async function logout() {
     if (isDevAuth.value) {
-      await $fetch("/api/dev/logout", { method: "POST" });
-      // Reload so /api/me re-fetches and the auth middleware re-evaluates
-      // with the suppression cookie now in place.
+      try {
+        await $fetch("/api/dev/logout", { method: "POST" });
+      } catch (err) {
+        console.error("[useMe] dev logout failed:", err);
+        return;
+      }
       if (typeof window !== "undefined") window.location.href = "/";
       return;
     }
@@ -52,7 +61,12 @@ export function useMe() {
 
   async function devLogin() {
     if (!isDevAuth.value) return;
-    await $fetch("/api/dev/login", { method: "POST" });
+    try {
+      await $fetch("/api/dev/login", { method: "POST" });
+    } catch (err) {
+      console.error("[useMe] dev login failed:", err);
+      return;
+    }
     if (typeof window !== "undefined") window.location.href = "/";
   }
 

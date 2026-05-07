@@ -32,7 +32,12 @@ export default defineNuxtConfig({
       // Public so the Logout link can point at it. Set per-deployment
       // (in ansible's .env.j2 → AUTHENTIK_HOST). Empty string disables
       // the Logout link (dev mode w/o IDP).
-      authHost: process.env.AUTHENTIK_HOST ?? ""
+      authHost: process.env.AUTHENTIK_HOST ?? "",
+      // Truthy iff SPECIFYR_DEV_USER_EMAIL is set on the server. The
+      // value itself stays server-side (display-only); we just need a
+      // boolean so the UI can render the Sign-in (dev) button only when
+      // it would actually do something.
+      devAuthAvailable: !!process.env.SPECIFYR_DEV_USER_EMAIL
     }
   },
   i18n: {
