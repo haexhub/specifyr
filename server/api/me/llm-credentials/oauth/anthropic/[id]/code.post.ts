@@ -1,0 +1,62 @@
+import {
+  getCredentialOwnedBy,
+  markOAuthAuthorized,
+} from "@su/llm-credentials-store";
+import { ownerCredentialsHome } from "@su/data-dirs";
+import {
+  getClaudeOAuthDriver,
+  readCredentialsExpiry,
+} from "@su/claude-oauth-driver";
+
+/**
+ * Submits the user-pasted OAuth code to the held-open
+ * `claude auth login` subprocess. Pipes the code into stdin, awaits
+ * the CLI exit, then verifies `.credentials.json` is on disk and
+ * stamps the DB row authorized.
+ *
+ * Returns the parsed expiry so the frontend can show "logged in
+ * until X" without a follow-up status poll.
+ */
+export default defineEventHandler(async (event) => {
+  const userId = event.context.userId;
+  if (!userId) {
+    throw createError({ statusCode: 401, statusMessage: "not authenticated" });
+  }
+  const id = getRouterParam(event, "id");
+  if (!id) throw createError({ statusCode: 400, statusMessage: "id required" });
+
+  // Ownership gate before touching the driver — a stranger's id
+  // can't manipulate someone else's flow.
+  const owned = await getCredentialOwnedBy(id, "user", userId);
+  if (!owned) throw createError({ statusCode: 404, statusMessage: "not found" });
+
+  const body = await readBody<{ code?: string }>(event);
+  const code = body?.code?.trim() ?? "";
+  if (code.length < 4) {
+    throw createError({ statusCode: 400, statusMessage: "code required" });
+  }
+
+  try {
+    await getClaudeOAuthDriver().submitCode(id, code);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "code submission failed";
+    throw createError({ statusCode: 400, statusMessage: message });
+  }
+
+  const home = ownerCredentialsHome("user", userId);
+  const expiresAt = await readCredentialsExpiry(home);
+  if (!expiresAt) {
+    throw createError({
+      statusCode: 500,
+      statusMessage: "credentials.json was not written by the CLI",
+    });
+  }
+
+  const updated = await markOAuthAuthorized(id, new Date());
+  return {
+    id,
+    oauthStatus: updated?.oauthStatus ?? "authorized",
+    expiresAt: expiresAt.toISOString(),
+  };
+});

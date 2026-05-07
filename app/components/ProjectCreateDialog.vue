@@ -28,6 +28,23 @@ const standardExtensions = ref<string[]>([]);
 const selectedExtensions = ref<Set<string>>(new Set());
 const extensionsLoading = ref(false);
 
+interface OrgOption {
+  id: string;
+  slug: string;
+  name: string;
+  role: "admin" | "member";
+}
+const orgs = ref<OrgOption[]>([]);
+const selectedOwner = ref<string>("");
+
+async function refreshOrgs() {
+  try {
+    orgs.value = await $fetch<OrgOption[]>("/api/orgs");
+  } catch {
+    orgs.value = [];
+  }
+}
+
 async function refreshWorkflows() {
   workflowsLoading.value = true;
   try {
@@ -66,8 +83,10 @@ watch(
       errorMessage.value = "";
       titleError.value = "";
       selectedWorkflow.value = DEFAULT_WORKFLOW_ID;
+      selectedOwner.value = "";
       refreshStandardExtensions();
       refreshWorkflows();
+      refreshOrgs();
     }
   }
 );
@@ -111,7 +130,8 @@ async function submit() {
         title: trimmed,
         description: description.value.trim(),
         extensions: [...extensionsToInstall],
-        workflow: selectedWorkflow.value
+        workflow: selectedWorkflow.value,
+        ownerOrgSlug: selectedOwner.value || null
       }
     });
     emit("created", created);
@@ -175,6 +195,23 @@ async function submit() {
               class="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-ring focus:ring-offset-2"
               :placeholder="$t('projectCreate.descriptionPlaceholder')"
             />
+          </div>
+
+          <div v-if="orgs.length > 0" class="space-y-1.5">
+            <label for="project-owner" class="text-sm font-medium">Owner</label>
+            <select
+              id="project-owner"
+              v-model="selectedOwner"
+              class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              <option value="">Personal (only you)</option>
+              <option v-for="o in orgs" :key="o.id" :value="o.slug">
+                {{ o.name }} (org)
+              </option>
+            </select>
+            <p class="text-[11px] text-muted-foreground">
+              Org-owned projects fall back to org-shared LLM credentials when a member has no personal key.
+            </p>
           </div>
 
           <div class="space-y-1.5">

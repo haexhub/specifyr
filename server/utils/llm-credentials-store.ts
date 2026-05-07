@@ -128,6 +128,61 @@ export async function updateApiKeyCredential(
   return row ? summarize(row) : null;
 }
 
+/**
+ * Phase 8: creates a placeholder oauth_claude credential. The actual
+ * OAuth token lives on disk under `<credentialsDir>/<owner>/.claude/.credentials.json`
+ * (written by the spawned CLI). This row tracks high-level lifecycle
+ * (`pending` → `authorized` / `expired`) so the UI can render state
+ * and the resolver can decide whether the credential is usable.
+ */
+export async function createOAuthClaudeCredential(input: {
+  ownerKind: "user" | "org";
+  ownerId: string;
+  displayName: string;
+}): Promise<CredentialSummary> {
+  const db = getDb();
+  if (!db) throw new Error("DB not configured");
+
+  const [row] = await db
+    .insert(llmCredentials)
+    .values({
+      ownerKind: input.ownerKind,
+      ownerId: input.ownerId,
+      provider: "anthropic",
+      mode: "oauth_claude",
+      displayName: input.displayName,
+      oauthStatus: "pending",
+      enabled: true,
+    })
+    .returning();
+  if (!row) throw new Error("oauth credential insert returned nothing");
+  return summarize(row);
+}
+
+/**
+ * Phase 8: stamp the credential as fully authorized once the spawned
+ * `claude auth login` flow finished and the credentials.json was
+ * parsed. authorizedAt is what we'd surface in the UI as "logged in
+ * since X" later.
+ */
+export async function markOAuthAuthorized(
+  id: string,
+  authorizedAt: Date,
+): Promise<CredentialSummary | null> {
+  const db = getDb();
+  if (!db) return null;
+  const [row] = await db
+    .update(llmCredentials)
+    .set({
+      oauthStatus: "authorized",
+      oauthAuthorizedAt: authorizedAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(llmCredentials.id, id))
+    .returning();
+  return row ? summarize(row) : null;
+}
+
 export async function deleteCredential(id: string): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
@@ -182,25 +237,40 @@ export async function getCredentialOwnedBy(
   return row ?? null;
 }
 
-export type ResolvedCredential = {
-  apiKey: string;
-  baseUrl: string | null;
-};
+/**
+ * Resolved credential — discriminated union so the runner caller knows
+ * whether to inject the api key directly or mint a runner session.
+ *
+ * - `mode: "api_key"`: caller injects ANTHROPIC_API_KEY = apiKey.
+ * - `mode: "oauth_claude"`: caller mints a runner_session for the
+ *   (ownerKind, ownerId) pair and injects the resulting token as
+ *   ANTHROPIC_API_KEY (with the proxy as ANTHROPIC_BASE_URL). The
+ *   resolver does NOT mint the token itself — that's a runner-side
+ *   concern with its own lifecycle and config (TTL, proxy URL).
+ */
+export type ResolvedCredential =
+  | {
+      mode: "api_key";
+      apiKey: string;
+      baseUrl: string | null;
+    }
+  | {
+      mode: "oauth_claude";
+      ownerKind: "user" | "org";
+      ownerId: string;
+      baseUrl: string | null;
+    };
 
 /**
- * Resolves a usable credential for a given user + provider, returning
- * the decrypted key + optional baseUrl. Used by the runner factory at
- * agent-spawn time to inject env vars into worker containers.
- *
- * v1 (Phase 4) walks user-personal credentials only. Phase 5 will add
- * org-fallback once project ownership wires through to a resolvable
- * org id. Multiple personal credentials of the same provider: picks
- * the most-recently-updated enabled api_key entry — minimal
- * "default" behaviour, can be sharpened to a user-pickable default
- * later if needed.
+ * Picks the most-recently-updated usable credential for an owner +
+ * provider pair. "Usable" = enabled AND
+ *   - api_key mode with a stored encrypted key, OR
+ *   - oauth_claude mode with oauthStatus='authorized'.
+ * If both kinds exist, the more-recently-updated row wins.
  */
-export async function resolveCredentialForUser(
-  userId: string,
+async function pickEnabledCredential(
+  ownerKind: "user" | "org",
+  ownerId: string,
   provider: Provider,
 ): Promise<ResolvedCredential | null> {
   const db = getDb();
@@ -211,25 +281,79 @@ export async function resolveCredentialForUser(
     .from(llmCredentials)
     .where(
       and(
-        eq(llmCredentials.ownerKind, "user"),
-        eq(llmCredentials.ownerId, userId),
+        eq(llmCredentials.ownerKind, ownerKind),
+        eq(llmCredentials.ownerId, ownerId),
         eq(llmCredentials.provider, provider),
-        eq(llmCredentials.mode, "api_key"),
         eq(llmCredentials.enabled, true),
       ),
     );
 
-  if (rows.length === 0) return null;
-  // Sort in JS to avoid pulling another column into the query plan;
-  // the result set is per-user so it's tiny in practice.
-  rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
-
-  const row = rows[0];
-  if (!row.apiKeyIv || !row.apiKeyTag || !row.apiKeyData) return null;
-  const apiKey = await decryptString({
-    iv: row.apiKeyIv,
-    tag: row.apiKeyTag,
-    data: row.apiKeyData,
+  // Filter to actually-usable rows in JS (the SQL OR for the
+  // mode/status combo is awkward and Drizzle's where chain stays
+  // readable as plain ANDs).
+  const usable = rows.filter((r) => {
+    if (r.mode === "api_key") {
+      return !!(r.apiKeyIv && r.apiKeyTag && r.apiKeyData);
+    }
+    if (r.mode === "oauth_claude") {
+      return r.oauthStatus === "authorized";
+    }
+    return false;
   });
-  return { apiKey, baseUrl: row.baseUrl };
+  if (usable.length === 0) return null;
+  usable.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  const row = usable[0]!;
+
+  if (row.mode === "api_key") {
+    const apiKey = await decryptString({
+      iv: row.apiKeyIv!,
+      tag: row.apiKeyTag!,
+      data: row.apiKeyData!,
+    });
+    return { mode: "api_key", apiKey, baseUrl: row.baseUrl };
+  }
+  return {
+    mode: "oauth_claude",
+    ownerKind: row.ownerKind,
+    ownerId: row.ownerId,
+    baseUrl: row.baseUrl,
+  };
+}
+
+/**
+ * User-personal-only resolver, api_key mode only — used by UI previews
+ * that need to know "does the user have a key?". Runner code should
+ * use {@link resolveCredentialForRequest} instead.
+ */
+export async function resolveCredentialForUser(
+  userId: string,
+  provider: Provider,
+): Promise<{ apiKey: string; baseUrl: string | null } | null> {
+  const hit = await pickEnabledCredential("user", userId, provider);
+  if (!hit || hit.mode !== "api_key") return null;
+  return { apiKey: hit.apiKey, baseUrl: hit.baseUrl };
+}
+
+/**
+ * Resolves a usable credential for a given user/project pair. Tries
+ * the user's personal credentials first, then falls back to the
+ * project's owning org (if any).
+ *
+ * Resolution order:
+ *   1. user-personal enabled credential (api_key OR oauth_claude)
+ *   2. project-owner-org enabled credential (when ownerOrgId is set)
+ *   3. null (caller falls back to legacy proxy / runtimeConfig)
+ */
+export async function resolveCredentialForRequest(
+  userId: string,
+  ownerOrgId: string | null,
+  provider: Provider,
+): Promise<ResolvedCredential | null> {
+  const personal = await pickEnabledCredential("user", userId, provider);
+  if (personal) return personal;
+  if (ownerOrgId) {
+    const orgHit = await pickEnabledCredential("org", ownerOrgId, provider);
+    if (orgHit) return orgHit;
+  }
+  return null;
 }

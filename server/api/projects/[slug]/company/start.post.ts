@@ -36,7 +36,12 @@ import {
   clearCompanyStarting,
 } from "@su/company-manager";
 import { getProjectSecrets } from "@su/secrets-store";
-import { resolveCredentialForUser } from "@su/llm-credentials-store";
+import {
+  resolveCredentialForRequest,
+  type ResolvedCredential,
+} from "@su/llm-credentials-store";
+import { getProjectFromDb } from "@su/project-store";
+import { mintRunnerSession } from "@su/runner-sessions-store";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
@@ -184,16 +189,46 @@ export default defineEventHandler(async (event) => {
       const opsUrl = config.companyOpsUrlBase;
       const projectSecrets = await getProjectSecrets(slug);
 
-      // Resolve the requesting user's personal LLM credential ONCE up
-      // front so the per-agent secretsResolver below stays sync-friendly
-      // (the resolver is hot-called by the runner factory and must not
-      // do per-agent DB queries). userId comes from the auth middleware
-      // — null in single-user/legacy mode, in which case we fall back
-      // to the existing runtimeConfig + project-secret chain.
+      // Resolve the LLM credential ONCE up front so the per-agent
+      // secretsResolver below stays sync-friendly (the resolver is
+      // hot-called by the runner factory and must not do per-agent DB
+      // queries). userId comes from the auth middleware — null in
+      // single-user/legacy mode, in which case we fall back to the
+      // existing runtimeConfig + project-secret chain.
+      //
+      // Resolution priority (Phase 5):
+      //   1. user-personal credential
+      //   2. project-owner-org credential (if project is org-owned)
+      //
+      // Phase 6: when the resolved row is `mode='oauth_claude'`, we
+      // mint a short-lived runner_session token and inject IT as the
+      // ANTHROPIC_API_KEY. The haex-claude-proxy (Phase 7) resolves
+      // that token back to (ownerKind, ownerId) and spawns the claude
+      // CLI with the matching credentials directory. The agent itself
+      // never sees the OAuth token, only the throwaway session token.
       const userId = event.context.userId;
-      const userAnthropic = userId
-        ? await resolveCredentialForUser(userId, "anthropic")
-        : null;
+      let resolvedAnthropic: ResolvedCredential | null = null;
+      let oauthSessionToken: string | null = null;
+      if (userId) {
+        const project = await getProjectFromDb(slug);
+        const ownerOrgId =
+          project?.ownerKind === "org" ? project.ownerId : null;
+        resolvedAnthropic = await resolveCredentialForRequest(
+          userId,
+          ownerOrgId,
+          "anthropic",
+        );
+        if (resolvedAnthropic?.mode === "oauth_claude") {
+          const minted = await mintRunnerSession({
+            userId,
+            owner: {
+              kind: resolvedAnthropic.ownerKind,
+              id: resolvedAnthropic.ownerId,
+            },
+          });
+          oauthSessionToken = minted.token;
+        }
+      }
 
       const runnerFactory = dockerRunnerFactory({
         projectRoot: pHostCwd,
@@ -211,26 +246,30 @@ export default defineEventHandler(async (event) => {
           };
 
           // Resolution priority for the Anthropic credential:
-          //   1. user-personal (Phase 4) — most specific, opt-in via
-          //      /settings/me/llm. Bypasses the shared claude-proxy
-          //      because the user has explicitly added their own key.
-          //   2. shared claude-proxy (legacy single-tenant OAuth path)
-          //   3. deployment-wide runtimeConfig + project secrets
+          //   1a. user-personal api_key (Phase 4) — most specific.
+          //   1b. user-personal oauth_claude — minted session token
+          //       routed through the multi-tenant proxy.
+          //   2.  project-owner-org credential (Phase 5) — same modes,
+          //       fallback for members who didn't add a personal one.
+          //   3.  deployment-wide runtimeConfig + project secrets.
+          //
+          // The legacy "shared OAuth via host ~/.claude" path is
+          // intentionally absent: the proxy is multi-tenant only, and
+          // a request without a per-user OAuth credential goes
+          // straight to the direct Anthropic API path (api_key from
+          // runtimeConfig).
           const proxyUrl = config.companyClaudeProxyUrl || undefined;
-          if (userAnthropic) {
-            env.ANTHROPIC_API_KEY = userAnthropic.apiKey;
-            if (userAnthropic.baseUrl) env.ANTHROPIC_BASE_URL = userAnthropic.baseUrl;
-          } else if (proxyUrl) {
-            // Route through the local claude-proxy container which forwards requests
-            // to api.anthropic.com using the Claude CLI OAuth credentials.
-            env.ANTHROPIC_BASE_URL = proxyUrl;
-            // Must use the sk-ant-api03- prefix so hermes classifies this as an
-            // API key (not OAuth/setup-token). The api03 path uses ANTHROPIC_BASE_URL
-            // directly (→ /v1/messages at the proxy). The sk-ant-proxy- prefix
-            // triggers the OAuth exchange path which ignores ANTHROPIC_BASE_URL
-            // and falls back to an OpenAI-compat client with no key → 401.
-            // The proxy ignores the key value; any api03-prefixed string works.
-            env.ANTHROPIC_API_KEY = "sk-ant-api03-proxy0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000AA";
+          if (resolvedAnthropic?.mode === "api_key") {
+            env.ANTHROPIC_API_KEY = resolvedAnthropic.apiKey;
+            if (resolvedAnthropic.baseUrl)
+              env.ANTHROPIC_BASE_URL = resolvedAnthropic.baseUrl;
+          } else if (resolvedAnthropic?.mode === "oauth_claude" && oauthSessionToken && proxyUrl) {
+            // Token IS the API key from the agent's perspective; the
+            // proxy unpacks it server-side. baseUrl on the credential
+            // overrides the deployment proxy when set (per-tenant
+            // proxy fan-out, not currently used but cheap to support).
+            env.ANTHROPIC_BASE_URL = resolvedAnthropic.baseUrl || proxyUrl;
+            env.ANTHROPIC_API_KEY = oauthSessionToken;
           } else {
             // Direct API: runtimeConfig takes priority, then project secrets.
             const apiKey = config.anthropicApiKey || projectSecrets["ANTHROPIC_API_KEY"];

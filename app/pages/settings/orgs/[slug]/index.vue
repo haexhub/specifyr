@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Copy, UserPlus } from "lucide-vue-next";
+import { Copy, KeyRound, UserPlus } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 
@@ -87,6 +87,13 @@ async function copyLink() {
         <span class="font-mono">/{{ data.org.slug }}</span> · You are
         <span class="font-medium">{{ data.myRole }}</span>
       </p>
+
+      <NuxtLink
+        :to="`/settings/orgs/${data.org.slug}/llm`"
+        class="mt-3 inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs hover:bg-muted/60"
+      >
+        <KeyRound class="size-3.5" /> LLM credentials
+      </NuxtLink>
 
       <section class="mt-8">
         <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">

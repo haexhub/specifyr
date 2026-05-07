@@ -6,6 +6,12 @@ import type {
   ProviderMeta,
 } from "~/components/LlmCredentialCard.vue";
 
+interface OrgLlmResponse {
+  org: { id: string; slug: string; name: string };
+  myRole: "admin" | "member";
+  credentials: CredentialRow[];
+}
+
 const providerMeta: Record<Provider, ProviderMeta> = {
   anthropic: {
     name: "Anthropic (Claude)",
@@ -30,9 +36,13 @@ const providerMeta: Record<Provider, ProviderMeta> = {
 };
 const providers: Provider[] = ["anthropic", "openai", "google", "openrouter"];
 
-const { data: credentials, refresh } = await useFetch<CredentialRow[]>(
-  "/api/me/llm-credentials",
-  { default: () => [] },
+const route = useRoute();
+const slug = computed(() => String(route.params.slug));
+const endpoint = computed(() => `/api/orgs/${slug.value}/llm-credentials`);
+
+const { data, refresh } = await useFetch<OrgLlmResponse>(
+  () => endpoint.value,
+  { default: () => null },
 );
 
 const credsByProvider = computed(() => {
@@ -42,58 +52,50 @@ const credsByProvider = computed(() => {
     google: [],
     openrouter: [],
   };
-  for (const c of credentials.value ?? []) {
+  for (const c of data.value?.credentials ?? []) {
     grouped[c.provider]?.push(c);
   }
   return grouped;
 });
 
-const anthropicOauth = computed(
-  () =>
-    (credentials.value ?? []).find(
-      (c) => c.provider === "anthropic" && c.mode === "oauth_claude",
-    ) ?? null,
-);
+const readOnly = computed(() => data.value?.myRole !== "admin");
 </script>
 
 <template>
   <div class="mx-auto w-full max-w-3xl px-6 py-8">
     <NuxtLink
-      to="/settings"
+      v-if="data"
+      :to="`/settings/orgs/${data.org.slug}`"
       class="text-xs text-muted-foreground hover:text-foreground"
     >
-      ← Settings
+      ← {{ data.org.name }}
     </NuxtLink>
 
     <h1 class="mt-2 flex items-center gap-2 text-2xl font-semibold">
       <KeyRound class="size-6 opacity-80" />
-      Personal LLM credentials
+      Org LLM credentials
     </h1>
     <p class="mt-1 text-sm text-muted-foreground">
-      API keys you add here are encrypted at rest and used by your agent runs.
-      Org-shared credentials are managed under each org's settings.
+      Members of this org without their own personal credential will fall back
+      to the keys configured here when they run agents on org-owned projects.
+      <template v-if="readOnly">
+        Only org admins can edit these.
+      </template>
     </p>
 
-    <AnthropicOAuthCard
-      :existing="
-        anthropicOauth
-          ? { id: anthropicOauth.id, oauthStatus: anthropicOauth.oauthStatus }
-          : null
-      "
-      endpoint="/api/me/llm-credentials/oauth/anthropic"
-      delete-endpoint="/api/me/llm-credentials"
-      @changed="refresh()"
-    />
-
-    <LlmCredentialCard
-      v-for="provider in providers"
-      :key="provider"
-      :provider="provider"
-      :meta="providerMeta[provider]"
-      :credentials="credsByProvider[provider] ?? []"
-      endpoint="/api/me/llm-credentials"
-      default-display-name="Personal"
-      @changed="refresh()"
-    />
+    <template v-if="data">
+      <LlmCredentialCard
+        v-for="provider in providers"
+        :key="provider"
+        :provider="provider"
+        :meta="providerMeta[provider]"
+        :credentials="credsByProvider[provider] ?? []"
+        :endpoint="endpoint"
+        :read-only="readOnly"
+        :default-display-name="data.org.name"
+        @changed="refresh()"
+      />
+    </template>
+    <p v-else class="mt-4 text-sm text-muted-foreground">Loading…</p>
   </div>
 </template>

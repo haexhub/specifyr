@@ -1,6 +1,6 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { projects, type Project } from "../db/schema";
+import { orgMemberships, projects, type Project } from "../db/schema";
 
 /**
  * DB-backed project ownership.
@@ -39,26 +39,60 @@ export async function getProjectFromDb(slug: string): Promise<Project | null> {
 }
 
 /**
- * Slugs of projects the user owns directly (owner_kind='user'). Org-owned
- * projects come from a separate query once the orgs phase lands.
+ * Slugs of projects the user can access: directly owned
+ * (owner_kind='user') OR owned by an org the user is a member of.
  */
 export async function listProjectSlugsForUser(userId: string): Promise<string[]> {
   const db = getDb();
   if (!db) return [];
 
+  // Two-step rather than a join so the SQL stays trivially readable:
+  // (1) find the user's org ids, (2) match projects against
+  // user-owned OR (org-owned AND in those org ids).
+  const memberships = await db
+    .select({ orgId: orgMemberships.orgId })
+    .from(orgMemberships)
+    .where(eq(orgMemberships.userId, userId));
+  const orgIds = memberships.map((m) => m.orgId);
+
+  const userOwnedFilter = and(
+    eq(projects.ownerKind, "user"),
+    eq(projects.ownerId, userId),
+  );
+  const filter = orgIds.length === 0
+    ? userOwnedFilter
+    : or(
+        userOwnedFilter,
+        and(eq(projects.ownerKind, "org"), inArray(projects.ownerId, orgIds)),
+      );
+
   const rows = await db
     .select({ slug: projects.slug })
     .from(projects)
-    .where(and(eq(projects.ownerKind, "user"), eq(projects.ownerId, userId)));
+    .where(filter);
   return rows.map((r) => r.slug);
 }
 
 /**
- * True iff the user owns the project directly. Org membership checks
- * land in phase 3.
+ * True iff the user can access the project: either owns it directly
+ * or is a member of the owning org.
  */
 export async function userOwnsProject(slug: string, userId: string): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false;
   const project = await getProjectFromDb(slug);
   if (!project) return false;
-  return project.ownerKind === "user" && project.ownerId === userId;
+  if (project.ownerKind === "user") return project.ownerId === userId;
+  // org-owned: check membership
+  const [m] = await db
+    .select({ orgId: orgMemberships.orgId })
+    .from(orgMemberships)
+    .where(
+      and(
+        eq(orgMemberships.orgId, project.ownerId),
+        eq(orgMemberships.userId, userId),
+      ),
+    )
+    .limit(1);
+  return !!m;
 }

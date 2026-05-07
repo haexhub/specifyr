@@ -170,3 +170,38 @@ export const llmCredentials = pgTable(
 
 export type LlmCredential = typeof llmCredentials.$inferSelect;
 export type NewLlmCredential = typeof llmCredentials.$inferInsert;
+
+// Short-lived bearer tokens injected into agent containers in place of
+// a real Anthropic API key. The haex-claude-proxy resolves the token
+// against this table at request time, then spawns the `claude` CLI with
+// HOME pointing at the matching credentials directory. The token itself
+// carries no privilege beyond "this owner is allowed to use the proxy
+// for this run" — short TTL keeps the blast radius small if a worker
+// container is compromised.
+//
+// owner_kind/owner_id is polymorphic the same way as the rest of the
+// schema (no FK on owner_id because of the polymorphism). user_id is
+// the requesting user — recorded for auditability + so cascading delete
+// of the user takes their sessions with them.
+export const runnerSessions = pgTable(
+  "runner_sessions",
+  {
+    token: text("token").primaryKey(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    ownerKind: text("owner_kind", { enum: ["user", "org"] }).notNull(),
+    ownerId: uuid("owner_id").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  },
+  (t) => ({
+    userIdx: index("runner_sessions_user_idx").on(t.userId, t.expiresAt),
+  }),
+);
+
+export type RunnerSession = typeof runnerSessions.$inferSelect;
+export type NewRunnerSession = typeof runnerSessions.$inferInsert;

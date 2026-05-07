@@ -1,7 +1,8 @@
 import { createProjectRecord } from "@su/project-creation";
 import { getAppConfigModule } from "@su/app-config";
 import { DEFAULT_WORKFLOW_ID } from "@su/workflows";
-import { recordProjectOwnership } from "@su/project-store";
+import { recordProjectOwnership, type ProjectOwner } from "@su/project-store";
+import { getMembership, getOrgBySlug } from "@su/org-store";
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
@@ -9,12 +10,36 @@ export default defineEventHandler(async (event) => {
     description?: string;
     extensions?: unknown;
     workflow?: string;
+    ownerOrgSlug?: string | null;
   }>(event);
   const title = body?.title?.trim() ?? "";
   const description = body?.description?.trim() ?? "";
 
   if (!title) {
     throw createError({ statusCode: 400, statusMessage: "Project title is required." });
+  }
+
+  // Resolve the requested owner. Empty/null/"me" → user-owned (current
+  // behaviour). A slug → org-owned, but only if the caller is a member
+  // of that org.
+  const userId = event.context.userId;
+  const ownerOrgSlug = body?.ownerOrgSlug?.trim() || null;
+  let resolvedOwner: ProjectOwner | null = null;
+  if (ownerOrgSlug && userId) {
+    const org = await getOrgBySlug(ownerOrgSlug);
+    if (!org) {
+      throw createError({ statusCode: 404, statusMessage: "Owner org not found." });
+    }
+    const membership = await getMembership(org.id, userId);
+    if (!membership) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: "You are not a member of the selected org.",
+      });
+    }
+    resolvedOwner = { kind: "org", id: org.id };
+  } else if (userId) {
+    resolvedOwner = { kind: "user", id: userId };
   }
 
   // Any string id is accepted at create-time (the extension that provides this workflow may still
@@ -49,10 +74,9 @@ export default defineEventHandler(async (event) => {
   // return the FS-created record — the FS work is already committed
   // and rolling it back is more dangerous than a temporary owner-less
   // project. The org/auth phases will reconcile later.
-  const userId = event.context.userId;
-  if (userId) {
+  if (resolvedOwner) {
     try {
-      await recordProjectOwnership(record.slug, { kind: "user", id: userId });
+      await recordProjectOwnership(record.slug, resolvedOwner);
     } catch (err) {
       console.warn("[projects.post] DB ownership write failed:", err);
     }
