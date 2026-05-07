@@ -1,6 +1,6 @@
 import { createApiKeyCredential, type Provider } from "@su/llm-credentials-store";
 
-const VALID_PROVIDERS: Provider[] = ["anthropic", "openai", "google"];
+const VALID_PROVIDERS: Provider[] = ["anthropic", "openai", "google", "openrouter"];
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -13,7 +13,6 @@ export default defineEventHandler(async (event) => {
     displayName?: string;
     apiKey?: string;
     baseUrl?: string;
-    defaultModel?: string;
   }>(event);
 
   const provider = body?.provider as Provider | undefined;
@@ -38,7 +37,6 @@ export default defineEventHandler(async (event) => {
       displayName,
       apiKey,
       baseUrl: body?.baseUrl?.trim() || undefined,
-      defaultModel: body?.defaultModel?.trim() || undefined,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "could not create credential";

@@ -3,7 +3,7 @@ import { Eye, EyeOff, KeyRound, Plus, Trash2 } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 
-type Provider = "anthropic" | "openai" | "google";
+type Provider = "anthropic" | "openai" | "google" | "openrouter";
 interface CredentialRow {
   id: string;
   ownerKind: "user" | "org";
@@ -13,35 +13,45 @@ interface CredentialRow {
   displayName: string;
   hasKey: boolean;
   baseUrl: string | null;
-  defaultModel: string | null;
   enabled: boolean;
   oauthStatus: "pending" | "authorized" | "expired" | null;
   createdAt: string;
   updatedAt: string;
 }
 
-const providerMeta: Record<
-  Provider,
-  { name: string; defaultModelHint: string; keyHint: string; baseUrlHint?: string }
-> = {
+type ProviderMeta = {
+  name: string;
+  keyHint: string;
+  // When set, the base-url field shows up. baseUrlPrefill is what to
+  // pre-populate on "Add key" click — the user can still override.
+  baseUrlHint?: string;
+  baseUrlPrefill?: string;
+  hint?: string;
+};
+
+const providerMeta: Record<Provider, ProviderMeta> = {
   anthropic: {
     name: "Anthropic (Claude)",
-    defaultModelHint: "claude-sonnet-4-6",
     keyHint: "sk-ant-…",
   },
   openai: {
     name: "OpenAI",
-    defaultModelHint: "gpt-5",
     keyHint: "sk-…",
     baseUrlHint: "https://api.openai.com/v1",
   },
   google: {
     name: "Google (Gemini)",
-    defaultModelHint: "gemini-2.5-pro",
     keyHint: "AIza…",
   },
+  openrouter: {
+    name: "OpenRouter",
+    keyHint: "sk-or-…",
+    baseUrlHint: "https://openrouter.ai/api/v1",
+    baseUrlPrefill: "https://openrouter.ai/api/v1",
+    hint: "Single key fronts many model families. Agents pick e.g. anthropic/claude-sonnet-4-5 or openai/gpt-5.",
+  },
 };
-const providers: Provider[] = ["anthropic", "openai", "google"];
+const providers: Provider[] = ["anthropic", "openai", "google", "openrouter"];
 
 const { data: credentials, refresh } = await useFetch<CredentialRow[]>(
   "/api/me/llm-credentials",
@@ -53,6 +63,7 @@ const credsByProvider = computed(() => {
     anthropic: [],
     openai: [],
     google: [],
+    openrouter: [],
   };
   for (const c of credentials.value ?? []) {
     grouped[c.provider]?.push(c);
@@ -65,7 +76,6 @@ const form = reactive({
   displayName: "Personal",
   apiKey: "",
   baseUrl: "",
-  defaultModel: "",
 });
 const showKey = ref(false);
 const submitting = ref(false);
@@ -75,8 +85,7 @@ function openForm(provider: Provider) {
   formOpenFor.value = provider;
   form.displayName = "Personal";
   form.apiKey = "";
-  form.baseUrl = "";
-  form.defaultModel = "";
+  form.baseUrl = providerMeta[provider].baseUrlPrefill ?? "";
   showKey.value = false;
   formError.value = null;
 }
@@ -98,7 +107,6 @@ async function submit() {
         displayName: form.displayName.trim(),
         apiKey: form.apiKey,
         baseUrl: form.baseUrl.trim() || undefined,
-        defaultModel: form.defaultModel.trim() || undefined,
       },
     });
     closeForm();
@@ -159,8 +167,11 @@ async function remove(c: CredentialRow) {
       >
         <div>
           <h2 class="font-medium">{{ providerMeta[provider].name }}</h2>
-          <p class="mt-0.5 text-xs text-muted-foreground">
-            Default model hint: {{ providerMeta[provider].defaultModelHint }}
+          <p
+            v-if="providerMeta[provider].hint"
+            class="mt-0.5 text-xs text-muted-foreground"
+          >
+            {{ providerMeta[provider].hint }}
           </p>
         </div>
         <Button
@@ -207,26 +218,15 @@ async function remove(c: CredentialRow) {
             Stored AES-256-GCM encrypted; never returned by the API after save.
           </p>
         </label>
-        <div class="grid gap-3 sm:grid-cols-2">
-          <label class="block">
-            <span class="text-xs font-medium">Default model (optional)</span>
-            <Input
-              v-model="form.defaultModel"
-              :placeholder="providerMeta[provider].defaultModelHint"
-              :disabled="submitting"
-              class="mt-1"
-            />
-          </label>
-          <label v-if="providerMeta[provider].baseUrlHint" class="block">
-            <span class="text-xs font-medium">Base URL (optional)</span>
-            <Input
-              v-model="form.baseUrl"
-              :placeholder="providerMeta[provider].baseUrlHint"
-              :disabled="submitting"
-              class="mt-1"
-            />
-          </label>
-        </div>
+        <label v-if="providerMeta[provider].baseUrlHint" class="block">
+          <span class="text-xs font-medium">Base URL</span>
+          <Input
+            v-model="form.baseUrl"
+            :placeholder="providerMeta[provider].baseUrlHint"
+            :disabled="submitting"
+            class="mt-1"
+          />
+        </label>
         <p v-if="formError" class="text-sm text-destructive">{{ formError }}</p>
         <div class="flex gap-2">
           <Button type="submit" size="sm" :disabled="submitting">
@@ -267,9 +267,9 @@ async function remove(c: CredentialRow) {
               </span>
             </div>
             <div class="mt-0.5 truncate text-xs text-muted-foreground">
-              {{ c.defaultModel ?? "—" }} ·
-              {{ c.hasKey ? "key set" : "no key" }} ·
-              added {{ new Date(c.createdAt).toLocaleDateString() }}
+              {{ c.hasKey ? "key set" : "no key" }}
+              <template v-if="c.baseUrl"> · {{ c.baseUrl }}</template>
+              · added {{ new Date(c.createdAt).toLocaleDateString() }}
             </div>
           </div>
           <Button

@@ -21,7 +21,6 @@ export default defineEventHandler(async (event) => {
     displayName?: string;
     apiKey?: string;
     baseUrl?: string | null;
-    defaultModel?: string | null;
     enabled?: boolean;
   }>(event);
 
@@ -36,9 +35,6 @@ export default defineEventHandler(async (event) => {
   }
   if (body.baseUrl !== undefined) {
     patch.baseUrl = body.baseUrl ? body.baseUrl.trim() : null;
-  }
-  if (body.defaultModel !== undefined) {
-    patch.defaultModel = body.defaultModel ? body.defaultModel.trim() : null;
   }
   if (body.enabled !== undefined) patch.enabled = body.enabled;
 

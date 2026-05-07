@@ -118,7 +118,10 @@ export const llmCredentials = pgTable(
     ownerId: uuid("owner_id").notNull(),
 
     provider: text("provider", {
-      enum: ["anthropic", "openai", "google"],
+      // openrouter behaves as an OpenAI-compatible gateway in front of
+      // many model families — single key, flexible model strings like
+      // `anthropic/claude-sonnet-4-5`. base_url is the differentiator.
+      enum: ["anthropic", "openai", "google", "openrouter"],
     }).notNull(),
     mode: text("mode", { enum: ["api_key", "oauth_claude"] }).notNull(),
     displayName: text("display_name").notNull(),
@@ -136,8 +139,10 @@ export const llmCredentials = pgTable(
     }),
     oauthAuthorizedAt: timestamp("oauth_authorized_at", { withTimezone: true }),
 
+    // base_url: per-provider override or the gateway URL (openrouter
+    // points at https://openrouter.ai/api/v1). Stored on the credential
+    // because it's infrastructure metadata, not per-request choice.
     baseUrl: text("base_url"),
-    defaultModel: text("default_model"),
     enabled: boolean("enabled").notNull().default(true),
 
     createdAt: timestamp("created_at", { withTimezone: true })

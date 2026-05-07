@@ -12,7 +12,7 @@ import { decryptString, encryptString } from "./secrets-store";
  * org-fallback lands in Phase 5.
  */
 
-export type Provider = "anthropic" | "openai" | "google";
+export type Provider = "anthropic" | "openai" | "google" | "openrouter";
 export type Mode = "api_key" | "oauth_claude";
 
 export type CredentialSummary = {
@@ -24,7 +24,6 @@ export type CredentialSummary = {
   displayName: string;
   hasKey: boolean;
   baseUrl: string | null;
-  defaultModel: string | null;
   enabled: boolean;
   oauthStatus: "pending" | "authorized" | "expired" | null;
   createdAt: Date;
@@ -41,7 +40,6 @@ function summarize(row: LlmCredential): CredentialSummary {
     displayName: row.displayName,
     hasKey: row.mode === "api_key" && !!row.apiKeyData,
     baseUrl: row.baseUrl,
-    defaultModel: row.defaultModel,
     enabled: row.enabled,
     oauthStatus: row.oauthStatus,
     createdAt: row.createdAt,
@@ -74,7 +72,6 @@ export async function createApiKeyCredential(input: {
   displayName: string;
   apiKey: string;
   baseUrl?: string;
-  defaultModel?: string;
 }): Promise<CredentialSummary> {
   const db = getDb();
   if (!db) throw new Error("DB not configured");
@@ -92,7 +89,6 @@ export async function createApiKeyCredential(input: {
       apiKeyTag: enc.tag,
       apiKeyData: enc.data,
       baseUrl: input.baseUrl ?? null,
-      defaultModel: input.defaultModel ?? null,
       enabled: true,
     })
     .returning();
@@ -105,7 +101,6 @@ export async function updateApiKeyCredential(
     apiKey?: string;
     displayName?: string;
     baseUrl?: string | null;
-    defaultModel?: string | null;
     enabled?: boolean;
   },
 ): Promise<CredentialSummary | null> {
@@ -117,7 +112,6 @@ export async function updateApiKeyCredential(
   };
   if (patch.displayName !== undefined) update.displayName = patch.displayName;
   if (patch.baseUrl !== undefined) update.baseUrl = patch.baseUrl;
-  if (patch.defaultModel !== undefined) update.defaultModel = patch.defaultModel;
   if (patch.enabled !== undefined) update.enabled = patch.enabled;
   if (patch.apiKey !== undefined) {
     const enc = await encryptString(patch.apiKey);
