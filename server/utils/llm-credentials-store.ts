@@ -181,3 +181,55 @@ export async function getCredentialOwnedBy(
     .limit(1);
   return row ?? null;
 }
+
+export type ResolvedCredential = {
+  apiKey: string;
+  baseUrl: string | null;
+};
+
+/**
+ * Resolves a usable credential for a given user + provider, returning
+ * the decrypted key + optional baseUrl. Used by the runner factory at
+ * agent-spawn time to inject env vars into worker containers.
+ *
+ * v1 (Phase 4) walks user-personal credentials only. Phase 5 will add
+ * org-fallback once project ownership wires through to a resolvable
+ * org id. Multiple personal credentials of the same provider: picks
+ * the most-recently-updated enabled api_key entry — minimal
+ * "default" behaviour, can be sharpened to a user-pickable default
+ * later if needed.
+ */
+export async function resolveCredentialForUser(
+  userId: string,
+  provider: Provider,
+): Promise<ResolvedCredential | null> {
+  const db = getDb();
+  if (!db) return null;
+
+  const rows = await db
+    .select()
+    .from(llmCredentials)
+    .where(
+      and(
+        eq(llmCredentials.ownerKind, "user"),
+        eq(llmCredentials.ownerId, userId),
+        eq(llmCredentials.provider, provider),
+        eq(llmCredentials.mode, "api_key"),
+        eq(llmCredentials.enabled, true),
+      ),
+    );
+
+  if (rows.length === 0) return null;
+  // Sort in JS to avoid pulling another column into the query plan;
+  // the result set is per-user so it's tiny in practice.
+  rows.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+
+  const row = rows[0];
+  if (!row.apiKeyIv || !row.apiKeyTag || !row.apiKeyData) return null;
+  const apiKey = await decryptString({
+    iv: row.apiKeyIv,
+    tag: row.apiKeyTag,
+    data: row.apiKeyData,
+  });
+  return { apiKey, baseUrl: row.baseUrl };
+}

@@ -36,6 +36,7 @@ import {
   clearCompanyStarting,
 } from "@su/company-manager";
 import { getProjectSecrets } from "@su/secrets-store";
+import { resolveCredentialForUser } from "@su/llm-credentials-store";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { randomBytes } from "node:crypto";
@@ -183,6 +184,17 @@ export default defineEventHandler(async (event) => {
       const opsUrl = config.companyOpsUrlBase;
       const projectSecrets = await getProjectSecrets(slug);
 
+      // Resolve the requesting user's personal LLM credential ONCE up
+      // front so the per-agent secretsResolver below stays sync-friendly
+      // (the resolver is hot-called by the runner factory and must not
+      // do per-agent DB queries). userId comes from the auth middleware
+      // — null in single-user/legacy mode, in which case we fall back
+      // to the existing runtimeConfig + project-secret chain.
+      const userId = event.context.userId;
+      const userAnthropic = userId
+        ? await resolveCredentialForUser(userId, "anthropic")
+        : null;
+
       const runnerFactory = dockerRunnerFactory({
         projectRoot: pHostCwd,
         imageForRole: (role) => {
@@ -198,8 +210,17 @@ export default defineEventHandler(async (event) => {
             COMPANY_OPS_URL: `${opsUrl}/${slug}`,
           };
 
+          // Resolution priority for the Anthropic credential:
+          //   1. user-personal (Phase 4) — most specific, opt-in via
+          //      /settings/me/llm. Bypasses the shared claude-proxy
+          //      because the user has explicitly added their own key.
+          //   2. shared claude-proxy (legacy single-tenant OAuth path)
+          //   3. deployment-wide runtimeConfig + project secrets
           const proxyUrl = config.companyClaudeProxyUrl || undefined;
-          if (proxyUrl) {
+          if (userAnthropic) {
+            env.ANTHROPIC_API_KEY = userAnthropic.apiKey;
+            if (userAnthropic.baseUrl) env.ANTHROPIC_BASE_URL = userAnthropic.baseUrl;
+          } else if (proxyUrl) {
             // Route through the local claude-proxy container which forwards requests
             // to api.anthropic.com using the Claude CLI OAuth credentials.
             env.ANTHROPIC_BASE_URL = proxyUrl;
