@@ -585,5 +585,139 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 404 });
       });
     });
+
+    describe("/api/orgs/:slug/llm-credentials/oauth/anthropic", () => {
+      const adminHeaders = authAs("oauth-org-admin@example.com", "Org Admin");
+      const memberHeaders = authAs("oauth-org-member@example.com", "Org Member");
+      const strangerHeaders = authAs("oauth-org-stranger@example.com", "Stranger");
+
+      // Each test boots a fresh org with admin + member to exercise
+      // the permission matrix without cross-test bleed.
+      async function bootstrapOrg() {
+        const org = await $fetch<{ slug: string; name: string }>("/api/orgs", {
+          method: "POST",
+          headers: adminHeaders,
+          body: { name: "Acme Org" },
+        });
+        await $fetch("/api/me", { headers: memberHeaders });
+        const inv = await $fetch<{ token: string }>(
+          `/api/orgs/${org.slug}/invites`,
+          {
+            method: "POST",
+            headers: adminHeaders,
+            body: {
+              email: "oauth-org-member@example.com",
+              role: "member",
+            },
+          },
+        );
+        await $fetch(`/api/invites/${inv.token}/accept`, {
+          method: "POST",
+          headers: memberHeaders,
+        });
+        return {
+          slug: org.slug,
+          base: `/api/orgs/${org.slug}/llm-credentials/oauth/anthropic`,
+        };
+      }
+
+      beforeEach(async () => {
+        await fs.rm(oauthCredentialsDir, { recursive: true, force: true });
+      });
+
+      it("admin starts a flow and member sees pending status (read-only)", async () => {
+        const { base } = await bootstrapOrg();
+        const r = await $fetch<{ id: string; url: string }>(`${base}/start`, {
+          method: "POST",
+          headers: adminHeaders,
+        });
+        expect(r.url).toMatch(/^https:\/\/claude\.com\/cai\/oauth\/authorize\?/);
+
+        const memberView = await $fetch<{ oauthStatus: string }>(
+          `${base}/${r.id}/status`,
+          { headers: memberHeaders },
+        );
+        expect(memberView.oauthStatus).toBe("pending");
+
+        await $fetch(`${base}/${r.id}/cancel`, {
+          method: "POST",
+          headers: adminHeaders,
+        });
+      });
+
+      it("admin completes the flow → org credential authorized", async () => {
+        const { base } = await bootstrapOrg();
+        const started = await $fetch<{ id: string }>(`${base}/start`, {
+          method: "POST",
+          headers: adminHeaders,
+        });
+        const after = await $fetch<{ oauthStatus: string; expiresAt: string }>(
+          `${base}/${started.id}/code`,
+          {
+            method: "POST",
+            headers: adminHeaders,
+            body: { code: "GOOD-CODE" },
+          },
+        );
+        expect(after.oauthStatus).toBe("authorized");
+      });
+
+      it("members are blocked from start / code / cancel (admin-only)", async () => {
+        const { base } = await bootstrapOrg();
+        await expect(
+          $fetch(`${base}/start`, {
+            method: "POST",
+            headers: memberHeaders,
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+
+        // Admin starts the flow so we have a real id to test code/cancel against.
+        const started = await $fetch<{ id: string }>(`${base}/start`, {
+          method: "POST",
+          headers: adminHeaders,
+        });
+
+        await expect(
+          $fetch(`${base}/${started.id}/code`, {
+            method: "POST",
+            headers: memberHeaders,
+            body: { code: "GOOD-CODE" },
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+
+        await expect(
+          $fetch(`${base}/${started.id}/cancel`, {
+            method: "POST",
+            headers: memberHeaders,
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+
+        // Cleanup with admin auth so the held-open subprocess doesn't
+        // leak into the next test.
+        await $fetch(`${base}/${started.id}/cancel`, {
+          method: "POST",
+          headers: adminHeaders,
+        });
+      });
+
+      it("strangers get 403 even on read-only status", async () => {
+        const { base } = await bootstrapOrg();
+        const started = await $fetch<{ id: string }>(`${base}/start`, {
+          method: "POST",
+          headers: adminHeaders,
+        });
+        await $fetch("/api/me", { headers: strangerHeaders });
+        await expect(
+          $fetch(`${base}/${started.id}/status`, {
+            headers: strangerHeaders,
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+
+        await $fetch(`${base}/${started.id}/cancel`, {
+          method: "POST",
+          headers: adminHeaders,
+        });
+      });
+    });
   });
 }

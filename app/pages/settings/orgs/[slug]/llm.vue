@@ -58,6 +58,13 @@ const credsByProvider = computed(() => {
   return grouped;
 });
 
+const anthropicOauth = computed(
+  () =>
+    (data.value?.credentials ?? []).find(
+      (c) => c.provider === "anthropic" && c.mode === "oauth_claude",
+    ) ?? null,
+);
+
 const readOnly = computed(() => data.value?.myRole !== "admin");
 </script>
 
@@ -84,6 +91,21 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
     </p>
 
     <template v-if="data">
+      <AnthropicOAuthCard
+        :existing="
+          anthropicOauth
+            ? {
+                id: anthropicOauth.id,
+                oauthStatus: anthropicOauth.oauthStatus,
+              }
+            : null
+        "
+        :endpoint="`${endpoint}/oauth/anthropic`"
+        :delete-endpoint="endpoint"
+        :read-only="readOnly"
+        @changed="refresh()"
+      />
+
       <LlmCredentialCard
         v-for="provider in providers"
         :key="provider"
