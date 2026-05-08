@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { Puzzle, Plus, Trash2, Star, RefreshCw, Check, ChevronsUpDown, Search, X, Filter, FolderGit2, FolderOpen } from "lucide-vue-next";
 import { watchDebounced } from "@vueuse/core";
-import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
+import { Button } from "~/components/shadcn/button";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
+import { Badge } from "~/components/shadcn/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/shadcn/popover";
 import {
   Command,
   CommandEmpty,
@@ -12,7 +12,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList
-} from "~/components/ui/command";
+} from "~/components/shadcn/command";
 
 interface CatalogExtension {
   id: string;

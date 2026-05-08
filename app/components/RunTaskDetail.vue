@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Loader2, CheckCircle2, AlertCircle, Wrench, RotateCcw, SkipForward } from "lucide-vue-next";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
+import { Badge } from "~/components/shadcn/badge";
+import { Button } from "~/components/shadcn/button";
 import type { RunTaskRow } from "~/components/RunTaskList.vue";
 
 export interface TaskLogEntry {

@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import CardFooter from "~/components/shadcn/card/CardFooter.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <div :class="cn('flex items-center p-6 pt-0', props.class)">
-    <slot />
-  </div>
+  <CardFooter v-bind="$attrs"><slot /></CardFooter>
 </template>

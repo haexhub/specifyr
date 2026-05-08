@@ -1,15 +1,8 @@
 <script setup lang="ts">
-import type { SelectRootEmits, SelectRootProps } from "reka-ui"
-import { SelectRoot, useForwardPropsEmits } from "reka-ui"
-
-const props = defineProps<SelectRootProps>()
-const emits = defineEmits<SelectRootEmits>()
-
-const forwarded = useForwardPropsEmits(props, emits)
+import Select from "~/components/shadcn/select/Select.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <SelectRoot v-bind="forwarded">
-    <slot />
-  </SelectRoot>
+  <Select v-bind="$attrs"><slot /></Select>
 </template>

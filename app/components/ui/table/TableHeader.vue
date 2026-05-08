@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import TableHeader from "~/components/shadcn/table/TableHeader.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <thead :class="cn('[&_tr]:border-b', props.class)">
-    <slot />
-  </thead>
+  <TableHeader v-bind="$attrs"><slot /></TableHeader>
 </template>

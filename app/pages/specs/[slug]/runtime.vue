@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Activity, Network, History, Circle, LayoutList, Send, Square } from "lucide-vue-next";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
+import { Badge } from "~/components/shadcn/badge";
 import ProjectShell from "~/components/ProjectShell.vue";
 import AgentDetailDrawer from "~/components/AgentDetailDrawer.vue";
 import AgentTaskBoard from "~/components/AgentTaskBoard.vue";

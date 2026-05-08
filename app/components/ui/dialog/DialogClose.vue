@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import type { DialogCloseProps } from "reka-ui"
-import { DialogClose } from "reka-ui"
-
-const props = defineProps<DialogCloseProps>()
+import DialogClose from "~/components/shadcn/dialog/DialogClose.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <DialogClose v-bind="props">
-    <slot />
-  </DialogClose>
+  <DialogClose v-bind="$attrs"><slot /></DialogClose>
 </template>

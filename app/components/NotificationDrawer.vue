@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X, CheckCircle2, AlertCircle, AlertTriangle, Info } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 import type { NotificationEvent } from "~/lib/types";
 
 const props = defineProps<{

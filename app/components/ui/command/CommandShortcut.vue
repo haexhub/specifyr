@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import CommandShortcut from "~/components/shadcn/command/CommandShortcut.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <span :class="cn('ml-auto text-xs tracking-widest text-muted-foreground', props.class)">
-    <slot />
-  </span>
+  <CommandShortcut v-bind="$attrs"><slot /></CommandShortcut>
 </template>

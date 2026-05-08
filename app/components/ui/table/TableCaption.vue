@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import TableCaption from "~/components/shadcn/table/TableCaption.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <caption :class="cn('mt-4 text-sm text-muted-foreground', props.class)">
-    <slot />
-  </caption>
+  <TableCaption v-bind="$attrs"><slot /></TableCaption>
 </template>

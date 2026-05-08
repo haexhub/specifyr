@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import CardDescription from "~/components/shadcn/card/CardDescription.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <p :class="cn('text-sm text-muted-foreground', props.class)">
-    <slot />
-  </p>
+  <CardDescription v-bind="$attrs"><slot /></CardDescription>
 </template>

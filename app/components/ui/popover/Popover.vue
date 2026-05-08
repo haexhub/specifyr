@@ -1,15 +1,8 @@
 <script setup lang="ts">
-import type { PopoverRootEmits, PopoverRootProps } from "reka-ui"
-import { PopoverRoot, useForwardPropsEmits } from "reka-ui"
-
-const props = defineProps<PopoverRootProps>()
-const emits = defineEmits<PopoverRootEmits>()
-
-const forwarded = useForwardPropsEmits(props, emits)
+import Popover from "~/components/shadcn/popover/Popover.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <PopoverRoot v-bind="forwarded">
-    <slot />
-  </PopoverRoot>
+  <Popover v-bind="$attrs"><slot /></Popover>
 </template>

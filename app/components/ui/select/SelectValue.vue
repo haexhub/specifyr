@@ -1,12 +1,8 @@
 <script setup lang="ts">
-import type { SelectValueProps } from "reka-ui"
-import { SelectValue } from "reka-ui"
-
-const props = defineProps<SelectValueProps>()
+import SelectValue from "~/components/shadcn/select/SelectValue.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <SelectValue v-bind="props">
-    <slot />
-  </SelectValue>
+  <SelectValue v-bind="$attrs"><slot /></SelectValue>
 </template>

@@ -1,21 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import TableCell from "~/components/shadcn/table/TableCell.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <td
-    :class="
-      cn(
-        'p-4 align-middle [&:has([role=checkbox])]:pr-0',
-        props.class,
-      )
-    "
-  >
-    <slot />
-  </td>
+  <TableCell v-bind="$attrs"><slot /></TableCell>
 </template>

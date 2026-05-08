@@ -1,16 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import Table from "~/components/shadcn/table/Table.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <div class="relative w-full overflow-auto">
-    <table :class="cn('w-full caption-bottom text-sm', props.class)">
-      <slot />
-    </table>
-  </div>
+  <Table v-bind="$attrs"><slot /></Table>
 </template>

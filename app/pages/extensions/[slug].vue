@@ -12,9 +12,9 @@ import {
   FolderGit2,
   Check
 } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
-import { Popover, PopoverContent, PopoverTrigger } from "~/components/ui/popover";
+import { Button } from "~/components/shadcn/button";
+import { Badge } from "~/components/shadcn/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "~/components/shadcn/popover";
 import {
   Command,
   CommandEmpty,
@@ -22,7 +22,7 @@ import {
   CommandInput,
   CommandItem,
   CommandList
-} from "~/components/ui/command";
+} from "~/components/shadcn/command";
 import type { ProjectListItem } from "~/lib/types";
 
 interface CatalogExtensionDetail {

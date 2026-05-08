@@ -27,8 +27,8 @@ export interface ProviderMeta {
 
 <script setup lang="ts">
 import { Eye, EyeOff, Plus, Trash2 } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
+import { Button } from "~/components/shadcn/button";
+import { Input } from "~/components/shadcn/input";
 
 const props = defineProps<{
   provider: LlmProvider;

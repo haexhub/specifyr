@@ -1,14 +1,8 @@
 <script setup lang="ts">
-import type { HTMLAttributes } from "vue"
-import { cn } from '~/lib/utils'
-
-const props = defineProps<{
-  class?: HTMLAttributes["class"]
-}>()
+import TableBody from "~/components/shadcn/table/TableBody.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <tbody :class="cn('[&_tr:last-child]:border-0', props.class)">
-    <slot />
-  </tbody>
+  <TableBody v-bind="$attrs"><slot /></TableBody>
 </template>

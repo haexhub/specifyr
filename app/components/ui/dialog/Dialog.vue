@@ -1,15 +1,8 @@
 <script setup lang="ts">
-import type { DialogRootEmits, DialogRootProps } from "reka-ui"
-import { DialogRoot, useForwardPropsEmits } from "reka-ui"
-
-const props = defineProps<DialogRootProps>()
-const emits = defineEmits<DialogRootEmits>()
-
-const forwarded = useForwardPropsEmits(props, emits)
+import Dialog from "~/components/shadcn/dialog/Dialog.vue";
+defineOptions({ inheritAttrs: false });
 </script>
 
 <template>
-  <DialogRoot v-bind="forwarded">
-    <slot />
-  </DialogRoot>
+  <Dialog v-bind="$attrs"><slot /></Dialog>
 </template>
