@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.0](https://github.com/haexhub/specifyr/compare/v0.5.0...v0.6.0) (2026-05-08)
+
+
+### Features
+
+* platform admin + mandatory-org + OAuth UX + cleanups ([#15](https://github.com/haexhub/specifyr/issues/15)) ([5324d6d](https://github.com/haexhub/specifyr/commit/5324d6d206a5ff7c398726596e189bf10f416059))
+* **server:** zod input validation + clear all TS errors ([#18](https://github.com/haexhub/specifyr/issues/18)) ([b4ea712](https://github.com/haexhub/specifyr/commit/b4ea71242fd7db4ec71438f76049ab5753df5870))
+
 ## [0.5.0](https://github.com/haexhub/specifyr/compare/v0.4.0...v0.5.0) (2026-05-07)
 
 
