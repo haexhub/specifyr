@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/haexhub/specifyr/compare/v0.6.0...v0.7.0) (2026-05-08)
+
+
+### Features
+
+* **extensions:** bundled speckit-company + org-scoped extensions w/ delegated permission ([#19](https://github.com/haexhub/specifyr/issues/19)) ([d85e887](https://github.com/haexhub/specifyr/commit/d85e88734314bdf6f8a19617308db3f3e2445e4f))
+
 ## [0.6.0](https://github.com/haexhub/specifyr/compare/v0.5.0...v0.6.0) (2026-05-08)
 
 
