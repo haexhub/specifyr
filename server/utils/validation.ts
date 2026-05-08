@@ -93,6 +93,17 @@ export const projectExtensionParams = z.object({
   extSlug: z.string().min(1).max(128),
 });
 
+export const orgExtensionParams = z.object({
+  slug: slugString,
+  extSlug: z.string().min(1).max(128).regex(/^[a-z0-9-]+$/),
+});
+
+export const orgPermissionParams = z.object({
+  slug: slugString,
+  userId: z.uuid(),
+  permission: z.enum(["manage_extensions"]),
+});
+
 export const projectSecretParams = z.object({
   slug: slugString,
   key: z.string().min(1).max(256),

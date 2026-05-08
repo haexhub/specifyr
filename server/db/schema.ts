@@ -242,3 +242,86 @@ export const platformSettings = pgTable("platform_settings", {
 
 export type PlatformSetting = typeof platformSettings.$inferSelect;
 export type NewPlatformSetting = typeof platformSettings.$inferInsert;
+
+// Per-org spec-kit extensions. Cloned from `source_url` into
+// <dataDir>/extensions/orgs/<org_id>/<slug>/ — the FS path is reconstructable
+// from the DB row, so we don't store it. `slug` comes from the cloned
+// extension.yml's `extension.id`, NOT from user input — this prevents an
+// attacker from registering a slug that shadows a bundled extension.
+//
+// Optional encrypted git credentials (HTTPS basic auth) for private repos:
+// the same AES-256-GCM mechanism as secrets-store.ts. NULL credentials
+// mean a public repo; partial NULLs are rejected at the store layer.
+//
+// Visibility: rows are scoped by `org_id` and never bleed across orgs;
+// the resolver (server/utils/extension-install.ts) merges them on top of
+// the deployment-global localExtensions and the bundled set when an
+// owner-org context is known (project-create, project-detail).
+export const orgExtensions = pgTable(
+  "org_extensions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    sourceRef: text("source_ref"), // tag/branch/commit; null = default branch
+    credentialUsername: text("credential_username"),
+    credentialIv: text("credential_iv"),
+    credentialTag: text("credential_tag"),
+    credentialData: text("credential_data"),
+    registeredBy: uuid("registered_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    registeredAt: timestamp("registered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniqueSlugPerOrg: unique("org_extensions_org_slug_uq").on(t.orgId, t.slug),
+    orgIdx: index("org_extensions_org_idx").on(t.orgId),
+  }),
+);
+
+export type OrgExtension = typeof orgExtensions.$inferSelect;
+export type NewOrgExtension = typeof orgExtensions.$inferInsert;
+
+// Fine-grained, additive permissions on top of the admin/member role.
+// A row grants one named permission to one user in one org; admins get
+// every permission implicitly (the check in server/utils/org-permissions
+// short-circuits on role='admin' before reading this table).
+//
+// `permission` is enumerated to keep typos out of the DB; new
+// permissions extend the enum + a code path uses them. Today the only
+// entry is `manage_extensions`, granted by org admins to let trusted
+// members register/remove org-scoped extensions without giving them
+// full admin powers.
+export const orgMemberPermissions = pgTable(
+  "org_member_permissions",
+  {
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    permission: text("permission", { enum: ["manage_extensions"] }).notNull(),
+    grantedBy: uuid("granted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.orgId, t.userId, t.permission] }),
+    userIdx: index("org_member_permissions_user_idx").on(t.userId),
+  }),
+);
+
+export type OrgMemberPermission = typeof orgMemberPermissions.$inferSelect;
+export type NewOrgMemberPermission = typeof orgMemberPermissions.$inferInsert;

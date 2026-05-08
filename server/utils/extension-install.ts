@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { projectCwd, loadEventStore } from "./specifyr-stores";
 import { dataDir, extensionsDir } from "./data-dirs";
 import { getAppConfigModule } from "./app-config";
+import { orgExtensionPath } from "./org-extensions-store";
 
 export interface ExtensionInstallRecord {
   slug: string;
@@ -55,7 +56,8 @@ async function writeManifest(projectSlug: string, manifest: ExtensionsManifest):
 export async function installExtensionsInProject(
   projectSlug: string,
   extensionSlugs: string[],
-  source: "auto" | "manual" = "manual"
+  source: "auto" | "manual" = "manual",
+  ownerOrgId: string | null = null
 ): Promise<{ manifest: ExtensionsManifest; installed: ExtensionInstallRecord[]; skipped: string[] }> {
   const manifest = await readManifest(projectSlug);
   const alreadyInstalled = new Set(
@@ -97,8 +99,22 @@ export async function installExtensionsInProject(
   const { findLocalExtensionPath } = await getAppConfigModule();
 
   for (const slug of toInstall) {
-    // Resolution order: app-config localExtensions → global extensions dir → community catalog.
-    let localPath = await findLocalExtensionPath(slug);
+    // Resolution order:
+    //   1. org-scoped (private to ownerOrgId)
+    //   2. app-config localExtensions (deployment-global + bundled)
+    //   3. global extensions dir
+    //   4. community catalog
+    let localPath: string | null = null;
+    if (ownerOrgId) {
+      const orgPath = orgExtensionPath(ownerOrgId, slug);
+      try {
+        await fs.access(orgPath);
+        localPath = orgPath;
+      } catch { /* not org-scoped */ }
+    }
+    if (!localPath) {
+      localPath = await findLocalExtensionPath(slug);
+    }
     if (!localPath) {
       const globalPath = path.join(extensionsDir(), slug);
       try {

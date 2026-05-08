@@ -59,6 +59,8 @@ const TABLES = [
   "runner_sessions",
   "llm_credentials",
   "org_invites",
+  "org_extensions",
+  "org_member_permissions",
   "org_memberships",
   "orgs",
   "projects",

@@ -1,7 +1,10 @@
 import { getAppConfigModule } from "@su/app-config";
 import { orgSlugParam, parseParams } from "@su/validation";
+import { requirePlatformAdmin } from "@su/platform-admin-auth";
 
+// Mutates the deployment-global app-config; platform-admin-only.
 export default defineEventHandler(async (event) => {
+  await requirePlatformAdmin(event);
   const { slug } = parseParams(event, orgSlugParam);
   const { removeLocalExtension } = await getAppConfigModule();
   try {

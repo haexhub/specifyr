@@ -3,12 +3,17 @@ import { z } from "zod";
 import { getAppConfigModule } from "@su/app-config";
 import { readLocalManifest } from "@su/local-extension";
 import { parseBody } from "@su/validation";
+import { requirePlatformAdmin } from "@su/platform-admin-auth";
 
 const bodySchema = z.object({
   path: z.string().trim().min(1).max(4096),
 });
 
+// Deployment-global registration: writes the entry to the shared
+// app-config and is therefore platform-admin-only. Per-org extensions
+// go through /api/orgs/:slug/extensions instead.
 export default defineEventHandler(async (event) => {
+  await requirePlatformAdmin(event);
   const { path: rawPath } = await parseBody(event, bodySchema);
   // Resolve relative paths against the app's CWD (where .specifyr/ lives).
   const resolved = path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
