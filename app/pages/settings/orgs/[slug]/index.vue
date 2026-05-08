@@ -32,10 +32,10 @@ const { data, refresh } = await useFetch<MembersResponse>(
   { default: () => null },
 );
 
-const amOwner = computed(
+const isOwner = computed(
   () => !!data.value && !!me.value && data.value.org.ownerUserId === me.value.id,
 );
-const amAdmin = computed(() => data.value?.myRole === "admin");
+const isAdmin = computed(() => data.value?.myRole === "admin");
 
 const memberError = ref<string | null>(null);
 
@@ -202,7 +202,7 @@ async function copyLink() {
               >
                 {{ m.role }}
               </span>
-              <template v-if="amAdmin && m.userId !== data.org.ownerUserId">
+              <template v-if="isAdmin && m.userId !== data.org.ownerUserId">
                 <Button
                   v-if="m.role === 'member'"
                   size="sm"
@@ -288,7 +288,7 @@ async function copyLink() {
       </section>
 
       <section
-        v-if="amOwner && data.members.filter(m => m.userId !== data.org.ownerUserId).length > 0"
+        v-if="isOwner && data.members.filter(m => m.userId !== data.org.ownerUserId).length > 0"
         class="mt-12 rounded-lg border border-destructive/30 bg-destructive/5 p-4"
       >
         <h2 class="text-sm font-semibold uppercase tracking-wide text-destructive">

@@ -3,16 +3,10 @@ definePageMeta({ layout: "workspace" });
 
 import { Building2 } from "lucide-vue-next";
 
-const { me, refresh } = useMe();
-
-// Already a member? The middleware will not redirect into here for
-// these users, but a manual visit shouldn't be a dead-end — bounce
-// them back to the home page.
-watchEffect(() => {
-  if (me.value && me.value.memberships.length > 0) {
-    navigateTo("/");
-  }
-});
+// onboarding-gate.global middleware handles both directions:
+// users without memberships are redirected here, users WITH
+// memberships are bounced back to /. No in-page guard needed.
+const { refresh } = useMe();
 
 const name = ref("");
 const submitting = ref(false);
