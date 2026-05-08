@@ -1,7 +1,7 @@
 /**
- * project-store: ownership, listing, access checks. Covers the
- * Phase-5 extension where org-owned projects appear in
- * listProjectSlugsForUser and userOwnsProject for any member.
+ * project-store: ownership, listing, access checks. Mandatory-org
+ * model — every project belongs to an org; access is gated by
+ * membership in `owner_org_id`.
  */
 
 import { test } from "node:test";
@@ -9,24 +9,27 @@ import assert from "node:assert/strict";
 import { skipIfNoDb, withDb, seedUser } from "../helpers/db.ts";
 
 test(
-  "recordProjectOwnership + getProjectFromDb roundtrip (user owner)",
+  "recordProjectOwnership + getProjectFromDb roundtrip (org owner)",
   { skip: skipIfNoDb },
   async () => {
     await withDb(async () => {
       const { recordProjectOwnership, getProjectFromDb } = await import(
         "../../server/utils/project-store.ts"
       );
+      const { createOrgWithAdmin } = await import(
+        "../../server/utils/org-store.ts"
+      );
       const u = await seedUser();
-      await recordProjectOwnership("my-app", { kind: "user", id: u.id });
+      const org = await createOrgWithAdmin("Acme", u.id);
+      await recordProjectOwnership("my-app", { ownerOrgId: org.id });
       const got = await getProjectFromDb("my-app");
-      assert.equal(got?.ownerKind, "user");
-      assert.equal(got?.ownerId, u.id);
+      assert.equal(got?.ownerOrgId, org.id);
     });
   },
 );
 
 test(
-  "listProjectSlugsForUser: includes user-owned and org-owned-via-membership",
+  "listProjectSlugsForUser: lists projects in user's orgs and nothing else",
   { skip: skipIfNoDb },
   async () => {
     await withDb(async () => {
@@ -39,58 +42,48 @@ test(
       const owner = await seedUser("owner");
       const member = await seedUser("member");
       const stranger = await seedUser("stranger");
-      const org = await createOrgWithAdmin("Acme", owner.id);
+      const acme = await createOrgWithAdmin("Acme", owner.id);
+      const beta = await createOrgWithAdmin("Beta", stranger.id);
       const invite = await createInvite({
-        orgId: org.id,
+        orgId: acme.id,
         invitedEmail: member.email,
         invitedRole: "member",
         createdBy: owner.id,
       });
       await acceptInvite(invite.token, member.id);
 
-      await recordProjectOwnership("personal-of-owner", {
-        kind: "user",
-        id: owner.id,
-      });
-      await recordProjectOwnership("org-project", {
-        kind: "org",
-        id: org.id,
-      });
-      await recordProjectOwnership("personal-of-stranger", {
-        kind: "user",
-        id: stranger.id,
-      });
+      await recordProjectOwnership("acme-app", { ownerOrgId: acme.id });
+      await recordProjectOwnership("acme-side", { ownerOrgId: acme.id });
+      await recordProjectOwnership("beta-app", { ownerOrgId: beta.id });
 
       const ownerSlugs = (await listProjectSlugsForUser(owner.id)).sort();
       const memberSlugs = (await listProjectSlugsForUser(member.id)).sort();
       const strangerSlugs = (await listProjectSlugsForUser(stranger.id)).sort();
 
-      assert.deepEqual(ownerSlugs, ["org-project", "personal-of-owner"]);
-      assert.deepEqual(memberSlugs, ["org-project"]);
-      assert.deepEqual(strangerSlugs, ["personal-of-stranger"]);
+      assert.deepEqual(ownerSlugs, ["acme-app", "acme-side"]);
+      assert.deepEqual(memberSlugs, ["acme-app", "acme-side"]);
+      assert.deepEqual(strangerSlugs, ["beta-app"]);
     });
   },
 );
 
 test(
-  "userOwnsProject: user-owner direct match",
+  "listProjectSlugsForUser: returns empty for users with no orgs",
   { skip: skipIfNoDb },
   async () => {
     await withDb(async () => {
-      const { recordProjectOwnership, userOwnsProject } = await import(
+      const { listProjectSlugsForUser } = await import(
         "../../server/utils/project-store.ts"
       );
-      const a = await seedUser("a");
-      const b = await seedUser("b");
-      await recordProjectOwnership("a-project", { kind: "user", id: a.id });
-      assert.equal(await userOwnsProject("a-project", a.id), true);
-      assert.equal(await userOwnsProject("a-project", b.id), false);
+      const u = await seedUser("orphan");
+      const slugs = await listProjectSlugsForUser(u.id);
+      assert.deepEqual(slugs, []);
     });
   },
 );
 
 test(
-  "userOwnsProject: org-owner returns true for any member, false for outsiders",
+  "userOwnsProject: org members access, outsiders denied",
   { skip: skipIfNoDb },
   async () => {
     await withDb(async () => {
@@ -111,10 +104,7 @@ test(
         createdBy: admin.id,
       });
       await acceptInvite(invite.token, member.id);
-      await recordProjectOwnership("org-project", {
-        kind: "org",
-        id: org.id,
-      });
+      await recordProjectOwnership("org-project", { ownerOrgId: org.id });
 
       assert.equal(await userOwnsProject("org-project", admin.id), true);
       assert.equal(await userOwnsProject("org-project", member.id), true);

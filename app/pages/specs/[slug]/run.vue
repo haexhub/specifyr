@@ -2,8 +2,8 @@
 definePageMeta({ layout: "workspace" });
 
 import { Rocket, AlertTriangle, Play, Square, Loader2, RefreshCw, CheckCircle2, Circle } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/shadcn/button";
+import { Badge } from "~/components/shadcn/badge";
 import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
 import RunTaskList, { type RunTaskRow } from "~/components/RunTaskList.vue";
 import RunTaskDetail, { type TaskLogEntry } from "~/components/RunTaskDetail.vue";

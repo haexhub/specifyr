@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Building2, ChevronRight, Plus } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
+import { Button } from "~/components/shadcn/button";
+import { Input } from "~/components/shadcn/input";
 
 interface OrgRow {
   id: string;

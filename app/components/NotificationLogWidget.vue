@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Activity, CheckCircle2, AlertCircle, AlertTriangle, Info, ChevronRight } from "lucide-vue-next";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
+import { Button } from "~/components/shadcn/button";
 import type { NotificationEvent } from "~/lib/types";
 
 defineProps<{

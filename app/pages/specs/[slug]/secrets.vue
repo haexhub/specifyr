@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { KeyRound, Trash2, Plus, Eye, EyeOff } from "lucide-vue-next";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
-import { Badge } from "~/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "~/components/shadcn/card";
+import { Button } from "~/components/shadcn/button";
+import { Input } from "~/components/shadcn/input";
+import { Badge } from "~/components/shadcn/badge";
 import ProjectShell from "~/components/ProjectShell.vue";
 
 const route = useRoute();

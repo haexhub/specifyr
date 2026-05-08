@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X, ArrowDownToLine, ChevronUp, Circle } from "lucide-vue-next";
-import { Badge } from "~/components/ui/badge";
+import { Badge } from "~/components/shadcn/badge";
 
 interface AgentSummary {
   role: string;

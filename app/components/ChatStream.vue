@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Send, Loader2, MessageSquarePlus, Info, ArrowRight, FileText, RotateCcw, Square, AlertTriangle } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 import ChatMessage from "~/components/ChatMessage.vue";
 import type { ChatMessage as ChatMessageType, SessionMetadata } from "~/lib/types";
 

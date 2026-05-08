@@ -3,8 +3,8 @@ import { marked } from "marked";
 import DOMPurify from "isomorphic-dompurify";
 import mermaid from "mermaid";
 import { FileWarning, Loader2, RefreshCw, PanelRightClose, Wand2, X } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { Button } from "~/components/shadcn/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/shadcn/select";
 
 interface ArtifactFile {
   type: "file";

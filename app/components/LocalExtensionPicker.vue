@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { Folder, Home, Server, ChevronRight, ArrowUp, Star, Loader2 } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 import {
   Dialog,
   DialogContent,
@@ -8,8 +8,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle
-} from "~/components/ui/dialog";
-import { Badge } from "~/components/ui/badge";
+} from "~/components/shadcn/dialog";
+import { Badge } from "~/components/shadcn/badge";
 
 interface FilesystemEntry {
   name: string;

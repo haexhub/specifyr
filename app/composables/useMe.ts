@@ -1,8 +1,18 @@
+export interface MeMembership {
+  orgId: string;
+  orgSlug: string;
+  orgName: string;
+  role: "admin" | "member";
+  isOwner: boolean;
+}
+
 interface Me {
   id: string;
   email: string;
   displayName: string | null;
+  isPlatformAdmin: boolean;
   createdAt: string;
+  memberships: MeMembership[];
 }
 
 /**

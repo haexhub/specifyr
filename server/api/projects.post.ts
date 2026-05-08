@@ -1,9 +1,20 @@
 import { createProjectRecord } from "@su/project-creation";
 import { getAppConfigModule } from "@su/app-config";
 import { DEFAULT_WORKFLOW_ID } from "@su/workflows";
-import { recordProjectOwnership, type ProjectOwner } from "@su/project-store";
-import { getMembership, getOrgBySlug } from "@su/org-store";
+import { recordProjectOwnership } from "@su/project-store";
+import { getMembership, getOrgBySlug, listOrgsForUser } from "@su/org-store";
 
+/**
+ * Create a project. Mandatory-org model: every project belongs to an
+ * org. Resolution order for the owning org:
+ *   1. `ownerOrgSlug` from the body (caller must be a member)
+ *   2. the caller's only org if they have exactly one
+ *   3. 400 — caller must pick an org
+ *
+ * Authenticated callers without any org membership are sent to the
+ * onboarding flow (UI redirect) rather than allowed to create a
+ * project; the API surface treats it as a 400.
+ */
 export default defineEventHandler(async (event) => {
   const body = await readBody<{
     title?: string;
@@ -19,13 +30,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Project title is required." });
   }
 
-  // Resolve the requested owner. Empty/null/"me" → user-owned (current
-  // behaviour). A slug → org-owned, but only if the caller is a member
-  // of that org.
   const userId = event.context.userId;
+  if (!userId) {
+    throw createError({ statusCode: 401, statusMessage: "not authenticated" });
+  }
+
   const ownerOrgSlug = body?.ownerOrgSlug?.trim() || null;
-  let resolvedOwner: ProjectOwner | null = null;
-  if (ownerOrgSlug && userId) {
+  let ownerOrgId: string | null = null;
+  if (ownerOrgSlug) {
     const org = await getOrgBySlug(ownerOrgSlug);
     if (!org) {
       throw createError({ statusCode: 404, statusMessage: "Owner org not found." });
@@ -37,9 +49,24 @@ export default defineEventHandler(async (event) => {
         statusMessage: "You are not a member of the selected org.",
       });
     }
-    resolvedOwner = { kind: "org", id: org.id };
-  } else if (userId) {
-    resolvedOwner = { kind: "user", id: userId };
+    ownerOrgId = org.id;
+  } else {
+    const orgs = await listOrgsForUser(userId);
+    if (orgs.length === 1) {
+      ownerOrgId = orgs[0]!.id;
+    } else if (orgs.length === 0) {
+      throw createError({
+        statusCode: 400,
+        statusMessage:
+          "Create or join an organization before creating a project.",
+      });
+    } else {
+      throw createError({
+        statusCode: 400,
+        statusMessage:
+          "ownerOrgSlug is required when you belong to multiple organizations.",
+      });
+    }
   }
 
   // Any string id is accepted at create-time (the extension that provides this workflow may still
@@ -68,18 +95,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode, statusMessage: message });
   }
 
-  // If the request was authenticated AND the DB is configured, write
-  // an ownership row. Best-effort: if the DB write fails (e.g. unique
-  // collision because the slug was already claimed), log it but still
-  // return the FS-created record — the FS work is already committed
-  // and rolling it back is more dangerous than a temporary owner-less
-  // project. The org/auth phases will reconcile later.
-  if (resolvedOwner) {
-    try {
-      await recordProjectOwnership(record.slug, resolvedOwner);
-    } catch (err) {
-      console.warn("[projects.post] DB ownership write failed:", err);
-    }
+  // FS work already committed; the DB write is best-effort. A failed
+  // ownership row leaves a dangling FS project that the user can
+  // delete or that a future reconciliation step picks up.
+  try {
+    await recordProjectOwnership(record.slug, { ownerOrgId });
+  } catch (err) {
+    console.warn("[projects.post] DB ownership write failed:", err);
   }
 
   return record;

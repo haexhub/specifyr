@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ArrowLeft, Filter } from "lucide-vue-next";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
 import ProjectShell from "~/components/ProjectShell.vue";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 

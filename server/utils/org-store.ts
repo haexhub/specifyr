@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   orgInvites,
@@ -23,8 +23,10 @@ function slugify(name: string): string {
 }
 
 /**
- * Creates an org and assigns the creator as admin in a single
- * transaction so we can never end up with an org that has no admins.
+ * Creates an org with the given user as both `owner_user_id` and an
+ * `admin` membership row, atomically. The owner_user_id is immutable
+ * except via {@link transferOrgOwnership}; membership guards key off
+ * it (owner cannot be removed/demoted).
  */
 export async function createOrgWithAdmin(
   name: string,
@@ -39,8 +41,14 @@ export async function createOrgWithAdmin(
   return db.transaction(async (tx) => {
     const [org] = await tx
       .insert(orgs)
-      .values({ slug, name: name.trim(), createdBy: creatorUserId })
+      .values({
+        slug,
+        name: name.trim(),
+        ownerUserId: creatorUserId,
+        createdBy: creatorUserId,
+      })
       .returning();
+    if (!org) throw new Error("org insert returned nothing");
     await tx.insert(orgMemberships).values({
       orgId: org.id,
       userId: creatorUserId,
@@ -59,6 +67,7 @@ export async function listOrgsForUser(userId: string): Promise<OrgWithRole[]> {
       id: orgs.id,
       slug: orgs.slug,
       name: orgs.name,
+      ownerUserId: orgs.ownerUserId,
       createdBy: orgs.createdBy,
       createdAt: orgs.createdAt,
       role: orgMemberships.role,
@@ -220,4 +229,230 @@ export async function revokeInvite(token: string): Promise<void> {
     .update(orgInvites)
     .set({ revokedAt: new Date() })
     .where(eq(orgInvites.token, token));
+}
+
+/**
+ * Counts the admins in an org. Used by the demote/remove guards to
+ * prevent orphaning the org with zero admins.
+ */
+export async function countAdmins(orgId: string): Promise<number> {
+  const db = getDb();
+  if (!db) return 0;
+  const [row] = await db
+    .select({ n: count() })
+    .from(orgMemberships)
+    .where(
+      and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.role, "admin")),
+    );
+  return Number(row?.n ?? 0);
+}
+
+export type MemberMutationResult =
+  | { ok: true }
+  | {
+      ok: false;
+      reason:
+        | "not_member"
+        | "owner_immutable"
+        | "would_orphan_admins"
+        | "would_orphan_member";
+    };
+
+/**
+ * Promotes/demotes a member's role. Guards:
+ *   - The org owner cannot be demoted from admin (their role is
+ *     pinned by `orgs.owner_user_id`).
+ *   - Demoting the last admin orphans the org and is rejected.
+ */
+export async function updateMembershipRole(
+  orgId: string,
+  userId: string,
+  role: "admin" | "member",
+): Promise<MemberMutationResult> {
+  const db = getDb();
+  if (!db) return { ok: false, reason: "not_member" };
+
+  return db.transaction(async (tx) => {
+    // Lock the org row up-front: all admin/owner mutations on a given
+    // org serialize through this lock so the invariant checks below
+    // (last-admin, owner-immutable, must-be-member) cannot be raced by
+    // concurrent transfer/remove/demote calls.
+    const [org] = await tx
+      .select()
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+      .for("update")
+      .limit(1);
+    if (!org) return { ok: false as const, reason: "not_member" as const };
+    const [m] = await tx
+      .select()
+      .from(orgMemberships)
+      .where(
+        and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, userId)),
+      )
+      .limit(1);
+    if (!m) return { ok: false as const, reason: "not_member" as const };
+
+    if (org.ownerUserId === userId && role === "member") {
+      return { ok: false as const, reason: "owner_immutable" as const };
+    }
+    if (m.role === "admin" && role === "member") {
+      const [{ n }] = await tx
+        .select({ n: count() })
+        .from(orgMemberships)
+        .where(
+          and(
+            eq(orgMemberships.orgId, orgId),
+            eq(orgMemberships.role, "admin"),
+          ),
+        );
+      if (Number(n) <= 1) {
+        return { ok: false as const, reason: "would_orphan_admins" as const };
+      }
+    }
+
+    await tx
+      .update(orgMemberships)
+      .set({ role })
+      .where(
+        and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, userId)),
+      );
+    return { ok: true as const };
+  });
+}
+
+/**
+ * Removes a member. Guards:
+ *   - The org owner cannot be removed (transfer ownership first).
+ *   - Removing the last admin orphans the org and is rejected.
+ */
+export async function removeMembership(
+  orgId: string,
+  userId: string,
+): Promise<MemberMutationResult> {
+  const db = getDb();
+  if (!db) return { ok: false, reason: "not_member" };
+
+  return db.transaction(async (tx) => {
+    // Lock the org row up-front: all admin/owner mutations on a given
+    // org serialize through this lock so the invariant checks below
+    // (last-admin, owner-immutable, must-be-member) cannot be raced by
+    // concurrent transfer/remove/demote calls.
+    const [org] = await tx
+      .select()
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+      .for("update")
+      .limit(1);
+    if (!org) return { ok: false as const, reason: "not_member" as const };
+    const [m] = await tx
+      .select()
+      .from(orgMemberships)
+      .where(
+        and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, userId)),
+      )
+      .limit(1);
+    if (!m) return { ok: false as const, reason: "not_member" as const };
+
+    if (org.ownerUserId === userId) {
+      return { ok: false as const, reason: "owner_immutable" as const };
+    }
+    if (m.role === "admin") {
+      const [{ n }] = await tx
+        .select({ n: count() })
+        .from(orgMemberships)
+        .where(
+          and(
+            eq(orgMemberships.orgId, orgId),
+            eq(orgMemberships.role, "admin"),
+          ),
+        );
+      if (Number(n) <= 1) {
+        return { ok: false as const, reason: "would_orphan_admins" as const };
+      }
+    }
+
+    await tx
+      .delete(orgMemberships)
+      .where(
+        and(eq(orgMemberships.orgId, orgId), eq(orgMemberships.userId, userId)),
+      );
+    return { ok: true as const };
+  });
+}
+
+export type TransferOwnershipResult =
+  | { ok: true }
+  | { ok: false; reason: "not_member" | "same_owner" };
+
+/**
+ * Transfers ownership atomically. The new owner must already be a
+ * member; on success both the old and new owners hold an `admin`
+ * membership row (the old owner is no longer pinned and can be
+ * removed/demoted afterwards via the normal endpoints).
+ */
+export async function transferOrgOwnership(
+  orgId: string,
+  newOwnerUserId: string,
+): Promise<TransferOwnershipResult> {
+  const db = getDb();
+  if (!db) return { ok: false, reason: "not_member" };
+
+  return db.transaction(async (tx) => {
+    // Lock the org row up-front: all admin/owner mutations on a given
+    // org serialize through this lock so the invariant checks below
+    // (last-admin, owner-immutable, must-be-member) cannot be raced by
+    // concurrent transfer/remove/demote calls.
+    const [org] = await tx
+      .select()
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+      .for("update")
+      .limit(1);
+    if (!org) return { ok: false as const, reason: "not_member" as const };
+    if (org.ownerUserId === newOwnerUserId) {
+      return { ok: false as const, reason: "same_owner" as const };
+    }
+    const [m] = await tx
+      .select()
+      .from(orgMemberships)
+      .where(
+        and(
+          eq(orgMemberships.orgId, orgId),
+          eq(orgMemberships.userId, newOwnerUserId),
+        ),
+      )
+      .limit(1);
+    if (!m) return { ok: false as const, reason: "not_member" as const };
+
+    await tx
+      .update(orgs)
+      .set({ ownerUserId: newOwnerUserId })
+      .where(eq(orgs.id, orgId));
+
+    // Both the old and new owner should be admins post-transfer. The
+    // new owner gets promoted (no-op if already admin); the old owner
+    // is left as admin (they were already, since the previous schema
+    // pinned them).
+    await tx
+      .update(orgMemberships)
+      .set({ role: "admin" })
+      .where(
+        and(
+          eq(orgMemberships.orgId, orgId),
+          eq(orgMemberships.userId, newOwnerUserId),
+        ),
+      );
+    await tx
+      .update(orgMemberships)
+      .set({ role: "admin" })
+      .where(
+        and(
+          eq(orgMemberships.orgId, orgId),
+          eq(orgMemberships.userId, org.ownerUserId),
+        ),
+      );
+
+    return { ok: true as const };
+  });
 }

@@ -7,8 +7,8 @@ export interface AnthropicOauthCredential {
 
 <script setup lang="ts">
 import { ExternalLink, LogIn, LogOut, X } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
+import { Button } from "~/components/shadcn/button";
+import { Input } from "~/components/shadcn/input";
 
 const props = defineProps<{
   /**
@@ -43,12 +43,88 @@ interface FlowState {
   url: string;
 }
 
+interface DiskStatus {
+  id: string;
+  oauthStatus: "pending" | "authorized" | "expired" | null;
+  expiresAt: string | null;
+  fileExists: boolean;
+}
+
+type ConnectedState = "fresh" | "expired" | "missing";
+
 const flow = ref<FlowState | null>(null);
 const code = ref("");
 const starting = ref(false);
 const submitting = ref(false);
 const error = ref<string | null>(null);
 const expiresAt = ref<string | null>(null);
+
+// Lazy disk-state fetch. URL is reactive on `existing.id`; when there
+// is no existing credential, the URL evaluates to null and useFetch
+// stays idle (no request fired, no SSR payload reserved).
+const { data: diskStatus, refresh: refreshDiskStatus } = useFetch<DiskStatus>(
+  () =>
+    props.existing
+      ? `${props.endpoint}/${props.existing.id}/status`
+      : null,
+  {
+    default: () => null,
+    watch: [() => props.existing?.id],
+    onResponseError(ctx) {
+      // Don't blow up the page on a transient 4xx/5xx — the card
+      // falls back to the row's `oauthStatus` until the next refresh.
+      ctx.response._data = null;
+    },
+  },
+);
+
+// Poll disk-state every 2s while a credential is connected so the
+// card reflects out-of-band changes (CLI refreshes the token,
+// credentials file removed, etc.) without requiring a page reload.
+// The interval is gated on `existing` — when there's nothing to
+// inspect we stay idle.
+let pollHandle: ReturnType<typeof setInterval> | null = null;
+function startPolling() {
+  if (pollHandle || !props.existing) return;
+  pollHandle = setInterval(() => {
+    void refreshDiskStatus();
+  }, 2000);
+}
+function stopPolling() {
+  if (pollHandle) {
+    clearInterval(pollHandle);
+    pollHandle = null;
+  }
+}
+onMounted(startPolling);
+onUnmounted(stopPolling);
+watch(
+  () => props.existing?.id,
+  (id) => {
+    if (id) startPolling();
+    else stopPolling();
+  },
+);
+
+const connectedState = computed<ConnectedState | null>(() => {
+  if (!props.existing) return null;
+  // 'pending' = a flow is mid-air (modal open) or was abandoned. Treat
+  // as "no credentials yet" so the under-modal view shows the plain
+  // login button instead of a misleading "re-auth required".
+  if (props.existing.oauthStatus === "pending") return null;
+  const ds = diskStatus.value;
+  // No disk-state yet (first paint): trust the row's status — if it's
+  // 'authorized' show fresh, otherwise treat as missing. The fetch
+  // will refine this on next tick.
+  if (!ds) {
+    return props.existing.oauthStatus === "authorized" ? "fresh" : "missing";
+  }
+  if (!ds.fileExists) return "missing";
+  if (ds.expiresAt && new Date(ds.expiresAt).getTime() <= Date.now()) {
+    return "expired";
+  }
+  return "fresh";
+});
 
 async function start() {
   starting.value = true;
@@ -134,7 +210,7 @@ async function signOut() {
     </header>
 
     <div class="px-4 py-3">
-      <template v-if="existing && existing.oauthStatus === 'authorized'">
+      <template v-if="connectedState === 'fresh'">
         <p class="text-sm">
           <span class="font-medium text-primary">✓ Connected.</span>
           Agents resolved to your user will route through the multi-tenant
@@ -149,6 +225,36 @@ async function signOut() {
         >
           <LogOut class="size-4" /> Sign out
         </Button>
+      </template>
+      <template v-else-if="connectedState === 'expired'">
+        <p class="text-sm">
+          <span class="font-medium text-amber-600">⟳ Token expired.</span>
+          Will be refreshed automatically on the next agent run.
+        </p>
+        <Button
+          v-if="!readOnly"
+          class="mt-3"
+          size="sm"
+          variant="outline"
+          @click="signOut"
+        >
+          <LogOut class="size-4" /> Sign out
+        </Button>
+      </template>
+      <template v-else-if="connectedState === 'missing'">
+        <p class="text-sm">
+          <span class="font-medium text-destructive">⚠ Re-authentication required.</span>
+          The credentials file is no longer present on disk.
+        </p>
+        <div v-if="!readOnly" class="mt-3 flex gap-2">
+          <Button size="sm" :disabled="starting" @click="start">
+            <LogIn class="size-4" />
+            {{ starting ? "Starting…" : "Login again" }}
+          </Button>
+          <Button size="sm" variant="outline" @click="signOut">
+            <LogOut class="size-4" /> Sign out
+          </Button>
+        </div>
       </template>
       <template v-else>
         <Button

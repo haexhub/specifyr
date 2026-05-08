@@ -285,30 +285,48 @@ export function _resetClaudeOAuthDriver(): void {
 }
 
 /**
- * Reads `.credentials.json` from a finished OAuth flow's HOME and
- * returns the expiry. The CLI writes the file with several keys; the
- * exact shape varies between versions, so we accept both
- * `expiresAt` (numeric ms) and a nested `expires_at` (ISO string).
+ * Discriminated state of the on-disk credentials file. The file is
+ * the source of truth for "is this OAuth credential still usable" —
+ * the CLI rewrites it whenever it refreshes the token, and our DB
+ * row's status is just a cache that can drift.
  *
- * Returns null when the file is missing or malformed — caller treats
- * that as "still pending".
+ * - `missing`: ENOENT — user signed out, dir was wiped, or flow never
+ *   completed. UI must surface "re-auth required".
+ * - `present` with `expiresAt = null`: file is there but malformed or
+ *   doesn't carry an expiry. Treat as "present but unverifiable" —
+ *   we keep the row authorized; the next CLI run will rewrite the
+ *   file or fail loudly.
+ * - `present` with a `Date`: definitive. UI compares against `now` to
+ *   decide between "Connected" and "expired, will refresh next run".
  */
-export async function readCredentialsExpiry(
+export type CredentialsDiskState =
+  | { kind: "missing" }
+  | { kind: "present"; expiresAt: Date | null };
+
+/**
+ * Reads `.credentials.json` from a finished OAuth flow's HOME and
+ * returns its disk state. The CLI writes the file with several keys;
+ * the exact shape varies between versions, so we accept both
+ * `expiresAt` (numeric ms) and a nested `expires_at` (ISO string).
+ */
+export async function readCredentialsState(
   home: string,
-): Promise<Date | null> {
+): Promise<CredentialsDiskState> {
   const p = path.join(home, ".claude", ".credentials.json");
   let raw: string;
   try {
     raw = await fs.readFile(p, "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { kind: "missing" };
+    }
     throw err;
   }
   let parsed: Record<string, unknown>;
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return null;
+    return { kind: "present", expiresAt: null };
   }
   // Walk the JSON looking for an expires_at-shaped value. This
   // tolerates the credential blob being nested under a top-level
@@ -321,12 +339,27 @@ export async function readCredentialsExpiry(
   for (const c of candidates) {
     const obj = c as Record<string, unknown>;
     const ms = typeof obj.expiresAt === "number" ? obj.expiresAt : undefined;
-    if (ms) return new Date(ms);
+    if (ms) return { kind: "present", expiresAt: new Date(ms) };
     const iso = typeof obj.expires_at === "string" ? obj.expires_at : undefined;
     if (iso) {
       const d = new Date(iso);
-      if (!Number.isNaN(d.getTime())) return d;
+      if (!Number.isNaN(d.getTime())) return { kind: "present", expiresAt: d };
     }
   }
-  return null;
+  return { kind: "present", expiresAt: null };
+}
+
+/**
+ * Back-compat wrapper that collapses {@link readCredentialsState} to
+ * the shape callers used before the missing/present distinction
+ * existed: a `Date` when the file is present + parseable, `null`
+ * otherwise. Status endpoints prefer the richer state directly so
+ * they can render a 3-way UI.
+ */
+export async function readCredentialsExpiry(
+  home: string,
+): Promise<Date | null> {
+  const state = await readCredentialsState(home);
+  if (state.kind === "missing") return null;
+  return state.expiresAt;
 }
