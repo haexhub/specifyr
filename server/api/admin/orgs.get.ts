@@ -2,9 +2,7 @@ import { count, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { orgMemberships, orgs, projects, users } from "../../db/schema";
 import { requirePlatformAdmin } from "@su/platform-admin-auth";
-
-const DEFAULT_LIMIT = 50;
-const MAX_LIMIT = 200;
+import { paginationSchema, parseQuery } from "@su/validation";
 
 /**
  * Platform-admin: paginated list of orgs with owner email, member
@@ -18,12 +16,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 503, statusMessage: "DB not configured" });
   }
 
-  const q = getQuery(event);
-  const limit = Math.min(
-    Math.max(Number.parseInt(String(q.limit ?? DEFAULT_LIMIT), 10) || DEFAULT_LIMIT, 1),
-    MAX_LIMIT,
-  );
-  const offset = Math.max(Number.parseInt(String(q.offset ?? 0), 10) || 0, 0);
+  const { limit, offset } = parseQuery(event, paginationSchema);
 
   const rows = await db
     .select({
@@ -33,8 +26,8 @@ export default defineEventHandler(async (event) => {
       ownerUserId: orgs.ownerUserId,
       ownerEmail: users.email,
       createdAt: orgs.createdAt,
-      memberCount: sql<number>`(SELECT count(*)::int FROM ${orgMemberships} WHERE ${orgMemberships.orgId} = ${orgs.id})`,
-      projectCount: sql<number>`(SELECT count(*)::int FROM ${projects} WHERE ${projects.ownerOrgId} = ${orgs.id})`,
+      memberCount: sql<number>`(SELECT count(*) FROM ${orgMemberships} WHERE ${orgMemberships.orgId} = ${orgs.id})`,
+      projectCount: sql<number>`(SELECT count(*) FROM ${projects} WHERE ${projects.ownerOrgId} = ${orgs.id})`,
     })
     .from(orgs)
     .leftJoin(users, eq(users.id, orgs.ownerUserId))

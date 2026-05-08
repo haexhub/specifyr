@@ -211,13 +211,7 @@ export default defineEventHandler(async (event) => {
       let oauthSessionToken: string | null = null;
       if (userId) {
         const project = await getProjectFromDb(slug);
-        if (!project || !project.ownerOrgId) {
-          throw createError({
-            statusCode: 409,
-            statusMessage: "Project ownership metadata missing",
-          });
-        }
-        const ownerOrgId = project.ownerOrgId;
+        const ownerOrgId = project?.ownerOrgId ?? null;
         resolvedAnthropic = await resolveCredentialForRequest(
           userId,
           ownerOrgId,

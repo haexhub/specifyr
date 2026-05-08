@@ -1,18 +1,21 @@
+import { z } from "zod";
 import { loadSessionStore, loadStepStateStore } from "@su/specifyr-stores";
+import { parseBody, parseParams, stepParams } from "@su/validation";
+
+const sessionCreateSchema = z.object({
+  title: z.string().trim().max(256).optional(),
+  initialPrompt: z.string().trim().max(8192).optional(),
+});
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  const stepId = getRouterParam(event, "stepId");
-  if (!slug || !stepId) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug/stepId" });
-  }
+  const { slug, stepId } = parseParams(event, stepParams);
 
-  const body = await readBody<{ title?: string; initialPrompt?: string }>(event);
+  const body = await parseBody(event, sessionCreateSchema);
 
   const store = await loadSessionStore();
   const created = await store.createSession(slug, stepId, {
-    title: body?.title?.trim() || undefined,
-    initialPrompt: body?.initialPrompt?.trim() || undefined
+    title: body.title || undefined,
+    initialPrompt: body.initialPrompt || undefined,
   });
 
   // Mark step as in-progress as soon as a session exists (unless already complete)

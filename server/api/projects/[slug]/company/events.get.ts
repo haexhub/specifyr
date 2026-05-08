@@ -15,24 +15,25 @@
  * to opening a read-only handle directly against state.db.)
  */
 
+import { z } from "zod";
 import { getActiveCompany } from "@su/company-manager";
+import { parseParams, parseQuery, projectSlugParam } from "@su/validation";
+
+const querySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(500).default(100),
+  since: z.string().min(1).optional(),
+  role: z.string().min(1).max(64).optional(),
+});
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
+  const { slug } = parseParams(event, projectSlugParam);
 
   const runtime = getActiveCompany(slug);
   if (!runtime) {
     throw createError({ statusCode: 404, statusMessage: "Company not running" });
   }
 
-  const query = getQuery(event);
-  const limitRaw = Number(query.limit ?? 100);
-  const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(limitRaw, 1), 500) : 100;
-  const since = typeof query.since === "string" ? query.since : undefined;
-  const role = typeof query.role === "string" ? query.role : undefined;
+  const { limit, since, role } = parseQuery(event, querySchema);
 
   const events = runtime.eventIndex.recent({ limit, since, role });
   return { slug, events };

@@ -8,7 +8,7 @@
 
 Aktuell liegt alles unter `app/components/ui/`:
 
-```text
+```
 app/components/ui/
   badge/{Badge.vue, index.ts}
   button/{Button.vue, index.ts}
@@ -26,9 +26,7 @@ shadcn-vue@latest add <component>` generiert wurden. `components.json` zeigt
 auf `~/components` mit dem Default-Output unter `~/components/ui/`.
 
 Nuxt registriert sie via Path-Prefix als `<UiButton>`, `<UiInput>`,
-`<UiTable>` usw. (lokal verifizierbar nach `pnpm dev` oder
-`pnpm exec nuxi prepare` über `.nuxt/components.d.ts` —
-generierte Datei, nicht eingecheckt.)
+`<UiTable>` usw. (Verifiziert in [.nuxt/components.d.ts](../../.nuxt/components.d.ts).)
 
 26 bestehende Files importieren Komponenten als named export aus diesen
 Pfaden:
@@ -56,7 +54,7 @@ existiert nebeneinander.
 
 ## Ziel-Layout
 
-```text
+```
 app/components/
   shadcn/                  ← unmodifizierte shadcn-Defaults (regenerierbar)
     badge/{Badge.vue, index.ts}

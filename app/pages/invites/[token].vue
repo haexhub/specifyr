@@ -18,7 +18,6 @@ const token = computed(() => String(route.params.token));
 
 const { data: invite, error: previewError } = await useFetch<InvitePreview>(
   () => `/api/invites/${token.value}`,
-  { default: () => null },
 );
 
 const accepting = ref(false);

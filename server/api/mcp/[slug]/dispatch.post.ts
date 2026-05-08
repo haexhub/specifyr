@@ -38,6 +38,7 @@ import path from "node:path";
 import { writeFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { requireRuntimeAuth } from "@su/mcp-auth";
+import { parseParams, projectSlugParam } from "@su/validation";
 
 interface DispatchBody {
   worker?: string;
@@ -65,10 +66,7 @@ async function loadMcpDispatch(): Promise<McpDispatchModule> {
 }
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
+  const { slug } = parseParams(event, projectSlugParam);
 
   const runtime = await requireRuntimeAuth(event, slug);
   const body = await readBody<DispatchBody>(event);

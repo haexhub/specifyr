@@ -1,6 +1,5 @@
-import { createApiKeyCredential, type Provider } from "@su/llm-credentials-store";
-
-const VALID_PROVIDERS: Provider[] = ["anthropic", "openai", "google", "openrouter"];
+import { createApiKeyCredential } from "@su/llm-credentials-store";
+import { llmCredentialCreateSchema, parseBody } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -8,26 +7,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: "not authenticated" });
   }
 
-  const body = await readBody<{
-    provider?: string;
-    displayName?: string;
-    apiKey?: string;
-    baseUrl?: string;
-  }>(event);
-
-  const provider = body?.provider as Provider | undefined;
-  const displayName = body?.displayName?.trim() ?? "";
-  const apiKey = body?.apiKey?.trim() ?? "";
-
-  if (!provider || !VALID_PROVIDERS.includes(provider)) {
-    throw createError({ statusCode: 400, statusMessage: "invalid provider" });
-  }
-  if (displayName.length < 1) {
-    throw createError({ statusCode: 400, statusMessage: "displayName required" });
-  }
-  if (apiKey.length < 8) {
-    throw createError({ statusCode: 400, statusMessage: "apiKey too short" });
-  }
+  const { provider, displayName, apiKey, baseUrl } = await parseBody(
+    event,
+    llmCredentialCreateSchema,
+  );
 
   try {
     return await createApiKeyCredential({
@@ -36,7 +19,7 @@ export default defineEventHandler(async (event) => {
       provider,
       displayName,
       apiKey,
-      baseUrl: body?.baseUrl?.trim() || undefined,
+      baseUrl: baseUrl || undefined,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "could not create credential";

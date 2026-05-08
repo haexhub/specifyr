@@ -1,29 +1,25 @@
+import { z } from "zod";
 import { installExtensionsInProject } from "@su/extension-install";
 import { assertProjectExists } from "@su/specifyr-stores";
+import { parseBody, parseParams, projectSlugParam } from "@su/validation";
 
-interface InstallBody {
-  slugs?: string[];
-  slug?: string;
-  source?: "manual" | "auto";
-}
+const installSchema = z
+  .object({
+    slugs: z.array(z.string().trim().min(1)).optional(),
+    slug: z.string().trim().min(1).optional(),
+    source: z.enum(["manual", "auto"]).default("manual"),
+  })
+  .refine(
+    (b) => (b.slugs && b.slugs.length > 0) || (typeof b.slug === "string" && b.slug.length > 0),
+    { message: "must contain 'slug' or 'slugs'" },
+  );
 
 export default defineEventHandler(async (event) => {
-  const projectSlug = getRouterParam(event, "slug");
-  if (!projectSlug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing project slug" });
-  }
+  const { slug: projectSlug } = parseParams(event, projectSlugParam);
   await assertProjectExists(projectSlug);
 
-  const body = (await readBody(event)) as InstallBody | null;
-  const slugs = Array.isArray(body?.slugs)
-    ? body!.slugs
-    : typeof body?.slug === "string"
-      ? [body.slug]
-      : [];
-  if (slugs.length === 0) {
-    throw createError({ statusCode: 400, statusMessage: "Body must contain 'slug' or 'slugs'" });
-  }
+  const body = await parseBody(event, installSchema);
+  const slugs = body.slugs && body.slugs.length > 0 ? body.slugs : [body.slug!];
 
-  const source = body?.source === "auto" ? "auto" : "manual";
-  return await installExtensionsInProject(projectSlug, slugs, source);
+  return await installExtensionsInProject(projectSlug, slugs, body.source);
 });

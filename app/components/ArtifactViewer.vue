@@ -163,8 +163,10 @@ async function fetchPath(p: string): Promise<FsResponse | null> {
   }
 }
 
-async function selectDirFile(name: string): Promise<void> {
+async function selectDirFile(value: unknown): Promise<void> {
   if (!dirBase.value) return;
+  const name = typeof value === "string" ? value : null;
+  if (!name) return;
   const res = await fetchPath(`${dirBase.value}/${name}`);
   if (res?.type === "file") {
     file.value = res;

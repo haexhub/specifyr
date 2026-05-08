@@ -1,8 +1,18 @@
+import { z } from "zod";
 import { createProjectRecord } from "@su/project-creation";
 import { getAppConfigModule } from "@su/app-config";
 import { DEFAULT_WORKFLOW_ID } from "@su/workflows";
 import { recordProjectOwnership } from "@su/project-store";
 import { getMembership, getOrgBySlug, listOrgsForUser } from "@su/org-store";
+import { parseBody } from "@su/validation";
+
+const createProjectSchema = z.object({
+  title: z.string().trim().min(1).max(256),
+  description: z.string().trim().max(4096).optional().default(""),
+  extensions: z.array(z.string().trim().min(1)).optional(),
+  workflow: z.string().trim().min(1).max(128).optional(),
+  ownerOrgSlug: z.string().trim().min(1).max(64).nullable().optional(),
+});
 
 /**
  * Create a project. Mandatory-org model: every project belongs to an
@@ -16,26 +26,16 @@ import { getMembership, getOrgBySlug, listOrgsForUser } from "@su/org-store";
  * project; the API surface treats it as a 400.
  */
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{
-    title?: string;
-    description?: string;
-    extensions?: unknown;
-    workflow?: string;
-    ownerOrgSlug?: string | null;
-  }>(event);
-  const title = body?.title?.trim() ?? "";
-  const description = body?.description?.trim() ?? "";
-
-  if (!title) {
-    throw createError({ statusCode: 400, statusMessage: "Project title is required." });
-  }
-
   const userId = event.context.userId;
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: "not authenticated" });
   }
 
-  const ownerOrgSlug = body?.ownerOrgSlug?.trim() || null;
+  const body = await parseBody(event, createProjectSchema);
+  const title = body.title;
+  const description = body.description ?? "";
+
+  const ownerOrgSlug = body.ownerOrgSlug?.trim() || null;
   let ownerOrgId: string | null = null;
   if (ownerOrgSlug) {
     const org = await getOrgBySlug(ownerOrgSlug);
@@ -71,15 +71,14 @@ export default defineEventHandler(async (event) => {
 
   // Any string id is accepted at create-time (the extension that provides this workflow may still
   // be installing and thus not yet discoverable). Invalid ids fall back to spec-kit on first read.
-  const workflow =
-    typeof body?.workflow === "string" && body.workflow.trim().length > 0
-      ? body.workflow.trim()
-      : DEFAULT_WORKFLOW_ID;
+  const workflow = body.workflow && body.workflow.length > 0
+    ? body.workflow
+    : DEFAULT_WORKFLOW_ID;
 
   // If client didn't specify extensions, fall back to the current standard list.
   let extensions: string[];
-  if (Array.isArray(body?.extensions)) {
-    extensions = body.extensions.map((x) => String(x).trim()).filter(Boolean);
+  if (body.extensions) {
+    extensions = body.extensions.filter(Boolean);
   } else {
     const { loadAppConfig } = await getAppConfigModule();
     const cfg = await loadAppConfig();

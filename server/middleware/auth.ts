@@ -95,11 +95,9 @@ export default defineEventHandler(async (event) => {
   const isInviteFlow = /^\/(api\/)?invites\//.test(path);
 
   if (!existing && !isPlatformAdmin && !isInviteFlow) {
-    // Safest default when unconfigured: "closed". Admins must explicitly
-    // opt-in to self-registration via /admin/settings/registration.
     const policy = await getSetting<RegistrationPolicy>(
       SETTING_KEYS.registrationPolicy,
-      "closed",
+      "open",
     );
     if (policy === "closed") {
       throw createError({

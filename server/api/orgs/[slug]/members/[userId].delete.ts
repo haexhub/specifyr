@@ -1,5 +1,6 @@
 import { requireOrgAdmin } from "@su/org-auth";
 import { removeMembership } from "@su/org-store";
+import { orgMemberParams, parseParams } from "@su/validation";
 
 /**
  * Remove an org member. Caller must be admin.
@@ -16,10 +17,7 @@ import { removeMembership } from "@su/org-store";
  */
 export default defineEventHandler(async (event) => {
   const { org } = await requireOrgAdmin(event);
-  const targetUserId = getRouterParam(event, "userId");
-  if (!targetUserId) {
-    throw createError({ statusCode: 400, statusMessage: "userId required" });
-  }
+  const { userId: targetUserId } = parseParams(event, orgMemberParams);
 
   const result = await removeMembership(org.id, targetUserId);
   if (!result.ok) {
@@ -40,10 +38,6 @@ export default defineEventHandler(async (event) => {
           "cannot remove the last admin — promote someone else first",
       });
     }
-    throw createError({
-      statusCode: 500,
-      statusMessage: "membership removal failed",
-    });
   }
 
   return { ok: true };

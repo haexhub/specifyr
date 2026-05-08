@@ -148,6 +148,7 @@ export async function createInvite(input: {
       expiresAt,
     })
     .returning();
+  if (!row) throw new Error("invite insert returned no row");
   return row;
 }
 
@@ -213,6 +214,7 @@ export async function acceptInvite(
       .where(eq(orgInvites.token, token));
 
     const [org] = await tx.select().from(orgs).where(eq(orgs.id, invite.orgId)).limit(1);
+    if (!org) throw new Error("invite references missing org");
     return {
       ok: true as const,
       orgId: invite.orgId,
@@ -273,16 +275,7 @@ export async function updateMembershipRole(
   if (!db) return { ok: false, reason: "not_member" };
 
   return db.transaction(async (tx) => {
-    // Lock the org row up-front: all admin/owner mutations on a given
-    // org serialize through this lock so the invariant checks below
-    // (last-admin, owner-immutable, must-be-member) cannot be raced by
-    // concurrent transfer/remove/demote calls.
-    const [org] = await tx
-      .select()
-      .from(orgs)
-      .where(eq(orgs.id, orgId))
-      .for("update")
-      .limit(1);
+    const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
     if (!org) return { ok: false as const, reason: "not_member" as const };
     const [m] = await tx
       .select()
@@ -297,7 +290,7 @@ export async function updateMembershipRole(
       return { ok: false as const, reason: "owner_immutable" as const };
     }
     if (m.role === "admin" && role === "member") {
-      const [{ n }] = await tx
+      const [adminCount] = await tx
         .select({ n: count() })
         .from(orgMemberships)
         .where(
@@ -306,7 +299,7 @@ export async function updateMembershipRole(
             eq(orgMemberships.role, "admin"),
           ),
         );
-      if (Number(n) <= 1) {
+      if (Number(adminCount?.n ?? 0) <= 1) {
         return { ok: false as const, reason: "would_orphan_admins" as const };
       }
     }
@@ -334,16 +327,7 @@ export async function removeMembership(
   if (!db) return { ok: false, reason: "not_member" };
 
   return db.transaction(async (tx) => {
-    // Lock the org row up-front: all admin/owner mutations on a given
-    // org serialize through this lock so the invariant checks below
-    // (last-admin, owner-immutable, must-be-member) cannot be raced by
-    // concurrent transfer/remove/demote calls.
-    const [org] = await tx
-      .select()
-      .from(orgs)
-      .where(eq(orgs.id, orgId))
-      .for("update")
-      .limit(1);
+    const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
     if (!org) return { ok: false as const, reason: "not_member" as const };
     const [m] = await tx
       .select()
@@ -358,7 +342,7 @@ export async function removeMembership(
       return { ok: false as const, reason: "owner_immutable" as const };
     }
     if (m.role === "admin") {
-      const [{ n }] = await tx
+      const [adminCount] = await tx
         .select({ n: count() })
         .from(orgMemberships)
         .where(
@@ -367,7 +351,7 @@ export async function removeMembership(
             eq(orgMemberships.role, "admin"),
           ),
         );
-      if (Number(n) <= 1) {
+      if (Number(adminCount?.n ?? 0) <= 1) {
         return { ok: false as const, reason: "would_orphan_admins" as const };
       }
     }
@@ -399,16 +383,7 @@ export async function transferOrgOwnership(
   if (!db) return { ok: false, reason: "not_member" };
 
   return db.transaction(async (tx) => {
-    // Lock the org row up-front: all admin/owner mutations on a given
-    // org serialize through this lock so the invariant checks below
-    // (last-admin, owner-immutable, must-be-member) cannot be raced by
-    // concurrent transfer/remove/demote calls.
-    const [org] = await tx
-      .select()
-      .from(orgs)
-      .where(eq(orgs.id, orgId))
-      .for("update")
-      .limit(1);
+    const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
     if (!org) return { ok: false as const, reason: "not_member" as const };
     if (org.ownerUserId === newOwnerUserId) {
       return { ok: false as const, reason: "same_owner" as const };

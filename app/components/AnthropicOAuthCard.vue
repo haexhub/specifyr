@@ -59,51 +59,26 @@ const submitting = ref(false);
 const error = ref<string | null>(null);
 const expiresAt = ref<string | null>(null);
 
-// Lazy disk-state fetch. URL is reactive on `existing.id`; when there
-// is no existing credential, the URL evaluates to null and useFetch
-// stays idle (no request fired, no SSR payload reserved).
-const { data: diskStatus, refresh: refreshDiskStatus } = useFetch<DiskStatus>(
-  () =>
-    props.existing
-      ? `${props.endpoint}/${props.existing.id}/status`
-      : null,
-  {
-    default: () => null,
-    watch: [() => props.existing?.id],
-    onResponseError(ctx) {
-      // Don't blow up the page on a transient 4xx/5xx — the card
-      // falls back to the row's `oauthStatus` until the next refresh.
-      ctx.response._data = null;
-    },
-  },
-);
-
-// Poll disk-state every 2s while a credential is connected so the
-// card reflects out-of-band changes (CLI refreshes the token,
-// credentials file removed, etc.) without requiring a page reload.
-// The interval is gated on `existing` — when there's nothing to
-// inspect we stay idle.
-let pollHandle: ReturnType<typeof setInterval> | null = null;
-function startPolling() {
-  if (pollHandle || !props.existing) return;
-  pollHandle = setInterval(() => {
-    void refreshDiskStatus();
-  }, 2000);
-}
-function stopPolling() {
-  if (pollHandle) {
-    clearInterval(pollHandle);
-    pollHandle = null;
-  }
-}
-onMounted(startPolling);
-onUnmounted(stopPolling);
+// Lazy disk-state fetch. Tied to `existing.id`; nothing fires when
+// there is no existing credential. A transient 4xx/5xx falls through
+// to null so the card can fall back to the row's `oauthStatus`.
+const diskStatus = ref<DiskStatus | null>(null);
 watch(
   () => props.existing?.id,
-  (id) => {
-    if (id) startPolling();
-    else stopPolling();
+  async (id) => {
+    if (!id) {
+      diskStatus.value = null;
+      return;
+    }
+    try {
+      diskStatus.value = await $fetch<DiskStatus>(
+        `${props.endpoint}/${id}/status`,
+      );
+    } catch {
+      diskStatus.value = null;
+    }
   },
+  { immediate: true },
 );
 
 const connectedState = computed<ConnectedState | null>(() => {

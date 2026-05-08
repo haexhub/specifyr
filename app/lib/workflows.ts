@@ -97,3 +97,4 @@ export function resolveWorkflow(
 }
 
 export type { StepStatus };
+export type WorkflowStep = StepDefinition;

@@ -1,10 +1,8 @@
 import { getAppConfigModule } from "@su/app-config";
+import { orgSlugParam, parseParams } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "slug path parameter required" });
-  }
+  const { slug } = parseParams(event, orgSlugParam);
   const { removeLocalExtension } = await getAppConfigModule();
   try {
     return await removeLocalExtension(slug);

@@ -1,5 +1,11 @@
+import { z } from "zod";
 import { requireOrgAdmin } from "@su/org-auth";
 import { updateMembershipRole } from "@su/org-store";
+import { orgMemberParams, parseBody, parseParams } from "@su/validation";
+
+const rolePatchSchema = z.object({
+  role: z.enum(["admin", "member"]),
+});
 
 /**
  * Promote/demote an org member. Caller must be admin (and the org's
@@ -15,18 +21,8 @@ import { updateMembershipRole } from "@su/org-store";
  */
 export default defineEventHandler(async (event) => {
   const { org } = await requireOrgAdmin(event);
-  const targetUserId = getRouterParam(event, "userId");
-  if (!targetUserId) {
-    throw createError({ statusCode: 400, statusMessage: "userId required" });
-  }
-  const body = await readBody<{ role?: string }>(event);
-  const role = body?.role;
-  if (role !== "admin" && role !== "member") {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "role must be 'admin' or 'member'",
-    });
-  }
+  const { userId: targetUserId } = parseParams(event, orgMemberParams);
+  const { role } = await parseBody(event, rolePatchSchema);
 
   const result = await updateMembershipRole(org.id, targetUserId, role);
   if (!result.ok) {

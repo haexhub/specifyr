@@ -1,6 +1,12 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { z } from "zod";
 import { projectCwd } from "@su/specifyr-stores";
+import { parseParams, parseQuery, projectSlugParam } from "@su/validation";
+
+const fsQuerySchema = z.object({
+  path: z.string().max(4096).optional().default(""),
+});
 
 /**
  * Read a file or list a directory inside a project's working tree.
@@ -10,13 +16,8 @@ import { projectCwd } from "@su/specifyr-stores";
  * is rejected with a 400.
  */
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
-
-  const query = getQuery(event);
-  const relRaw = typeof query.path === "string" ? query.path : "";
+  const { slug } = parseParams(event, projectSlugParam);
+  const { path: relRaw } = parseQuery(event, fsQuerySchema);
   const rel = relRaw.replace(/^\/+/, ""); // drop leading slashes so path.resolve keeps it relative
 
   const root = projectCwd(slug);

@@ -124,6 +124,7 @@ interface AgentImageBuilderModule {
     nix_packages: string[];
     projectRoot?: string;
     dockerCommand?: string;
+    onLog?: (line: string) => void;
   }) => Promise<string>;
 }
 

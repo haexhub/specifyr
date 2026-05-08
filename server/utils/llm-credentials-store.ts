@@ -92,6 +92,7 @@ export async function createApiKeyCredential(input: {
       enabled: true,
     })
     .returning();
+  if (!row) throw new Error("credential insert returned no row");
   return summarize(row);
 }
 

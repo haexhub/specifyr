@@ -1,13 +1,14 @@
+import { z } from "zod";
 import { loadEventStore } from "@su/specifyr-stores";
+import { parseParams, parseQuery, projectSlugParam } from "@su/validation";
+
+const querySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(10_000).optional(),
+});
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
-  const q = getQuery(event);
-  const limitParam = typeof q.limit === "string" ? Number.parseInt(q.limit, 10) : undefined;
-  const limit = Number.isFinite(limitParam) && limitParam! > 0 ? limitParam : undefined;
+  const { slug } = parseParams(event, projectSlugParam);
+  const { limit } = parseQuery(event, querySchema);
 
   const store = await loadEventStore(slug);
   const all = await store.list();

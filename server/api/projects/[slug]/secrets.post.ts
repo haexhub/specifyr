@@ -1,21 +1,19 @@
+import { z } from "zod";
 import { assertProjectExists } from "@su/specifyr-stores";
 import { setSecret } from "@su/secrets-store";
+import { parseBody, parseParams, projectSlugParam } from "@su/validation";
+
+const secretSchema = z.object({
+  key: z.string().trim().min(1).max(256),
+  value: z.string().min(1),
+});
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) throw createError({ statusCode: 400, statusMessage: "Missing slug" });
+  const { slug } = parseParams(event, projectSlugParam);
   await assertProjectExists(slug);
 
-  const body = await readBody<{ key?: string; value?: string }>(event);
-  if (!body?.key || typeof body.key !== "string" || !body.value || typeof body.value !== "string") {
-    throw createError({ statusCode: 400, statusMessage: "Body must have { key: string, value: string }" });
-  }
+  const { key, value } = await parseBody(event, secretSchema);
 
-  const key = body.key.trim();
-  if (!key) {
-    throw createError({ statusCode: 400, statusMessage: "Secret key must be non-empty" });
-  }
-
-  await setSecret(slug, key, body.value);
+  await setSecret(slug, key, value);
   return { ok: true, key };
 });

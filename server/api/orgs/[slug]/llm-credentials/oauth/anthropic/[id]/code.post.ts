@@ -8,6 +8,12 @@ import {
   readCredentialsExpiry,
 } from "@su/claude-oauth-driver";
 import { requireOrgAdmin } from "@su/org-auth";
+import {
+  oauthCodeSchema,
+  orgCredentialParams,
+  parseBody,
+  parseParams,
+} from "@su/validation";
 
 /**
  * Pipes the user-pasted OAuth code into the held-open subprocess
@@ -17,17 +23,12 @@ import { requireOrgAdmin } from "@su/org-auth";
  */
 export default defineEventHandler(async (event) => {
   const { org } = await requireOrgAdmin(event);
-  const id = getRouterParam(event, "id");
-  if (!id) throw createError({ statusCode: 400, statusMessage: "id required" });
+  const { id } = parseParams(event, orgCredentialParams);
 
   const owned = await getCredentialOwnedBy(id, "org", org.id);
   if (!owned) throw createError({ statusCode: 404, statusMessage: "not found" });
 
-  const body = await readBody<{ code?: string }>(event);
-  const code = body?.code?.trim() ?? "";
-  if (code.length < 4) {
-    throw createError({ statusCode: 400, statusMessage: "code required" });
-  }
+  const { code } = await parseBody(event, oauthCodeSchema);
 
   try {
     await getClaudeOAuthDriver().submitCode(id, code);

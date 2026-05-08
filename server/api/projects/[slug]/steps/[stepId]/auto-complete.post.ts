@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { z } from "zod";
 import {
   loadStepStateStore,
   loadEventStore,
@@ -8,6 +9,12 @@ import {
 } from "@su/specifyr-stores";
 import { getProjectWorkflowId } from "@su/workflows";
 import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "@su/workflow-discovery";
+import { parseBody, parseParams, stepParams } from "@su/validation";
+
+const autoCompleteSchema = z.object({
+  sessionId: z.string().trim().min(1).max(128).optional(),
+  requireArtifact: z.boolean().optional(),
+});
 
 /**
  * Checks whether the current step's artifact files exist in the project directory.
@@ -17,18 +24,14 @@ import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "@su/workflow-
  * Called by the client after each successful turn completes.
  */
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  const stepId = getRouterParam(event, "stepId");
-  if (!slug || !stepId) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug/stepId" });
-  }
+  const { slug, stepId } = parseParams(event, stepParams);
 
   await assertProjectExists(slug);
 
-  const body = await readBody<{ sessionId?: string; requireArtifact?: boolean }>(event);
+  const body = await parseBody(event, autoCompleteSchema);
   // requireArtifact=true: only complete if a concrete file exists (used on page load).
   // requireArtifact=false (default): also complete steps with no artifacts after a turn.
-  const requireArtifact = body?.requireArtifact === true;
+  const requireArtifact = body.requireArtifact === true;
 
   const { store } = await loadStepStateStore();
   const current = await store.getStep(slug, stepId);
@@ -56,7 +59,7 @@ export default defineEventHandler(async (event) => {
     return { completed: false, status: current.status };
   }
 
-  const updated = await store.markComplete(slug, stepId, body?.sessionId ?? null);
+  const updated = await store.markComplete(slug, stepId, body.sessionId ?? null);
   const events = await loadEventStore(slug);
   await events.append({
     type: "step_auto_completed",
@@ -70,12 +73,6 @@ export default defineEventHandler(async (event) => {
   return { completed: true, status: updated.status };
 });
 
-/**
- * Returns true if at least one artifact path exists.
- * - Template paths (angle brackets): check parent dir for any files.
- * - Directory paths (no extension): check if the directory has any files.
- * - File paths: check if the file exists.
- */
 async function anyArtifactExists(projectDir: string, artifacts: string[]): Promise<boolean> {
   for (const artifact of artifacts) {
     const hasPlaceholder = artifact.includes("<") || artifact.includes(">");

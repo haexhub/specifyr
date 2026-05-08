@@ -104,7 +104,10 @@ export class ClaudeOAuthDriver {
 
     await fs.mkdir(path.join(input.home, ".claude"), { recursive: true });
 
-    const env = { ...process.env, HOME: input.home };
+    const env: Record<string, string | undefined> = {
+      ...process.env,
+      HOME: input.home,
+    };
     // Strip CLAUDECODE so the CLI doesn't refuse "cannot launch
     // inside another Claude Code session" when we run in a dev shell
     // that has it set (matches the proxy's SUBPROCESS_ENV_BASE).

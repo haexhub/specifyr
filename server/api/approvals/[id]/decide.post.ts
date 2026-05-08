@@ -16,32 +16,19 @@
  * proper auth before opening the host port.
  */
 
+import { z } from "zod";
 import { findRuntimeByApprovalId } from "@su/company-manager";
+import { idUuidParam, parseBody, parseParams } from "@su/validation";
 
-const VALID_DECISIONS = new Set(["approved", "denied", "escalated"]);
-
-interface DecideBody {
-  decision?: string;
-  by?: string;
-}
+const decideSchema = z.object({
+  decision: z.enum(["approved", "denied", "escalated"]),
+  by: z.string().trim().min(1).max(256).optional(),
+});
 
 export default defineEventHandler(async (event) => {
-  const id = getRouterParam(event, "id");
-  if (!id) {
-    throw createError({ statusCode: 400, statusMessage: "Missing approval id" });
-  }
-  const body = await readBody<DecideBody>(event);
-  if (!body || typeof body !== "object") {
-    throw createError({ statusCode: 400, statusMessage: "Body must be an object" });
-  }
-  const decision = body.decision;
-  if (typeof decision !== "string" || !VALID_DECISIONS.has(decision)) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: `Invalid decision. Expected one of: ${[...VALID_DECISIONS].join(", ")}`,
-    });
-  }
-  const by = typeof body.by === "string" && body.by.length > 0 ? body.by : "user";
+  const { id } = parseParams(event, idUuidParam);
+  const { decision, by } = await parseBody(event, decideSchema);
+  const decidedBy = by && by.length > 0 ? by : "user";
 
   const found = findRuntimeByApprovalId(id);
   if (!found) {
@@ -51,8 +38,8 @@ export default defineEventHandler(async (event) => {
     });
   }
   const ok = found.runtime.approvalService.resolve(id, {
-    decision: decision as "approved" | "denied" | "escalated",
-    by,
+    decision,
+    by: decidedBy,
   });
   if (!ok) {
     // Race: gone between findRuntimeByApprovalId and resolve.

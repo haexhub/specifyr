@@ -20,28 +20,20 @@ async function submit() {
   }
   submitting.value = true;
   error.value = null;
-  let org: { slug: string };
   try {
-    org = await $fetch<{ slug: string }>("/api/orgs", {
+    const org = await $fetch<{ slug: string }>("/api/orgs", {
       method: "POST",
       body: { name: trimmed },
     });
+    await refresh();
+    await navigateTo(`/settings/orgs/${org.slug}`);
   } catch (err: unknown) {
     error.value =
       (err as { statusMessage?: string })?.statusMessage ??
       (err instanceof Error ? err.message : "Could not create org.");
+  } finally {
     submitting.value = false;
-    return;
   }
-  // Org was created — refresh failure must not surface as "create
-  // failed" (which prompts the user to retry and create a duplicate).
-  try {
-    await refresh();
-  } catch {
-    // Local /me cache out of sync; the destination page will refetch.
-  }
-  await navigateTo(`/settings/orgs/${encodeURIComponent(org.slug)}`);
-  submitting.value = false;
 }
 </script>
 

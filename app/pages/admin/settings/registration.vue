@@ -12,25 +12,15 @@ interface SettingsResponse {
   };
 }
 
-const { data, refresh, pending } = await useFetch<SettingsResponse>(
-  "/api/admin/settings",
-  {
-    default: () => ({
-      registration: { policy: "closed" as Policy, allowedDomains: [] },
-    }),
-  },
-);
+const { data, refresh } = await useFetch<SettingsResponse>("/api/admin/settings", {
+  default: () => ({ registration: { policy: "open" as Policy, allowedDomains: [] } }),
+});
 
 const policy = ref<Policy>(data.value.registration.policy);
 const domainsText = ref(data.value.registration.allowedDomains.join("\n"));
 const saving = ref(false);
 const message = ref<string | null>(null);
 const error = ref<string | null>(null);
-
-// Form is locked while the initial settings fetch is pending or while
-// a save is in flight. Without this gate the user could submit the
-// fallback default ("closed") before the real settings ever arrived.
-const formLocked = computed(() => pending.value || saving.value);
 
 watch(data, (d) => {
   if (!d) return;
@@ -98,7 +88,7 @@ async function save() {
         <select
           v-model="policy"
           class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-          :disabled="formLocked"
+          :disabled="saving"
         >
           <option value="open">Open — anyone with an IDP account can sign in</option>
           <option value="domain">Domain-restricted — only allowed email domains</option>
@@ -113,7 +103,7 @@ async function save() {
           rows="4"
           class="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs"
           placeholder="example.com&#10;another.org"
-          :disabled="formLocked"
+          :disabled="saving"
         />
         <p class="mt-1 text-xs text-muted-foreground">
           One per line, comma- or whitespace-separated. Lower-cased on save.
@@ -121,7 +111,7 @@ async function save() {
       </div>
 
       <div class="flex items-center gap-3">
-        <ShadcnButton type="submit" :disabled="formLocked">
+        <ShadcnButton type="submit" :disabled="saving">
           {{ saving ? "Saving…" : "Save settings" }}
         </ShadcnButton>
         <span v-if="message" class="text-sm text-primary">{{ message }}</span>
@@ -130,7 +120,7 @@ async function save() {
     </form>
 
     <p class="mt-6 text-xs text-muted-foreground">
-      Invite redemptions ignore this policy by design — an org admin can
+      Invite-flow accepts ignore this policy by design — an org admin can
       onboard external collaborators even when the platform is "closed".
     </p>
   </div>
