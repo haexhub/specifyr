@@ -1,5 +1,11 @@
+import { z } from "zod";
 import { requireOrgMembership } from "@su/org-auth";
 import { transferOrgOwnership } from "@su/org-store";
+import { parseBody } from "@su/validation";
+
+const transferSchema = z.object({
+  newOwnerUserId: z.uuid(),
+});
 
 /**
  * Transfer org ownership. Caller must be the current owner — admin
@@ -18,14 +24,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const body = await readBody<{ newOwnerUserId?: string }>(event);
-  const newOwnerUserId = body?.newOwnerUserId?.trim();
-  if (!newOwnerUserId) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "newOwnerUserId required",
-    });
-  }
+  const { newOwnerUserId } = await parseBody(event, transferSchema);
 
   const result = await transferOrgOwnership(org.id, newOwnerUserId);
   if (!result.ok) {

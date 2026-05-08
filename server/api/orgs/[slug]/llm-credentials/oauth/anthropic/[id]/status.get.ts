@@ -6,6 +6,7 @@ import {
 import { ownerCredentialsHome } from "@su/data-dirs";
 import { readCredentialsState } from "@su/claude-oauth-driver";
 import { requireOrgMembership } from "@su/org-auth";
+import { orgCredentialParams, parseParams } from "@su/validation";
 
 /**
  * Polled status endpoint — readable by any member so non-admins can
@@ -16,8 +17,7 @@ import { requireOrgMembership } from "@su/org-auth";
  */
 export default defineEventHandler(async (event) => {
   const { org } = await requireOrgMembership(event);
-  const id = getRouterParam(event, "id");
-  if (!id) throw createError({ statusCode: 400, statusMessage: "id required" });
+  const { id } = parseParams(event, orgCredentialParams);
 
   const owned = await getCredentialOwnedBy(id, "org", org.id);
   if (!owned) throw createError({ statusCode: 404, statusMessage: "not found" });

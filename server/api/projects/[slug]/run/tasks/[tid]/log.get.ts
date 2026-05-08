@@ -1,12 +1,9 @@
 import { getRunStoreModule } from "@su/run-manager";
 import { dataDir } from "@su/data-dirs";
+import { parseParams, taskIdParams } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  const tid = getRouterParam(event, "tid");
-  if (!slug || !tid) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug/tid" });
-  }
+  const { slug, tid } = parseParams(event, taskIdParams);
 
   const { RunStore } = await getRunStoreModule();
   const store = new RunStore(dataDir());

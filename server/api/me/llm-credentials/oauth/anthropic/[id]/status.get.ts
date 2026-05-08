@@ -5,6 +5,7 @@ import {
 } from "@su/llm-credentials-store";
 import { ownerCredentialsHome } from "@su/data-dirs";
 import { readCredentialsState } from "@su/claude-oauth-driver";
+import { idUuidParam, parseParams } from "@su/validation";
 
 /**
  * Polled by the frontend every ~2s while a flow is open AND on the
@@ -24,8 +25,7 @@ export default defineEventHandler(async (event) => {
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: "not authenticated" });
   }
-  const id = getRouterParam(event, "id");
-  if (!id) throw createError({ statusCode: 400, statusMessage: "id required" });
+  const { id } = parseParams(event, idUuidParam);
 
   const owned = await getCredentialOwnedBy(id, "user", userId);
   if (!owned) throw createError({ statusCode: 404, statusMessage: "not found" });

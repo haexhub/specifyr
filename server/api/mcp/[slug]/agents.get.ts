@@ -12,12 +12,10 @@
  */
 
 import { requireRuntimeAuth } from "@su/mcp-auth";
+import { parseParams, projectSlugParam } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
+  const { slug } = parseParams(event, projectSlugParam);
   const runtime = await requireRuntimeAuth(event, slug);
 
   const agents = runtime.listAgents().map((a: any) => ({

@@ -7,6 +7,12 @@ import {
   getClaudeOAuthDriver,
   readCredentialsExpiry,
 } from "@su/claude-oauth-driver";
+import {
+  idUuidParam,
+  oauthCodeSchema,
+  parseBody,
+  parseParams,
+} from "@su/validation";
 
 /**
  * Submits the user-pasted OAuth code to the held-open
@@ -22,19 +28,14 @@ export default defineEventHandler(async (event) => {
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: "not authenticated" });
   }
-  const id = getRouterParam(event, "id");
-  if (!id) throw createError({ statusCode: 400, statusMessage: "id required" });
+  const { id } = parseParams(event, idUuidParam);
 
   // Ownership gate before touching the driver — a stranger's id
   // can't manipulate someone else's flow.
   const owned = await getCredentialOwnedBy(id, "user", userId);
   if (!owned) throw createError({ statusCode: 404, statusMessage: "not found" });
 
-  const body = await readBody<{ code?: string }>(event);
-  const code = body?.code?.trim() ?? "";
-  if (code.length < 4) {
-    throw createError({ statusCode: 400, statusMessage: "code required" });
-  }
+  const { code } = await parseBody(event, oauthCodeSchema);
 
   try {
     await getClaudeOAuthDriver().submitCode(id, code);

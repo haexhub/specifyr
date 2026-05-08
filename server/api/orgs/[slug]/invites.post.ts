@@ -1,4 +1,15 @@
+import { z } from "zod";
 import { createInvite, getMembership, getOrgBySlug } from "@su/org-store";
+import { orgSlugParam, parseBody, parseParams } from "@su/validation";
+
+const inviteSchema = z.object({
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .regex(/^[^@\s]+@[^@\s]+\.[^@\s]+$/, "invalid email"),
+  role: z.enum(["admin", "member"]).default("member"),
+});
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -6,8 +17,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: "not authenticated" });
   }
 
-  const slug = getRouterParam(event, "slug");
-  if (!slug) throw createError({ statusCode: 400, statusMessage: "slug required" });
+  const { slug } = parseParams(event, orgSlugParam);
 
   const org = await getOrgBySlug(slug);
   if (!org) throw createError({ statusCode: 404, statusMessage: "org not found" });
@@ -17,12 +27,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: "admin only" });
   }
 
-  const body = await readBody<{ email?: string; role?: "admin" | "member" }>(event);
-  const email = body?.email?.trim().toLowerCase() ?? "";
-  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-    throw createError({ statusCode: 400, statusMessage: "invalid email" });
-  }
-  const role = body?.role === "admin" ? "admin" : "member";
+  const { email, role } = await parseBody(event, inviteSchema);
 
   const invite = await createInvite({
     orgId: org.id,

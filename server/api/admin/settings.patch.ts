@@ -1,11 +1,16 @@
-import {
-  SETTING_KEYS,
-  setSetting,
-  type RegistrationPolicy,
-} from "@su/platform-settings";
+import { z } from "zod";
+import { SETTING_KEYS, setSetting } from "@su/platform-settings";
 import { requirePlatformAdmin } from "@su/platform-admin-auth";
+import { parseBody } from "@su/validation";
 
-const VALID_POLICIES: RegistrationPolicy[] = ["open", "domain", "closed"];
+const settingsPatchSchema = z.object({
+  registration: z
+    .object({
+      policy: z.enum(["open", "domain", "closed"]).optional(),
+      allowedDomains: z.array(z.string().trim()).optional(),
+    })
+    .optional(),
+});
 
 /**
  * Update platform settings. Body is a partial — only the fields
@@ -15,35 +20,19 @@ const VALID_POLICIES: RegistrationPolicy[] = ["open", "domain", "closed"];
  */
 export default defineEventHandler(async (event) => {
   const userId = await requirePlatformAdmin(event);
+  const body = await parseBody(event, settingsPatchSchema);
 
-  const body = await readBody<{
-    registration?: {
-      policy?: string;
-      allowedDomains?: string[];
-    };
-  }>(event);
-
-  if (body?.registration?.policy !== undefined) {
-    const policy = body.registration.policy;
-    if (!VALID_POLICIES.includes(policy as RegistrationPolicy)) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: `policy must be one of: ${VALID_POLICIES.join(", ")}`,
-      });
-    }
-    await setSetting(SETTING_KEYS.registrationPolicy, policy, userId);
+  if (body.registration?.policy !== undefined) {
+    await setSetting(
+      SETTING_KEYS.registrationPolicy,
+      body.registration.policy,
+      userId,
+    );
   }
 
-  if (body?.registration?.allowedDomains !== undefined) {
-    const domains = body.registration.allowedDomains;
-    if (!Array.isArray(domains) || !domains.every((d) => typeof d === "string")) {
-      throw createError({
-        statusCode: 400,
-        statusMessage: "allowedDomains must be an array of strings",
-      });
-    }
-    const normalized = domains
-      .map((d) => d.trim().toLowerCase())
+  if (body.registration?.allowedDomains !== undefined) {
+    const normalized = body.registration.allowedDomains
+      .map((d) => d.toLowerCase())
       .filter(Boolean);
     await setSetting(
       SETTING_KEYS.registrationAllowedDomains,

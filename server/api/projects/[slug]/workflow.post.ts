@@ -1,21 +1,20 @@
 import path from "node:path";
 import fs from "node:fs/promises";
+import { z } from "zod";
 import { dataDir } from "@su/data-dirs";
 import { assertProjectExists } from "@su/specifyr-stores";
 import { listProjectWorkflows } from "@su/workflow-discovery";
+import { parseBody, parseParams, projectSlugParam } from "@su/validation";
+
+const workflowBodySchema = z.object({
+  workflow: z.string().trim().min(1).max(128),
+});
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
+  const { slug } = parseParams(event, projectSlugParam);
   await assertProjectExists(slug);
 
-  const body = await readBody<{ workflow?: string }>(event);
-  const workflow = body?.workflow;
-  if (!workflow || typeof workflow !== "string") {
-    throw createError({ statusCode: 400, statusMessage: "Body must contain a 'workflow' id." });
-  }
+  const { workflow } = await parseBody(event, workflowBodySchema);
 
   // Accept only workflows actually available for this project: spec-kit (always) or an installed
   // extension that declares itself as a workflow via its extension.yml tags.

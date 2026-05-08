@@ -1,16 +1,15 @@
 import path from "node:path";
+import { z } from "zod";
 import { getAppConfigModule } from "@su/app-config";
 import { readLocalManifest } from "@su/local-extension";
+import { parseBody } from "@su/validation";
+
+const bodySchema = z.object({
+  path: z.string().trim().min(1).max(4096),
+});
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{ path?: unknown }>(event);
-  const rawPath = typeof body?.path === "string" ? body.path.trim() : "";
-  if (!rawPath) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Body must contain { path: string }"
-    });
-  }
+  const { path: rawPath } = await parseBody(event, bodySchema);
   // Resolve relative paths against the app's CWD (where .specifyr/ lives).
   const resolved = path.isAbsolute(rawPath) ? rawPath : path.resolve(process.cwd(), rawPath);
 

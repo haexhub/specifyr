@@ -1,10 +1,8 @@
 import { getExtensionDetail } from "@su/extension-detail";
+import { orgSlugParam, parseParams } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
+  const { slug } = parseParams(event, orgSlugParam);
   try {
     return await getExtensionDetail(slug);
   } catch (err) {

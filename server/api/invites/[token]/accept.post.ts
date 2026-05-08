@@ -1,4 +1,5 @@
 import { acceptInvite } from "@su/org-store";
+import { parseParams, tokenParam } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -6,8 +7,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: "not authenticated" });
   }
 
-  const token = getRouterParam(event, "token");
-  if (!token) throw createError({ statusCode: 400, statusMessage: "token required" });
+  const { token } = parseParams(event, tokenParam);
 
   const result = await acceptInvite(token, userId);
   if (!result.ok) {

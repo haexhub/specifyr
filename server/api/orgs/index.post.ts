@@ -1,4 +1,10 @@
+import { z } from "zod";
 import { createOrgWithAdmin } from "@su/org-store";
+import { parseBody } from "@su/validation";
+
+const createOrgSchema = z.object({
+  name: z.string().trim().min(2).max(120),
+});
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -6,11 +12,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: "not authenticated" });
   }
 
-  const body = await readBody<{ name?: string }>(event);
-  const name = body?.name?.trim() ?? "";
-  if (name.length < 2) {
-    throw createError({ statusCode: 400, statusMessage: "name must be at least 2 chars" });
-  }
+  const { name } = await parseBody(event, createOrgSchema);
 
   try {
     const org = await createOrgWithAdmin(name, userId);

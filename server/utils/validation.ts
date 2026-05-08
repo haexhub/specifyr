@@ -1,0 +1,132 @@
+import { z, ZodError } from "zod";
+
+/**
+ * Shared schemas + thin parsing helpers.
+ *
+ * h3's `getValidatedQuery` etc. wrap any thrown error in their own
+ * 400 envelope, which would nest our issues under `data.data.issues`.
+ * We use plain `getQuery`/`readBody` and validate explicitly so the
+ * 400 response is exactly what we throw.
+ *
+ * The event parameter is typed as Parameters<typeof getQuery>[0] —
+ * H3Event is auto-imported as a global in Nitro, but vue-tsc against
+ * the client tsconfig can't resolve a `from "h3"` import.
+ */
+
+type H3Event = Parameters<typeof getQuery>[0];
+
+function toBadRequest(error: ZodError): never {
+  throw createError({
+    statusCode: 400,
+    statusMessage: "Invalid input",
+    data: {
+      issues: error.issues.map((i) => ({
+        path: i.path,
+        message: i.message,
+        code: i.code,
+      })),
+    },
+  });
+}
+
+export function parseQuery<T>(event: H3Event, schema: z.ZodType<T>): T {
+  const result = schema.safeParse(getQuery(event));
+  if (!result.success) toBadRequest(result.error);
+  return result.data;
+}
+
+export async function parseBody<T>(
+  event: H3Event,
+  schema: z.ZodType<T>,
+): Promise<T> {
+  const body = await readBody(event).catch(() => null);
+  const result = schema.safeParse(body);
+  if (!result.success) toBadRequest(result.error);
+  return result.data;
+}
+
+export function parseParams<T>(event: H3Event, schema: z.ZodType<T>): T {
+  const result = schema.safeParse(event.context.params ?? {});
+  if (!result.success) toBadRequest(result.error);
+  return result.data;
+}
+
+/* ---------- shared schemas ---------- */
+
+export const paginationSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+
+const slugString = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9-]+$/);
+
+export const orgSlugParam = z.object({ slug: slugString });
+export const projectSlugParam = z.object({ slug: slugString });
+
+export const userIdParam = z.object({ userId: z.uuid() });
+export const idParam = z.object({ id: z.string().min(1) });
+export const idUuidParam = z.object({ id: z.uuid() });
+export const tokenParam = z.object({ token: z.string().min(1).max(256) });
+
+export const stepParams = z.object({
+  slug: slugString,
+  stepId: z.string().min(1).max(128),
+});
+
+export const sessionParams = z.object({
+  slug: slugString,
+  stepId: z.string().min(1).max(128),
+  sid: z.string().min(1).max(128),
+});
+
+export const taskIdParams = z.object({
+  slug: slugString,
+  tid: z.string().min(1).max(256),
+});
+
+export const projectExtensionParams = z.object({
+  slug: slugString,
+  extSlug: z.string().min(1).max(128),
+});
+
+export const projectSecretParams = z.object({
+  slug: slugString,
+  key: z.string().min(1).max(256),
+});
+
+export const orgMemberParams = z.object({
+  slug: slugString,
+  userId: z.uuid(),
+});
+
+export const orgCredentialParams = z.object({
+  slug: slugString,
+  id: z.uuid(),
+});
+
+const PROVIDERS = ["anthropic", "openai", "google", "openrouter"] as const;
+
+export const llmCredentialCreateSchema = z.object({
+  provider: z.enum(PROVIDERS),
+  displayName: z.string().trim().min(1).max(120),
+  apiKey: z.string().trim().min(8).max(4096),
+  baseUrl: z.string().trim().min(1).max(512).optional(),
+});
+
+export const llmCredentialPatchSchema = z.object({
+  displayName: z.string().trim().min(1).max(120).optional(),
+  apiKey: z.string().trim().min(8).max(4096).optional(),
+  baseUrl: z.string().trim().min(1).max(512).nullable().optional(),
+  enabled: z.boolean().optional(),
+});
+
+export const oauthCodeSchema = z.object({
+  code: z.string().trim().min(4).max(4096),
+});
+
+export type LlmCredentialCreateInput = z.infer<typeof llmCredentialCreateSchema>;
+export type LlmCredentialPatchInput = z.infer<typeof llmCredentialPatchSchema>;

@@ -27,29 +27,22 @@
  * the runtime's secretsResolver. Mismatch → 401.
  */
 
+import { z } from "zod";
 import { requireRuntimeAuth } from "@su/mcp-auth";
+import { parseBody, parseParams, projectSlugParam } from "@su/validation";
 
-interface AuthorizeBody {
-  role?: string;
-  capability?: string;
-  taskAutonomy?: string;
-  requestPayload?: unknown;
-}
+const authorizeSchema = z.object({
+  role: z.string().trim().min(1).max(64),
+  capability: z.string().trim().min(1).max(256),
+  taskAutonomy: z.enum(["full", "supervised", "interactive"]).optional(),
+  requestPayload: z.unknown().optional(),
+});
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
+  const { slug } = parseParams(event, projectSlugParam);
   const runtime = await requireRuntimeAuth(event, slug);
 
-  const body = await readBody<AuthorizeBody>(event);
-  if (!body?.role) {
-    throw createError({ statusCode: 400, statusMessage: "Missing 'role' in body" });
-  }
-  if (!body?.capability) {
-    throw createError({ statusCode: 400, statusMessage: "Missing 'capability' in body" });
-  }
+  const body = await parseBody(event, authorizeSchema);
 
   return runtime.authorizeWithApproval({
     role: body.role,

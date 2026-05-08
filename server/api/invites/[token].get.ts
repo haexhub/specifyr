@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../../db/client";
 import { orgInvites, orgs } from "../../db/schema";
+import { parseParams, tokenParam } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
-  const token = getRouterParam(event, "token");
-  if (!token) throw createError({ statusCode: 400, statusMessage: "token required" });
+  const { token } = parseParams(event, tokenParam);
 
   const db = getDb();
   if (!db) throw createError({ statusCode: 503, statusMessage: "DB not configured" });

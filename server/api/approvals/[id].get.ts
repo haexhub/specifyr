@@ -13,12 +13,10 @@
  */
 
 import { findRuntimeByApprovalId } from "@su/company-manager";
+import { idUuidParam, parseParams } from "@su/validation";
 
 export default defineEventHandler((event) => {
-  const id = getRouterParam(event, "id");
-  if (!id) {
-    throw createError({ statusCode: 400, statusMessage: "Missing approval id" });
-  }
+  const { id } = parseParams(event, idUuidParam);
   const found = findRuntimeByApprovalId(id);
   if (!found) {
     throw createError({

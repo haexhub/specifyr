@@ -12,12 +12,14 @@
 import path from "node:path";
 import { writeFile, mkdir } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
+import { z } from "zod";
 import { getActiveCompany } from "@su/company-manager";
+import { parseBody, parseParams, projectSlugParam } from "@su/validation";
 
-interface DispatchBody {
-  goal?: string;
-  title?: string;
-}
+const dispatchSchema = z.object({
+  goal: z.string().trim().min(1).max(8192),
+  title: z.string().trim().min(1).max(256).optional(),
+});
 
 interface McpDispatchModule {
   buildTaskId: () => string;
@@ -33,20 +35,14 @@ async function loadMcpDispatch(): Promise<McpDispatchModule> {
 }
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  if (!slug) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug" });
-  }
+  const { slug } = parseParams(event, projectSlugParam);
 
   const runtime = getActiveCompany(slug);
   if (!runtime) {
     throw createError({ statusCode: 409, statusMessage: `No active company runtime for '${slug}'` });
   }
 
-  const body = await readBody<DispatchBody>(event);
-  if (!body?.goal || typeof body.goal !== "string" || body.goal.trim() === "") {
-    throw createError({ statusCode: 400, statusMessage: "Missing or empty 'goal'" });
-  }
+  const body = await parseBody(event, dispatchSchema);
 
   const ceoRole = (runtime as any).ceoRole ?? "ceo";
   const queueDir = runtime.getRoleQueueDir(ceoRole);
@@ -56,8 +52,8 @@ export default defineEventHandler(async (event) => {
 
   const { buildTaskId, buildDispatchYaml } = await loadMcpDispatch();
 
-  const task: Record<string, unknown> = { goal: body.goal.trim() };
-  if (body.title?.trim()) task.title = body.title.trim();
+  const task: Record<string, unknown> = { goal: body.goal };
+  if (body.title) task.title = body.title;
 
   await mkdir(queueDir, { recursive: true });
   const taskId = buildTaskId();

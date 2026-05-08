@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   loadSessionStore,
   loadStepStateStore,
@@ -6,12 +7,17 @@ import {
   projectCwd,
   assertProjectExists
 } from "@su/specifyr-stores";
-import { getProjectStepIds, getProjectWorkflowId } from "@su/workflows";
+import { getProjectWorkflowId } from "@su/workflows";
 import {
   SPEC_KIT_WORKFLOW,
   loadInstalledExtensionWorkflow,
   loadStepCommandBody
 } from "@su/workflow-discovery";
+import { parseBody, parseParams, sessionParams } from "@su/validation";
+
+const turnSchema = z.object({
+  content: z.string().trim().min(1).max(32_000),
+});
 
 /**
  * Kicks off a chat turn. The turn runs in the background under the TurnBroker —
@@ -22,18 +28,8 @@ import {
  * is owned by the broker, not by any single HTTP connection.
  */
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, "slug");
-  const stepId = getRouterParam(event, "stepId");
-  const sid = getRouterParam(event, "sid");
-  if (!slug || !stepId || !sid) {
-    throw createError({ statusCode: 400, statusMessage: "Missing slug/stepId/sid" });
-  }
-
-  const body = await readBody<{ content?: string }>(event);
-  const content = body?.content?.trim();
-  if (!content) {
-    throw createError({ statusCode: 400, statusMessage: "Message content is required." });
-  }
+  const { slug, stepId, sid } = parseParams(event, sessionParams);
+  const { content } = await parseBody(event, turnSchema);
 
   await assertProjectExists(slug);
 
