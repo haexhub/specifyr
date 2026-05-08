@@ -43,13 +43,13 @@ function taskLabel(e: EventRow): string {
   if (t) return t;
   if (!e.task_path) return e.type;
   const parts = e.task_path.split("/");
-  return parts[parts.length - 1].replace(/\.ya?ml$/, "");
+  return (parts[parts.length - 1] ?? "").replace(/\.ya?ml$/, "");
 }
 
 function queuedLabel(t: TaskSummary): string {
   if (t.title) return t.title;
   const parts = t.path.split("/");
-  return parts[parts.length - 1].replace(/\.ya?ml$/, "");
+  return (parts[parts.length - 1] ?? "").replace(/\.ya?ml$/, "");
 }
 </script>
 

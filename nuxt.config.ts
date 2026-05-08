@@ -3,7 +3,13 @@ import { fileURLToPath } from "node:url";
 
 export default defineNuxtConfig({
   nitro: {
-    alias: { "@su": fileURLToPath(new URL("./server/utils", import.meta.url)) }
+    alias: { "@su": fileURLToPath(new URL("./server/utils", import.meta.url)) },
+    typescript: {
+      tsConfig: { compilerOptions: { paths: { "@su/*": ["../server/utils/*"] } } }
+    }
+  },
+  typescript: {
+    tsConfig: { compilerOptions: { paths: { "@su/*": ["../server/utils/*"] } } }
   },
   compatibilityDate: "2025-01-01",
   devtools: { enabled: true },
@@ -42,7 +48,6 @@ export default defineNuxtConfig({
   },
   i18n: {
     locales: [{ code: "de", language: "de-DE", file: "de.json" }],
-    defaultLocale: "de",
-    lazy: false
+    defaultLocale: "de"
   }
 });

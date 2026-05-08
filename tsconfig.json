@@ -1,8 +1,3 @@
 {
-  "extends": "./.nuxt/tsconfig.json",
-  "compilerOptions": {
-    "paths": {
-      "#su/*": ["./server/utils/*"]
-    }
-  }
+  "extends": "./.nuxt/tsconfig.json"
 }

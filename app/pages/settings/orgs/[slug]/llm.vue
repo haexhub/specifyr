@@ -42,7 +42,6 @@ const endpoint = computed(() => `/api/orgs/${slug.value}/llm-credentials`);
 
 const { data, refresh } = await useFetch<OrgLlmResponse>(
   () => endpoint.value,
-  { default: () => null },
 );
 
 const credsByProvider = computed(() => {

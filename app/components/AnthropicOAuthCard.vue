@@ -59,23 +59,26 @@ const submitting = ref(false);
 const error = ref<string | null>(null);
 const expiresAt = ref<string | null>(null);
 
-// Lazy disk-state fetch. URL is reactive on `existing.id`; when there
-// is no existing credential, the URL evaluates to null and useFetch
-// stays idle (no request fired, no SSR payload reserved).
-const { data: diskStatus } = useFetch<DiskStatus>(
-  () =>
-    props.existing
-      ? `${props.endpoint}/${props.existing.id}/status`
-      : null,
-  {
-    default: () => null,
-    watch: [() => props.existing?.id],
-    onResponseError(ctx) {
-      // Don't blow up the page on a transient 4xx/5xx — the card
-      // falls back to the row's `oauthStatus` until the next refresh.
-      ctx.response._data = null;
-    },
+// Lazy disk-state fetch. Tied to `existing.id`; nothing fires when
+// there is no existing credential. A transient 4xx/5xx falls through
+// to null so the card can fall back to the row's `oauthStatus`.
+const diskStatus = ref<DiskStatus | null>(null);
+watch(
+  () => props.existing?.id,
+  async (id) => {
+    if (!id) {
+      diskStatus.value = null;
+      return;
+    }
+    try {
+      diskStatus.value = await $fetch<DiskStatus>(
+        `${props.endpoint}/${id}/status`,
+      );
+    } catch {
+      diskStatus.value = null;
+    }
   },
+  { immediate: true },
 );
 
 const connectedState = computed<ConnectedState | null>(() => {

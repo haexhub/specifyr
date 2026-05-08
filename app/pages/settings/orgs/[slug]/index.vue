@@ -29,7 +29,6 @@ const { me } = useMe();
 
 const { data, refresh } = await useFetch<MembersResponse>(
   () => `/api/orgs/${slug.value}/members`,
-  { default: () => null },
 );
 
 const isOwner = computed(
@@ -132,6 +131,16 @@ async function sendInvite() {
     inviting.value = false;
   }
 }
+
+// Volar can't narrow `data` inside filter callbacks, so we precompute
+// the transferable-members list as a typed computed.
+const transferableMembers = computed(() =>
+  data.value
+    ? data.value.members.filter(
+        (m) => m.userId !== data.value!.org.ownerUserId,
+      )
+    : [],
+);
 
 const inviteUrl = computed(() => {
   if (!inviteResult.value) return "";
@@ -295,7 +304,7 @@ async function copyLink() {
       </section>
 
       <section
-        v-if="isOwner && data.members.filter(m => m.userId !== data.org.ownerUserId).length > 0"
+        v-if="isOwner && transferableMembers.length > 0"
         class="mt-12 rounded-lg border border-destructive/30 bg-destructive/5 p-4"
       >
         <h2 class="text-sm font-semibold uppercase tracking-wide text-destructive">
@@ -316,7 +325,7 @@ async function copyLink() {
           >
             <option value="">Select new owner…</option>
             <option
-              v-for="m in data.members.filter(x => x.userId !== data.org.ownerUserId)"
+              v-for="m in transferableMembers"
               :key="m.userId"
               :value="m.userId"
             >
