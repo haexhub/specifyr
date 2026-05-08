@@ -9,9 +9,8 @@ const VALID_POLICIES: RegistrationPolicy[] = ["open", "domain", "closed"];
 
 /**
  * Update platform settings. Body is a partial — only the fields
- * passed are written. Each key is upserted independently so a
- * mid-write failure leaves the others unchanged (within reason; this
- * isn't transactional across keys yet).
+ * passed are written. All fields are validated upfront before any
+ * write so a 400 response never leaves a half-applied state.
  */
 export default defineEventHandler(async (event) => {
   const userId = await requirePlatformAdmin(event);
@@ -23,6 +22,9 @@ export default defineEventHandler(async (event) => {
     };
   }>(event);
 
+  let nextPolicy: RegistrationPolicy | undefined;
+  let nextAllowedDomains: string[] | undefined;
+
   if (body?.registration?.policy !== undefined) {
     const policy = body.registration.policy;
     if (!VALID_POLICIES.includes(policy as RegistrationPolicy)) {
@@ -31,7 +33,7 @@ export default defineEventHandler(async (event) => {
         statusMessage: `policy must be one of: ${VALID_POLICIES.join(", ")}`,
       });
     }
-    await setSetting(SETTING_KEYS.registrationPolicy, policy, userId);
+    nextPolicy = policy as RegistrationPolicy;
   }
 
   if (body?.registration?.allowedDomains !== undefined) {
@@ -42,12 +44,18 @@ export default defineEventHandler(async (event) => {
         statusMessage: "allowedDomains must be an array of strings",
       });
     }
-    const normalized = domains
+    nextAllowedDomains = domains
       .map((d) => d.trim().toLowerCase())
       .filter(Boolean);
+  }
+
+  if (nextPolicy !== undefined) {
+    await setSetting(SETTING_KEYS.registrationPolicy, nextPolicy, userId);
+  }
+  if (nextAllowedDomains !== undefined) {
     await setSetting(
       SETTING_KEYS.registrationAllowedDomains,
-      normalized,
+      nextAllowedDomains,
       userId,
     );
   }

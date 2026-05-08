@@ -33,7 +33,7 @@ nichts externes.
 
 ## Reihenfolge & Abhängigkeiten
 
-```
+```text
 1. runner_sessions Cleanup-Cron        ─┐
 2. Token-Refresh-UX                     │  (independent von 0)
 3. Per-app DB user für proxy            ─┘
@@ -69,7 +69,7 @@ das als separates Mini-Feature.
 
 ### Schema-Ziel
 
-```
+```text
 users
   id                PK
   email             TEXT UNIQUE NOT NULL

@@ -273,7 +273,16 @@ export async function updateMembershipRole(
   if (!db) return { ok: false, reason: "not_member" };
 
   return db.transaction(async (tx) => {
-    const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
+    // Lock the org row up-front: all admin/owner mutations on a given
+    // org serialize through this lock so the invariant checks below
+    // (last-admin, owner-immutable, must-be-member) cannot be raced by
+    // concurrent transfer/remove/demote calls.
+    const [org] = await tx
+      .select()
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+      .for("update")
+      .limit(1);
     if (!org) return { ok: false as const, reason: "not_member" as const };
     const [m] = await tx
       .select()
@@ -325,7 +334,16 @@ export async function removeMembership(
   if (!db) return { ok: false, reason: "not_member" };
 
   return db.transaction(async (tx) => {
-    const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
+    // Lock the org row up-front: all admin/owner mutations on a given
+    // org serialize through this lock so the invariant checks below
+    // (last-admin, owner-immutable, must-be-member) cannot be raced by
+    // concurrent transfer/remove/demote calls.
+    const [org] = await tx
+      .select()
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+      .for("update")
+      .limit(1);
     if (!org) return { ok: false as const, reason: "not_member" as const };
     const [m] = await tx
       .select()
@@ -381,7 +399,16 @@ export async function transferOrgOwnership(
   if (!db) return { ok: false, reason: "not_member" };
 
   return db.transaction(async (tx) => {
-    const [org] = await tx.select().from(orgs).where(eq(orgs.id, orgId)).limit(1);
+    // Lock the org row up-front: all admin/owner mutations on a given
+    // org serialize through this lock so the invariant checks below
+    // (last-admin, owner-immutable, must-be-member) cannot be raced by
+    // concurrent transfer/remove/demote calls.
+    const [org] = await tx
+      .select()
+      .from(orgs)
+      .where(eq(orgs.id, orgId))
+      .for("update")
+      .limit(1);
     if (!org) return { ok: false as const, reason: "not_member" as const };
     if (org.ownerUserId === newOwnerUserId) {
       return { ok: false as const, reason: "same_owner" as const };

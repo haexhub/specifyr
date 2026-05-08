@@ -141,9 +141,16 @@ const inviteUrl = computed(() => {
 
 async function copyLink() {
   if (!inviteUrl.value) return;
-  await navigator.clipboard.writeText(inviteUrl.value);
-  copied.value = true;
-  setTimeout(() => (copied.value = false), 2000);
+  try {
+    await navigator.clipboard.writeText(inviteUrl.value);
+    copied.value = true;
+    setTimeout(() => (copied.value = false), 2000);
+  } catch {
+    // Clipboard permission denied (e.g. non-secure context, browser
+    // policy). Surface a hint via the existing error slot so the user
+    // can copy manually instead of the action silently failing.
+    inviteError.value = "Clipboard access denied. Copy the link manually.";
+  }
 }
 </script>
 

@@ -41,6 +41,10 @@ export default defineEventHandler(async (event) => {
         statusMessage: "already the owner",
       });
     }
+    throw createError({
+      statusCode: 500,
+      statusMessage: "ownership transfer failed",
+    });
   }
 
   return { ok: true, newOwnerUserId };

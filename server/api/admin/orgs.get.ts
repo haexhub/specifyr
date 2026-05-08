@@ -33,8 +33,8 @@ export default defineEventHandler(async (event) => {
       ownerUserId: orgs.ownerUserId,
       ownerEmail: users.email,
       createdAt: orgs.createdAt,
-      memberCount: sql<number>`(SELECT count(*) FROM ${orgMemberships} WHERE ${orgMemberships.orgId} = ${orgs.id})`,
-      projectCount: sql<number>`(SELECT count(*) FROM ${projects} WHERE ${projects.ownerOrgId} = ${orgs.id})`,
+      memberCount: sql<number>`(SELECT count(*)::int FROM ${orgMemberships} WHERE ${orgMemberships.orgId} = ${orgs.id})`,
+      projectCount: sql<number>`(SELECT count(*)::int FROM ${projects} WHERE ${projects.ownerOrgId} = ${orgs.id})`,
     })
     .from(orgs)
     .leftJoin(users, eq(users.id, orgs.ownerUserId))

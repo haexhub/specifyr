@@ -198,19 +198,19 @@ async function submit() {
           </div>
 
           <div v-if="orgs.length > 1" class="space-y-1.5">
-            <label for="project-owner" class="text-sm font-medium">Workspace</label>
+            <label for="project-owner" class="text-sm font-medium">{{ $t("projectCreate.workspace") }}</label>
             <select
               id="project-owner"
               v-model="selectedOwner"
               class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
-              <option value="">Pick a workspace…</option>
+              <option value="">{{ $t("projectCreate.pickWorkspace") }}</option>
               <option v-for="o in orgs" :key="o.id" :value="o.slug">
                 {{ o.name }}
               </option>
             </select>
             <p class="text-[11px] text-muted-foreground">
-              Members of this workspace will have access to the project.
+              {{ $t("projectCreate.workspaceAccessNote") }}
             </p>
           </div>
 

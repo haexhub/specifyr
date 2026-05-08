@@ -33,7 +33,10 @@
     "alreadyExists": "Ein Projekt mit dem Namen „{name}“ existiert bereits.",
     "creationFailed": "Projekt konnte nicht erstellt werden.",
     "creating": "Erstelle…",
-    "create": "Erstellen"
+    "create": "Erstellen",
+    "workspace": "Workspace",
+    "pickWorkspace": "Workspace auswählen…",
+    "workspaceAccessNote": "Mitglieder dieses Workspaces erhalten Zugriff auf das Projekt."
   },
 
   "sidebar": {

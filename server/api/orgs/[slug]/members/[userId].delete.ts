@@ -40,6 +40,10 @@ export default defineEventHandler(async (event) => {
           "cannot remove the last admin — promote someone else first",
       });
     }
+    throw createError({
+      statusCode: 500,
+      statusMessage: "membership removal failed",
+    });
   }
 
   return { ok: true };

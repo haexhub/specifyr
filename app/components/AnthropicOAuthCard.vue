@@ -62,7 +62,7 @@ const expiresAt = ref<string | null>(null);
 // Lazy disk-state fetch. URL is reactive on `existing.id`; when there
 // is no existing credential, the URL evaluates to null and useFetch
 // stays idle (no request fired, no SSR payload reserved).
-const { data: diskStatus } = useFetch<DiskStatus>(
+const { data: diskStatus, refresh: refreshDiskStatus } = useFetch<DiskStatus>(
   () =>
     props.existing
       ? `${props.endpoint}/${props.existing.id}/status`
@@ -75,6 +75,34 @@ const { data: diskStatus } = useFetch<DiskStatus>(
       // falls back to the row's `oauthStatus` until the next refresh.
       ctx.response._data = null;
     },
+  },
+);
+
+// Poll disk-state every 2s while a credential is connected so the
+// card reflects out-of-band changes (CLI refreshes the token,
+// credentials file removed, etc.) without requiring a page reload.
+// The interval is gated on `existing` — when there's nothing to
+// inspect we stay idle.
+let pollHandle: ReturnType<typeof setInterval> | null = null;
+function startPolling() {
+  if (pollHandle || !props.existing) return;
+  pollHandle = setInterval(() => {
+    void refreshDiskStatus();
+  }, 2000);
+}
+function stopPolling() {
+  if (pollHandle) {
+    clearInterval(pollHandle);
+    pollHandle = null;
+  }
+}
+onMounted(startPolling);
+onUnmounted(stopPolling);
+watch(
+  () => props.existing?.id,
+  (id) => {
+    if (id) startPolling();
+    else stopPolling();
   },
 );
 
