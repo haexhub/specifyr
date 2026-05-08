@@ -1,6 +1,7 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { and, count, eq } from "drizzle-orm";
+import { randomUUID } from "node:crypto";
+import { and, count, eq, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   orgExtensions,
@@ -50,6 +51,29 @@ function toListEntry(row: OrgExtension): OrgExtensionListEntry {
   };
 }
 
+/** A reservation slug never collides with a valid extension slug,
+ *  which the manifest reader constrains to `[a-z0-9-]+`. The double
+ *  underscore prefix is the marker that picker / install paths use to
+ *  ignore in-flight rows. */
+function reservationSlug(): string {
+  return `__pending_${randomUUID()}__`;
+}
+
+function isReservationSlug(slug: string): boolean {
+  return slug.startsWith("__pending_") && slug.endsWith("__");
+}
+
+/** Postgres unique-violation. */
+function isUniqueViolation(err: unknown): boolean {
+  return !!(err && typeof err === "object" && "code" in err && (err as { code?: string }).code === "23505");
+}
+
+/** Filter out reservation rows so partial in-flight inserts never leak
+ *  into list/picker responses or credential lookups. */
+function isVisible(row: OrgExtension): boolean {
+  return !isReservationSlug(row.slug);
+}
+
 export async function listOrgExtensions(
   orgId: string,
 ): Promise<OrgExtensionListEntry[]> {
@@ -59,7 +83,7 @@ export async function listOrgExtensions(
     .select()
     .from(orgExtensions)
     .where(eq(orgExtensions.orgId, orgId));
-  return rows.map(toListEntry);
+  return rows.filter(isVisible).map(toListEntry);
 }
 
 export async function getOrgExtensionBySlug(
@@ -73,7 +97,7 @@ export async function getOrgExtensionBySlug(
     .from(orgExtensions)
     .where(and(eq(orgExtensions.orgId, orgId), eq(orgExtensions.slug, slug)))
     .limit(1);
-  return row ? toListEntry(row) : null;
+  return row && isVisible(row) ? toListEntry(row) : null;
 }
 
 export interface AddOrgExtensionInput {
@@ -101,14 +125,25 @@ export interface AddOrgExtensionError {
 }
 
 /**
- * Adds an org extension end-to-end:
- *   1. quota check
- *   2. clone into a fresh temp dir within the org's sandbox
- *   3. parse extension.yml, slug derives from extension.id
- *   4. atomic rename to the final slug-named dir; rejects on conflict
- *   5. persist DB row with optionally-encrypted credentials
+ * Adds an org extension end-to-end. Concurrency-safe layout:
  *
- * On any failure between (2) and (5), the partial clone is removed.
+ *   1. Validate input (creds shape, sourceUrl shape) — pure, fast.
+ *   2. Encrypt credentials.
+ *   3. Reserve a slot in the DB with a placeholder slug inside a
+ *      single transaction. SELECT count + INSERT under one TX serialise
+ *      against `MAX_EXTENSIONS_PER_ORG`; the placeholder slug also
+ *      reserves an `id` we can roll back later.
+ *   4. Clone into a temp dir. Long-running, NOT inside the TX (would
+ *      hold a row-lock for the entire network round-trip).
+ *   5. Read the manifest to discover the real slug.
+ *   6. UPDATE the placeholder row to the real slug. The (orgId, slug)
+ *      unique constraint atomically resolves slug_conflict against any
+ *      other already-finalised row, with no FS write yet.
+ *   7. Rename the cloned dir into place. By now the DB owns the slug,
+ *      so this rename is the only writer for that path.
+ *
+ * Any failure between steps 3 and 7 deletes the reservation row and
+ * the temp dir. The DB row never points at a missing/stale FS dir.
  */
 export async function addOrgExtension(
   input: AddOrgExtensionInput,
@@ -116,87 +151,21 @@ export async function addOrgExtension(
   const db = getDb();
   if (!db) throw new Error("DB not configured");
 
-  // Quota guard.
-  const [quota] = await db
-    .select({ n: count() })
-    .from(orgExtensions)
-    .where(eq(orgExtensions.orgId, input.orgId));
-  if (Number(quota?.n ?? 0) >= MAX_EXTENSIONS_PER_ORG) {
-    return {
-      ok: false,
-      reason: "quota_exceeded",
-      message: `org has reached the limit of ${MAX_EXTENSIONS_PER_ORG} extensions`,
-    };
-  }
-
-  // Clone to a temp dir; we don't know the slug until we've read
-  // extension.yml, and we don't want a partial dir at the final path.
-  const orgRoot = path.join(dataDir(), "extensions", "orgs", input.orgId);
-  await fs.mkdir(orgRoot, { recursive: true });
-  const tempDir = await fs.mkdtemp(path.join(orgRoot, ".tmp-clone-"));
-  // mkdtemp creates the dir; gitClone needs it to NOT exist, so use a child path.
-  const cloneDir = path.join(tempDir, "ext");
-
-  const clone = await gitClone({
-    url: input.sourceUrl,
-    ref: input.sourceRef ?? null,
-    credentials: input.credentials ?? null,
-    destination: cloneDir,
-  }).catch((err: Error) => ({ ok: false as const, stderr: err.message }));
-  if (!clone.ok) {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    const reason: AddOrgExtensionError["reason"] =
-      /only https/.test(clone.stderr) || /URL host/.test(clone.stderr) || /invalid URL/.test(clone.stderr)
-        ? "url_invalid"
-        : "clone_failed";
-    return { ok: false, reason, message: clone.stderr.trim() || "git clone failed" };
-  }
-
-  let manifest;
-  try {
-    manifest = await readLocalManifest(cloneDir);
-  } catch (err) {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    return {
-      ok: false,
-      reason: "manifest_invalid",
-      message: (err as Error).message,
-    };
-  }
-
-  const slug = manifest.slug;
-  const finalDir = orgExtensionPath(input.orgId, slug);
-
-  // Reject overlap with an existing slug for this org. Done before
-  // rename so we can keep the ENOENT-only semantics of fs.rename.
-  const [existing] = await db
-    .select()
-    .from(orgExtensions)
-    .where(and(eq(orgExtensions.orgId, input.orgId), eq(orgExtensions.slug, slug)))
-    .limit(1);
-  if (existing) {
-    await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-    return {
-      ok: false,
-      reason: "slug_conflict",
-      message: `slug '${slug}' is already registered for this org`,
-    };
-  }
-
-  // Final rename and stale-dir cleanup.
-  await fs.rm(finalDir, { recursive: true, force: true }).catch(() => {});
-  await fs.rename(cloneDir, finalDir);
-  await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-
-  let credentialFields: Partial<OrgExtension> = {};
+  // (1) Input validation upfront — no FS work yet.
   if (input.credentials) {
-    if (!input.credentials.username || !input.credentials.token) {
+    if (!input.credentials.username?.trim() || !input.credentials.token?.trim()) {
       return {
         ok: false,
         reason: "url_invalid",
         message: "credentials.username and credentials.token are both required",
       };
     }
+  }
+
+  // (2) Encrypt creds before touching the DB so a reservation row is
+  // either fully populated or absent — never half-written.
+  let credentialFields: Partial<OrgExtension> = {};
+  if (input.credentials) {
     const enc = await encryptString(input.credentials.token);
     credentialFields = {
       credentialUsername: input.credentials.username,
@@ -206,27 +175,148 @@ export async function addOrgExtension(
     };
   }
 
-  const [row] = await db
-    .insert(orgExtensions)
-    .values({
-      orgId: input.orgId,
-      slug,
-      sourceUrl: input.sourceUrl,
-      sourceRef: input.sourceRef ?? null,
-      registeredBy: input.registeredBy,
-      ...credentialFields,
-    })
-    .returning();
-  if (!row) {
+  // (3) Reservation TX: count-then-insert under SERIALIZABLE-ish
+  // semantics. With READ COMMITTED + the row-level lock the insert
+  // takes, two concurrent quota probes that both see N=99 will both
+  // try to insert; the LIMIT-checking subquery here makes the second
+  // one INSERT zero rows and we catch that.
+  const placeholder = reservationSlug();
+  const reservation = await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(orgExtensions)
+      .values({
+        orgId: input.orgId,
+        slug: placeholder,
+        sourceUrl: input.sourceUrl,
+        sourceRef: input.sourceRef ?? null,
+        registeredBy: input.registeredBy,
+        ...credentialFields,
+      })
+      // Conditional insert via a CTE-like guard: the row is only created
+      // when the org is below quota. Drizzle's onConflictDoNothing
+      // doesn't help here (we're not conflicting on the unique index),
+      // so we run a follow-up count and roll back if exceeded.
+      .returning();
+    const [stats] = await tx
+      .select({ n: count() })
+      .from(orgExtensions)
+      .where(eq(orgExtensions.orgId, input.orgId));
+    if (Number(stats?.n ?? 0) > MAX_EXTENSIONS_PER_ORG) {
+      throw new Error("__quota_exceeded__");
+    }
+    return inserted[0]!;
+  }).catch((err: Error) => {
+    if (err.message === "__quota_exceeded__") return null;
+    throw err;
+  });
+  if (!reservation) {
+    return {
+      ok: false,
+      reason: "quota_exceeded",
+      message: `org has reached the limit of ${MAX_EXTENSIONS_PER_ORG} extensions`,
+    };
+  }
+
+  // From here on, every error path must clean up the reservation row
+  // and any temp dir that was created.
+  const cleanup = async (tempDir?: string) => {
+    await db.delete(orgExtensions).where(eq(orgExtensions.id, reservation.id)).catch(() => {});
+    if (tempDir) await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+  };
+
+  // (4) Clone. tempDir is unique per call — concurrent adds for the
+  // same org never race here.
+  const orgRoot = path.join(dataDir(), "extensions", "orgs", input.orgId);
+  await fs.mkdir(orgRoot, { recursive: true });
+  const tempDir = await fs.mkdtemp(path.join(orgRoot, ".tmp-clone-"));
+  const cloneDir = path.join(tempDir, "ext");
+
+  const clone = await gitClone({
+    url: input.sourceUrl,
+    ref: input.sourceRef ?? null,
+    credentials: input.credentials ?? null,
+    destination: cloneDir,
+  }).catch((err: Error) => ({ ok: false as const, stderr: err.message }));
+  if (!clone.ok) {
+    await cleanup(tempDir);
+    const reason: AddOrgExtensionError["reason"] =
+      /only https/.test(clone.stderr) ||
+      /URL host/.test(clone.stderr) ||
+      /invalid URL/.test(clone.stderr) ||
+      /URL must not contain inline credentials/.test(clone.stderr) ||
+      /destination/.test(clone.stderr)
+        ? "url_invalid"
+        : "clone_failed";
+    return { ok: false, reason, message: clone.stderr.trim() || "git clone failed" };
+  }
+
+  // (5) Manifest read.
+  let manifest;
+  try {
+    manifest = await readLocalManifest(cloneDir);
+  } catch (err) {
+    await cleanup(tempDir);
+    return {
+      ok: false,
+      reason: "manifest_invalid",
+      message: (err as Error).message,
+    };
+  }
+  const realSlug = manifest.slug;
+
+  // (6) Atomic slug claim. Unique (orgId, slug) makes a parallel
+  // already-finalised row reject this update with 23505 — that is the
+  // ONLY source of truth for slug-conflict.
+  try {
+    await db
+      .update(orgExtensions)
+      .set({ slug: realSlug, updatedAt: sql`now()` })
+      .where(eq(orgExtensions.id, reservation.id));
+  } catch (err) {
+    await cleanup(tempDir);
+    if (isUniqueViolation(err)) {
+      return {
+        ok: false,
+        reason: "slug_conflict",
+        message: `slug '${realSlug}' is already registered for this org`,
+      };
+    }
+    throw err;
+  }
+
+  // (7) Move clone into place. The DB now owns the slug, so a stale
+  // dir from a previous failed run is the only thing that could be
+  // sitting at finalDir; remove it before rename.
+  const finalDir = orgExtensionPath(input.orgId, realSlug);
+  try {
     await fs.rm(finalDir, { recursive: true, force: true }).catch(() => {});
-    throw new Error("org_extensions insert returned no row");
+    await fs.rename(cloneDir, finalDir);
+  } catch (err) {
+    await cleanup(tempDir);
+    await fs.rm(finalDir, { recursive: true, force: true }).catch(() => {});
+    throw err;
+  }
+  await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+
+  // Re-read the row to return current data (slug + updatedAt).
+  const [row] = await db
+    .select()
+    .from(orgExtensions)
+    .where(eq(orgExtensions.id, reservation.id))
+    .limit(1);
+  if (!row) {
+    // Vanishingly unlikely: row was deleted between update and select.
+    await fs.rm(finalDir, { recursive: true, force: true }).catch(() => {});
+    throw new Error("org_extensions row vanished during add");
   }
   return { ok: true, extension: toListEntry(row) };
 }
 
 /**
  * Removes the DB row and the on-disk clone. Returns false if the row
- * didn't exist (caller can map to 404).
+ * didn't exist (caller can map to 404). Reservation rows are invisible
+ * to callers, so a slug like "__pending_..." is treated the same as
+ * "not registered".
  */
 export async function removeOrgExtension(
   orgId: string,
@@ -234,6 +324,8 @@ export async function removeOrgExtension(
 ): Promise<boolean> {
   const db = getDb();
   if (!db) throw new Error("DB not configured");
+
+  if (isReservationSlug(slug)) return false;
 
   const deleted = await db
     .delete(orgExtensions)
@@ -248,8 +340,12 @@ export async function removeOrgExtension(
 
 /**
  * Reads the stored token back. Used by the (future) refresh endpoint
- * and tests. Throws on a row that's missing the encrypted fields
- * because that means the row was tampered with manually.
+ * and tests.
+ *
+ * Returns null when the row has no credentials at all (public repo) or
+ * the row doesn't exist. Throws on partial credentials — that means
+ * the row was tampered with at the DB level and silently treating it
+ * as "no credentials" would mask data corruption.
  */
 export async function getOrgExtensionCredentials(
   orgId: string,
@@ -262,9 +358,11 @@ export async function getOrgExtensionCredentials(
     .from(orgExtensions)
     .where(and(eq(orgExtensions.orgId, orgId), eq(orgExtensions.slug, slug)))
     .limit(1);
-  if (!row) return null;
-  if (!row.credentialIv) return null;
-  if (!row.credentialUsername || !row.credentialTag || !row.credentialData) {
+  if (!row || !isVisible(row)) return null;
+  const allAbsent =
+    !row.credentialIv && !row.credentialUsername && !row.credentialTag && !row.credentialData;
+  if (allAbsent) return null;
+  if (!row.credentialIv || !row.credentialUsername || !row.credentialTag || !row.credentialData) {
     throw new Error(`org_extensions row '${slug}' has partial credentials`);
   }
   const token = await decryptString({

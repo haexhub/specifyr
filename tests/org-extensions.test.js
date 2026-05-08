@@ -40,7 +40,8 @@ async function seedOrg() {
   return { db, user, org };
 }
 
-test("orgExtensionPath: deterministic per (orgId, slug)", { skip: skipReason }, async () => {
+// Pure function — runs without a DB.
+test("orgExtensionPath: deterministic per (orgId, slug)", async () => {
   process.env.SPECIFYR_DATA_DIR = path.join(os.tmpdir(), "specifyr-orgext-pathtest");
   const { orgExtensionPath } = await import("../server/utils/org-extensions-store.ts");
   const a = orgExtensionPath("org-1", "my-ext");

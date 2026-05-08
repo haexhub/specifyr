@@ -46,7 +46,15 @@ async function injectBundledLocalExtensions(merged, cwd) {
   }
 }
 
-export async function loadAppConfig(cwd = process.cwd()) {
+/**
+ * Loads the deployment-global app config. By default the bundled
+ * extensions list is injected on top of `localExtensions` so callers
+ * (workflow picker, extension installer) see them out of the box. The
+ * injection is in-memory only; passing `{ injectBundled: false }`
+ * skips it so write paths that round-trip through `saveAppConfig`
+ * never persist absolute bundled paths into `config.json`.
+ */
+export async function loadAppConfig(cwd = process.cwd(), { injectBundled = true } = {}) {
   const saved = await readJson(configPath(cwd), null);
   const merged = saved
     ? {
@@ -58,7 +66,7 @@ export async function loadAppConfig(cwd = process.cwd()) {
         acp: { ...DEFAULT_APP_CONFIG.acp, ...(saved.acp ?? {}) }
       }
     : structuredClone(DEFAULT_APP_CONFIG);
-  await injectBundledLocalExtensions(merged, cwd);
+  if (injectBundled) await injectBundledLocalExtensions(merged, cwd);
   return merged;
 }
 
@@ -74,7 +82,7 @@ export async function setStandardExtensions(extensions, cwd = process.cwd()) {
     throw new Error("standardExtensions must be an array of strings");
   }
   const cleaned = Array.from(new Set(extensions.map((x) => String(x).trim()).filter(Boolean)));
-  const current = await loadAppConfig(cwd);
+  const current = await loadAppConfig(cwd, { injectBundled: false });
   const next = { ...current, standardExtensions: cleaned };
   await saveAppConfig(next, cwd);
   return next.standardExtensions;
@@ -102,7 +110,7 @@ function normalizeLocalEntry(entry) {
 
 export async function addLocalExtension(entry, cwd = process.cwd()) {
   const normalized = normalizeLocalEntry(entry);
-  const current = await loadAppConfig(cwd);
+  const current = await loadAppConfig(cwd, { injectBundled: false });
   const existing = current.localExtensions ?? [];
   if (existing.some((e) => e.slug === normalized.slug)) {
     throw new Error(`local extension '${normalized.slug}' is already registered`);
@@ -115,7 +123,7 @@ export async function addLocalExtension(entry, cwd = process.cwd()) {
 export async function removeLocalExtension(slug, cwd = process.cwd()) {
   const target = String(slug ?? "").trim();
   if (!target) throw new Error("slug is required");
-  const current = await loadAppConfig(cwd);
+  const current = await loadAppConfig(cwd, { injectBundled: false });
   const existing = current.localExtensions ?? [];
   const kept = existing.filter((e) => e.slug !== target);
   if (kept.length === existing.length) {
@@ -131,6 +139,8 @@ export async function removeLocalExtension(slug, cwd = process.cwd()) {
 export async function findLocalExtensionPath(slug, cwd = process.cwd()) {
   const target = String(slug ?? "").trim();
   if (!target) return null;
+  // Read-only lookup → keep bundled injection so callers can resolve
+  // bundled-only slugs that have no saved entry.
   const current = await loadAppConfig(cwd);
   const found = (current.localExtensions ?? []).find((e) => e.slug === target);
   return found ? found.path : null;

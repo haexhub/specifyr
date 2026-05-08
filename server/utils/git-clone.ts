@@ -1,5 +1,8 @@
 import { spawn } from "node:child_process";
+import { lookup as dnsLookup } from "node:dns/promises";
 import fs from "node:fs/promises";
+import net from "node:net";
+import path from "node:path";
 
 export interface GitCloneOptions {
   url: string;
@@ -18,13 +21,43 @@ export interface GitCloneResult {
 }
 
 /**
- * Validates that the URL is a plain `https://...` URL pointing at a
- * non-loopback host. Rejects file://, git://, ssh://, and bracket-form
- * IPv6 URLs that resolve to loopback. The host check defends against
- * SSRF-style abuse where a malicious org admin would otherwise be able
- * to register `http://169.254.169.254/...` (cloud metadata) as a Git
- * remote — git wouldn't actually clone non-https, but failing fast
- * here makes the constraint explicit.
+ * Reject any string that has reserved-range bits set. Covers the IPv4
+ * spaces ordinary developers know about (loopback, RFC1918, link-local,
+ * shared-CGN, metadata) plus IPv6 loopback / link-local / ULA / IPv4-
+ * mapped equivalents. Anything else (incl. real public addresses) is
+ * accepted.
+ */
+function isPrivateAddress(ip: string): boolean {
+  const family = net.isIP(ip);
+  if (family === 4) {
+    const [a, b] = ip.split(".").map((s) => Number(s));
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 172 && b !== undefined && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true; // link-local + AWS metadata
+    if (a === 100 && b !== undefined && b >= 64 && b <= 127) return true; // CGN
+    if (a === 0) return true;
+    return false;
+  }
+  if (family === 6) {
+    const lower = ip.toLowerCase();
+    if (lower === "::1" || lower === "::") return true;
+    if (lower.startsWith("fe80:") || lower.startsWith("fe80::")) return true;
+    // Unique-Local Addresses fc00::/7 → leading nibble in {fc, fd}.
+    if (/^fc[0-9a-f][0-9a-f]:/.test(lower) || /^fd[0-9a-f][0-9a-f]:/.test(lower)) return true;
+    // IPv4-mapped (::ffff:a.b.c.d) — re-check the embedded v4 address.
+    const mapped = /^::ffff:([0-9.]+)$/.exec(lower);
+    if (mapped) return isPrivateAddress(mapped[1]!);
+    return false;
+  }
+  return false;
+}
+
+/**
+ * Validates URL shape. Returns the parsed URL on success, throws an
+ * Error with a user-readable message otherwise. Does NOT do DNS — that
+ * happens in {@link assertHostNotPrivate} after parsing succeeds.
  */
 function assertSafeUrl(url: string): URL {
   let parsed: URL;
@@ -36,22 +69,52 @@ function assertSafeUrl(url: string): URL {
   if (parsed.protocol !== "https:") {
     throw new Error("only https:// URLs are supported");
   }
+  // Inline basic-auth in the URL is a footgun: it would bypass the
+  // encrypted credentials path and end up in DB / logs. Refuse it
+  // explicitly here and have the caller pass `credentials` instead.
+  if (parsed.username || parsed.password) {
+    throw new Error("URL must not contain inline credentials; use the credentials field");
+  }
   // URL.hostname strips brackets for IPv6 in some Node versions but
-  // keeps them in others — accept both forms for the loopback check.
+  // keeps them in others — normalise by trimming.
   const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-  if (
-    host === "localhost" ||
-    host === "127.0.0.1" ||
-    host === "::1" ||
-    host === "0:0:0:0:0:0:0:1" ||
-    host.startsWith("169.254.") ||
-    host.endsWith(".localhost")
-  ) {
+  if (host === "localhost" || host.endsWith(".localhost")) {
     throw new Error("URL host is not allowed");
   }
-  // git deals with whatever ref it's given; we don't try to validate it
-  // because the legal grammar is broad and our timeout bounds the cost.
+  // Literal-IP fast path: don't bother resolving, just check directly.
+  if (net.isIP(host) && isPrivateAddress(host)) {
+    throw new Error("URL host is not allowed");
+  }
   return parsed;
+}
+
+/**
+ * Resolve `hostname` (A + AAAA) and reject every result that lives in
+ * a reserved range. This closes the public-name-pointing-at-private-IP
+ * SSRF hole that string checks alone leave open. There is still a TOCTOU
+ * window between this resolution and git's own resolution at clone time
+ * (DNS rebinding); fixing that requires git to bind a pre-resolved IP,
+ * which we don't do here. The protocol allowlist + repo sandbox limits
+ * the blast radius even if rebinding wins.
+ */
+async function assertHostNotPrivate(hostname: string): Promise<void> {
+  if (net.isIP(hostname)) {
+    if (isPrivateAddress(hostname)) {
+      throw new Error("URL host is not allowed");
+    }
+    return;
+  }
+  let addrs: { address: string; family: number }[];
+  try {
+    addrs = await dnsLookup(hostname, { all: true });
+  } catch {
+    throw new Error("URL host is not resolvable");
+  }
+  for (const a of addrs) {
+    if (isPrivateAddress(a.address)) {
+      throw new Error("URL host is not allowed");
+    }
+  }
 }
 
 function buildCloneUrl(parsed: URL, credentials?: { username: string; token: string } | null): string {
@@ -67,18 +130,47 @@ function buildCloneUrl(parsed: URL, credentials?: { username: string; token: str
 }
 
 /**
+ * Replace any `username:password@host` userinfo prefix with `***:***@`
+ * in the given text. Covers both the raw and percent-encoded forms we
+ * produce in {@link buildCloneUrl}, plus a generic fallback for any
+ * stray basic-auth-shaped substring git might log.
+ */
+function redactSecrets(
+  text: string,
+  credentials?: { username: string; token: string } | null,
+): string {
+  let out = text;
+  if (credentials) {
+    const raw = `${credentials.username}:${credentials.token}@`;
+    const enc = `${encodeURIComponent(credentials.username)}:${encodeURIComponent(credentials.token)}@`;
+    out = out.split(raw).join("***:***@").split(enc).join("***:***@");
+  }
+  // Fallback: scrub anything that looks like userinfo@host, in case git
+  // echoed the URL after re-encoding or normalisation.
+  return out.replace(/(https?:\/\/)[^/\s@]+:[^/\s@]+@/g, "$1***:***@");
+}
+
+/**
  * Run `git clone --depth 1 [--branch <ref>] <url> <destination>` with the
  * given options. The `.git` directory is removed on success so the
  * resulting tree contains no embedded credentials in `.git/config`.
  *
- * The destination must not already exist. Cleanup on failure is the
- * caller's responsibility (we don't rm-rf a partial clone here because
- * the caller knows the safe sandbox boundary).
+ * Destination must be an absolute path that does not yet exist.
+ * Cleanup on failure is the caller's responsibility (we don't rm-rf a
+ * partial clone here because the caller owns the sandbox boundary).
  */
 export async function gitClone(opts: GitCloneOptions): Promise<GitCloneResult> {
+  if (!path.isAbsolute(opts.destination)) {
+    return { ok: false, stderr: "destination must be an absolute path" };
+  }
+  if (await fs.stat(opts.destination).then(() => true).catch(() => false)) {
+    return { ok: false, stderr: "destination already exists" };
+  }
+
   let parsed: URL;
   try {
     parsed = assertSafeUrl(opts.url);
+    await assertHostNotPrivate(parsed.hostname.replace(/^\[|\]$/g, ""));
   } catch (err) {
     return { ok: false, stderr: (err as Error).message };
   }
@@ -88,6 +180,7 @@ export async function gitClone(opts: GitCloneOptions): Promise<GitCloneResult> {
   if (opts.ref) args.push("--branch", opts.ref);
   args.push(cloneUrl, opts.destination);
 
+  const creds = opts.credentials ?? null;
   const stderr: string[] = [];
   const child = spawn("git", args, {
     env: {
@@ -106,7 +199,9 @@ export async function gitClone(opts: GitCloneOptions): Promise<GitCloneResult> {
     },
     stdio: ["ignore", "ignore", "pipe"],
   });
-  child.stderr?.on("data", (chunk) => stderr.push(chunk.toString()));
+  child.stderr?.on("data", (chunk) =>
+    stderr.push(redactSecrets(chunk.toString(), creds)),
+  );
 
   const timeoutMs = opts.timeoutMs ?? 60_000;
   const result = await new Promise<GitCloneResult>((resolve) => {
@@ -116,11 +211,11 @@ export async function gitClone(opts: GitCloneOptions): Promise<GitCloneResult> {
     }, timeoutMs);
     child.on("error", (err) => {
       clearTimeout(timer);
-      resolve({ ok: false, stderr: String(err) });
+      resolve({ ok: false, stderr: redactSecrets(String(err), creds) });
     });
     child.on("close", (code) => {
       clearTimeout(timer);
-      resolve({ ok: code === 0, stderr: stderr.join("") });
+      resolve({ ok: code === 0, stderr: redactSecrets(stderr.join(""), creds) });
     });
   });
 

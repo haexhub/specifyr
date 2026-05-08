@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -295,20 +298,21 @@ export type NewOrgExtension = typeof orgExtensions.$inferInsert;
 // every permission implicitly (the check in server/utils/org-permissions
 // short-circuits on role='admin' before reading this table).
 //
-// `permission` is enumerated to keep typos out of the DB; new
-// permissions extend the enum + a code path uses them. Today the only
-// entry is `manage_extensions`, granted by org admins to let trusted
-// members register/remove org-scoped extensions without giving them
-// full admin powers.
+// `permission` is enumerated at the type AND DB level (CHECK constraint)
+// so a typo can't drift past validation. New permissions extend the
+// enum + a code path that uses them.
+//
+// Lifecycle: a delegated grant must vanish if the underlying membership
+// vanishes — otherwise re-adding a previously-removed user resurrects
+// their old `manage_extensions` privilege. The composite FK to
+// `org_memberships(org_id, user_id)` with ON DELETE CASCADE makes
+// membership the single source of authority. Deleting the org or user
+// also cascades, transitively, via that membership row.
 export const orgMemberPermissions = pgTable(
   "org_member_permissions",
   {
-    orgId: uuid("org_id")
-      .notNull()
-      .references(() => orgs.id, { onDelete: "cascade" }),
-    userId: uuid("user_id")
-      .notNull()
-      .references(() => users.id, { onDelete: "cascade" }),
+    orgId: uuid("org_id").notNull(),
+    userId: uuid("user_id").notNull(),
     permission: text("permission", { enum: ["manage_extensions"] }).notNull(),
     grantedBy: uuid("granted_by").references(() => users.id, {
       onDelete: "set null",
@@ -320,6 +324,15 @@ export const orgMemberPermissions = pgTable(
   (t) => ({
     pk: primaryKey({ columns: [t.orgId, t.userId, t.permission] }),
     userIdx: index("org_member_permissions_user_idx").on(t.userId),
+    membershipFk: foreignKey({
+      name: "org_member_permissions_membership_fk",
+      columns: [t.orgId, t.userId],
+      foreignColumns: [orgMemberships.orgId, orgMemberships.userId],
+    }).onDelete("cascade"),
+    permissionCheck: check(
+      "org_member_permissions_permission_chk",
+      sql`${t.permission} IN ('manage_extensions')`,
+    ),
   }),
 );
 

@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { projectCwd, loadEventStore } from "./specifyr-stores";
 import { dataDir, extensionsDir } from "./data-dirs";
 import { getAppConfigModule } from "./app-config";
-import { orgExtensionPath } from "./org-extensions-store";
+import { getOrgExtensionBySlug } from "./org-extensions-store";
 
 export interface ExtensionInstallRecord {
   slug: string;
@@ -100,32 +100,47 @@ export async function installExtensionsInProject(
 
   for (const slug of toInstall) {
     // Resolution order:
-    //   1. org-scoped (private to ownerOrgId)
-    //   2. app-config localExtensions (deployment-global + bundled)
-    //   3. global extensions dir
-    //   4. community catalog
+    //   1. org-scoped — DB row is the source of truth. If the row
+    //      exists but the on-disk clone is missing, fail closed rather
+    //      than letting the slug fall through to a deployment/community
+    //      extension that happens to share the name.
+    //   2. app-config localExtensions (deployment-global + bundled).
+    //   3. global extensions dir.
+    //   4. community catalog (no `--dev`, by slug).
     let localPath: string | null = null;
+    let resolutionFailed = false;
+    let resolutionFailureMessage = "";
     if (ownerOrgId) {
-      const orgPath = orgExtensionPath(ownerOrgId, slug);
-      try {
-        await fs.access(orgPath);
-        localPath = orgPath;
-      } catch { /* not org-scoped */ }
+      const orgRow = await getOrgExtensionBySlug(ownerOrgId, slug);
+      if (orgRow) {
+        const onDisk = await fs.access(orgRow.path).then(() => true).catch(() => false);
+        if (onDisk) {
+          localPath = orgRow.path;
+        } else {
+          resolutionFailed = true;
+          resolutionFailureMessage = `org extension '${slug}' is registered but the on-disk clone is missing — re-add the extension`;
+        }
+      }
     }
-    if (!localPath) {
+    if (!resolutionFailed && !localPath) {
       localPath = await findLocalExtensionPath(slug);
     }
-    if (!localPath) {
+    if (!resolutionFailed && !localPath) {
       const globalPath = path.join(extensionsDir(), slug);
       try {
         await fs.access(globalPath);
         localPath = globalPath;
       } catch { /* not in global dir */ }
     }
-    const args = localPath
-      ? ["extension", "add", "--dev", localPath]
-      : ["extension", "add", slug];
-    const result = await runCommand("specify", args, { cwd });
+    let result: { ok: boolean; stdout?: string; stderr?: string };
+    if (resolutionFailed) {
+      result = { ok: false, stderr: resolutionFailureMessage };
+    } else {
+      const args = localPath
+        ? ["extension", "add", "--dev", localPath]
+        : ["extension", "add", slug];
+      result = await runCommand("specify", args, { cwd });
+    }
     const record: ExtensionInstallRecord = {
       slug,
       installedAt: new Date().toISOString(),

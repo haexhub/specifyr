@@ -1,5 +1,5 @@
 {
-  "id": "9d7a0fd9-390d-4617-af70-d02b7b2d36f1",
+  "id": "4f445397-476c-4c4a-9e4f-6ce24caa2af6",
   "prevId": "f3c12b7c-4d4f-49a1-b657-7ee352442f9c",
   "version": "7",
   "dialect": "postgresql",
@@ -445,32 +445,6 @@
         }
       },
       "foreignKeys": {
-        "org_member_permissions_org_id_orgs_id_fk": {
-          "name": "org_member_permissions_org_id_orgs_id_fk",
-          "tableFrom": "org_member_permissions",
-          "tableTo": "orgs",
-          "columnsFrom": [
-            "org_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "org_member_permissions_user_id_users_id_fk": {
-          "name": "org_member_permissions_user_id_users_id_fk",
-          "tableFrom": "org_member_permissions",
-          "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
         "org_member_permissions_granted_by_users_id_fk": {
           "name": "org_member_permissions_granted_by_users_id_fk",
           "tableFrom": "org_member_permissions",
@@ -482,6 +456,21 @@
             "id"
           ],
           "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "org_member_permissions_membership_fk": {
+          "name": "org_member_permissions_membership_fk",
+          "tableFrom": "org_member_permissions",
+          "tableTo": "org_memberships",
+          "columnsFrom": [
+            "org_id",
+            "user_id"
+          ],
+          "columnsTo": [
+            "org_id",
+            "user_id"
+          ],
+          "onDelete": "cascade",
           "onUpdate": "no action"
         }
       },
@@ -497,7 +486,12 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "org_member_permissions_permission_chk": {
+          "name": "org_member_permissions_permission_chk",
+          "value": "\"org_member_permissions\".\"permission\" IN ('manage_extensions')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.org_memberships": {
