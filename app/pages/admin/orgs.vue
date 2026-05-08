@@ -52,30 +52,30 @@ const { data, pending } = await useFetch<OrgsResponse>("/api/admin/orgs", {
     </p>
 
     <div v-if="pending" class="mt-6 text-sm text-muted-foreground">Loading…</div>
-    <UiTable v-else class="mt-6">
-      <UiTableHeader>
-        <UiTableRow>
-          <UiTableHead>Org</UiTableHead>
-          <UiTableHead>Owner</UiTableHead>
-          <UiTableHead>Members</UiTableHead>
-          <UiTableHead>Projects</UiTableHead>
-          <UiTableHead>Created</UiTableHead>
-        </UiTableRow>
-      </UiTableHeader>
-      <UiTableBody>
-        <UiTableRow v-for="o in data.orgs" :key="o.id">
-          <UiTableCell>
+    <ShadcnTable v-else class="mt-6">
+      <ShadcnTableHeader>
+        <ShadcnTableRow>
+          <ShadcnTableHead>Org</ShadcnTableHead>
+          <ShadcnTableHead>Owner</ShadcnTableHead>
+          <ShadcnTableHead>Members</ShadcnTableHead>
+          <ShadcnTableHead>Projects</ShadcnTableHead>
+          <ShadcnTableHead>Created</ShadcnTableHead>
+        </ShadcnTableRow>
+      </ShadcnTableHeader>
+      <ShadcnTableBody>
+        <ShadcnTableRow v-for="o in data.orgs" :key="o.id">
+          <ShadcnTableCell>
             <div class="font-medium">{{ o.name }}</div>
             <div class="font-mono text-xs text-muted-foreground">/{{ o.slug }}</div>
-          </UiTableCell>
-          <UiTableCell class="font-mono text-xs">{{ o.ownerEmail ?? "—" }}</UiTableCell>
-          <UiTableCell>{{ o.memberCount }}</UiTableCell>
-          <UiTableCell>{{ o.projectCount }}</UiTableCell>
-          <UiTableCell class="text-muted-foreground">
+          </ShadcnTableCell>
+          <ShadcnTableCell class="font-mono text-xs">{{ o.ownerEmail ?? "—" }}</ShadcnTableCell>
+          <ShadcnTableCell>{{ o.memberCount }}</ShadcnTableCell>
+          <ShadcnTableCell>{{ o.projectCount }}</ShadcnTableCell>
+          <ShadcnTableCell class="text-muted-foreground">
             {{ new Date(o.createdAt).toLocaleDateString() }}
-          </UiTableCell>
-        </UiTableRow>
-      </UiTableBody>
-    </UiTable>
+          </ShadcnTableCell>
+        </ShadcnTableRow>
+      </ShadcnTableBody>
+    </ShadcnTable>
   </div>
 </template>
