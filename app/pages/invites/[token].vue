@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: "workspace" });
+
 import { Building2 } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 

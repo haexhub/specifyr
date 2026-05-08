@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: "workspace" });
+
 import { Rocket, AlertTriangle, Play, Square, Loader2, RefreshCw, CheckCircle2, Circle } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";

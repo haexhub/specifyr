@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: "workspace" });
+
 import { PanelRightOpen, Play } from "lucide-vue-next";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";

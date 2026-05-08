@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: "workspace" });
+
 import { Check, X, ArrowUpRight, Loader2, ShieldQuestion, AlertTriangle } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
@@ -52,7 +54,7 @@ async function decide(decision: Decision) {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center p-6">
+  <div class="flex h-full items-center justify-center p-6">
     <div class="w-full max-w-md">
       <Card v-if="fetchPending && !approval">
         <CardContent class="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">

@@ -10,10 +10,6 @@ const { data: projects, refresh } = await useFetch<ProjectListItem[]>("/api/proj
 
 provide("refreshProjects", refresh);
 
-// Inside a project, the ProjectStepSidebar already provides project context.
-// We keep the global sidebar but collapse it to its icon-rail (compact)
-// mode so Settings/Extensions/Project-list stay one click away without
-// crowding the workspace.
 const compactGlobalSidebar = computed(() => route.path.startsWith("/specs/"));
 </script>
 
@@ -22,9 +18,7 @@ const compactGlobalSidebar = computed(() => route.path.startsWith("/specs/"));
     <div class="flex h-full">
       <ProjectListSidebar :projects="projects ?? []" :compact="compactGlobalSidebar" />
       <main class="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <div class="mx-auto w-full max-w-4xl p-6 lg:p-10">
-          <slot />
-        </div>
+        <slot />
       </main>
     </div>
   </div>
