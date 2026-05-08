@@ -48,7 +48,7 @@ async function createOrg() {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-6 py-8">
+  <div>
     <div class="mb-6 flex items-start justify-between gap-4">
       <div>
         <NuxtLink

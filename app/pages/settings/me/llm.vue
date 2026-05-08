@@ -57,7 +57,7 @@ const anthropicOauth = computed(
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-6 py-8">
+  <div>
     <NuxtLink
       to="/settings"
       class="text-xs text-muted-foreground hover:text-foreground"

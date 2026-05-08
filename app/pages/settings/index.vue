@@ -5,7 +5,7 @@ const { me, isDevAuth, logout, devLogin } = useMe();
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-6 py-8">
+  <div>
     <div class="flex items-start justify-between gap-4">
       <div>
         <h1 class="text-2xl font-semibold">Settings</h1>

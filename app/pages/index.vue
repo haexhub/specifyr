@@ -1,4 +1,6 @@
 <script setup lang="ts">
+definePageMeta({ layout: "workspace" });
+
 import { Plus, FolderOpen } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import ProjectCreateDialog from "~/components/ProjectCreateDialog.vue";
@@ -24,7 +26,7 @@ async function handleCreated() {
 </script>
 
 <template>
-  <div class="flex min-h-screen items-center justify-center px-8 py-12">
+  <div class="flex h-full items-center justify-center px-8 py-12">
     <div class="w-full max-w-xl text-center">
       <div class="mx-auto mb-6 inline-flex size-24 items-center justify-center rounded-lg bg-primary/10 text-primary">
         <SpecifyrLogo size="hero" :show-text="false" />

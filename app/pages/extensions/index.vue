@@ -252,9 +252,8 @@ async function unregisterLocalExtension(slug: string) {
 </script>
 
 <template>
-  <div class="h-dvh overflow-y-auto p-6 lg:p-10">
-    <div class="mx-auto w-full max-w-4xl space-y-6">
-      <header class="flex shrink-0 items-center gap-3">
+  <div class="space-y-6">
+    <header class="flex shrink-0 items-center gap-3">
         <div class="inline-flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Puzzle class="size-5" />
         </div>
@@ -647,6 +646,5 @@ async function unregisterLocalExtension(slug: string) {
           </template>
         </CardContent>
       </Card>
-    </div>
   </div>
 </template>

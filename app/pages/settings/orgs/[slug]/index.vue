@@ -73,7 +73,7 @@ async function copyLink() {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-6 py-8">
+  <div>
     <NuxtLink
       to="/settings/orgs"
       class="text-xs text-muted-foreground hover:text-foreground"

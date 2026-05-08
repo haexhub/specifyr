@@ -176,9 +176,8 @@ async function installIntoSelectedProjects() {
 </script>
 
 <template>
-  <div class="h-dvh overflow-y-auto p-6 lg:p-10">
-    <div class="mx-auto w-full max-w-4xl space-y-4">
-      <NuxtLink to="/extensions" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+  <div class="space-y-4">
+    <NuxtLink to="/extensions" class="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft class="size-4" />
         {{ $t("extensions.detail.backToCatalog") }}
       </NuxtLink>
@@ -402,6 +401,5 @@ async function installIntoSelectedProjects() {
           </span>
         </div>
       </template>
-    </div>
   </div>
 </template>
