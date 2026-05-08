@@ -2,8 +2,6 @@
 definePageMeta({ layout: "workspace", middleware: ["platform-admin"] });
 
 import { Settings } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
 
 type Policy = "open" | "domain" | "closed";
 
@@ -113,9 +111,9 @@ async function save() {
       </div>
 
       <div class="flex items-center gap-3">
-        <Button type="submit" :disabled="saving">
+        <UiButton type="submit" :disabled="saving">
           {{ saving ? "Saving…" : "Save settings" }}
-        </Button>
+        </UiButton>
         <span v-if="message" class="text-sm text-primary">{{ message }}</span>
         <span v-if="error" class="text-sm text-destructive">{{ error }}</span>
       </div>

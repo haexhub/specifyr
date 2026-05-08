@@ -2,8 +2,6 @@
 definePageMeta({ layout: "workspace" });
 
 import { Building2 } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
 
 const { me, refresh } = useMe();
 
@@ -62,7 +60,7 @@ async function submit() {
       <form class="mt-5 space-y-3" @submit.prevent="submit">
         <label class="block text-sm">
           <span class="font-medium">Organization name</span>
-          <Input
+          <UiInput
             v-model="name"
             class="mt-1"
             placeholder="Acme Inc"
@@ -71,9 +69,9 @@ async function submit() {
           />
         </label>
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        <Button type="submit" class="w-full" :disabled="submitting">
+        <UiButton type="submit" class="w-full" :disabled="submitting">
           {{ submitting ? "Creating…" : "Create workspace" }}
-        </Button>
+        </UiButton>
       </form>
     </div>
   </div>

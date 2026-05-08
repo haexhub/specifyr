@@ -51,35 +51,35 @@ const { data, pending } = await useFetch<UsersResponse>("/api/admin/users", {
     </p>
 
     <div v-if="pending" class="mt-6 text-sm text-muted-foreground">Loading…</div>
-    <table v-else class="mt-6 w-full text-sm">
-      <thead class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-        <tr>
-          <th class="py-2 font-medium">User</th>
-          <th class="py-2 font-medium">Orgs</th>
-          <th class="py-2 font-medium">Joined</th>
-          <th class="py-2 font-medium">Flags</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="u in data.users" :key="u.id" class="border-b border-border/50">
-          <td class="py-3">
+    <UiTable v-else class="mt-6">
+      <UiTableHeader>
+        <UiTableRow>
+          <UiTableHead>User</UiTableHead>
+          <UiTableHead>Orgs</UiTableHead>
+          <UiTableHead>Joined</UiTableHead>
+          <UiTableHead>Flags</UiTableHead>
+        </UiTableRow>
+      </UiTableHeader>
+      <UiTableBody>
+        <UiTableRow v-for="u in data.users" :key="u.id">
+          <UiTableCell>
             <div class="font-medium">{{ u.displayName || u.email }}</div>
             <div class="font-mono text-xs text-muted-foreground">{{ u.email }}</div>
-          </td>
-          <td class="py-3">{{ u.orgCount }}</td>
-          <td class="py-3 text-muted-foreground">
+          </UiTableCell>
+          <UiTableCell>{{ u.orgCount }}</UiTableCell>
+          <UiTableCell class="text-muted-foreground">
             {{ new Date(u.createdAt).toLocaleDateString() }}
-          </td>
-          <td class="py-3">
+          </UiTableCell>
+          <UiTableCell>
             <span
               v-if="u.isPlatformAdmin"
               class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600"
             >
               <ShieldCheck class="size-3" /> platform admin
             </span>
-          </td>
-        </tr>
-      </tbody>
-    </table>
+          </UiTableCell>
+        </UiTableRow>
+      </UiTableBody>
+    </UiTable>
   </div>
 </template>

@@ -52,30 +52,30 @@ const { data, pending } = await useFetch<OrgsResponse>("/api/admin/orgs", {
     </p>
 
     <div v-if="pending" class="mt-6 text-sm text-muted-foreground">Loading…</div>
-    <table v-else class="mt-6 w-full text-sm">
-      <thead class="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-        <tr>
-          <th class="py-2 font-medium">Org</th>
-          <th class="py-2 font-medium">Owner</th>
-          <th class="py-2 font-medium">Members</th>
-          <th class="py-2 font-medium">Projects</th>
-          <th class="py-2 font-medium">Created</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-for="o in data.orgs" :key="o.id" class="border-b border-border/50">
-          <td class="py-3">
+    <UiTable v-else class="mt-6">
+      <UiTableHeader>
+        <UiTableRow>
+          <UiTableHead>Org</UiTableHead>
+          <UiTableHead>Owner</UiTableHead>
+          <UiTableHead>Members</UiTableHead>
+          <UiTableHead>Projects</UiTableHead>
+          <UiTableHead>Created</UiTableHead>
+        </UiTableRow>
+      </UiTableHeader>
+      <UiTableBody>
+        <UiTableRow v-for="o in data.orgs" :key="o.id">
+          <UiTableCell>
             <div class="font-medium">{{ o.name }}</div>
             <div class="font-mono text-xs text-muted-foreground">/{{ o.slug }}</div>
-          </td>
-          <td class="py-3 font-mono text-xs">{{ o.ownerEmail ?? "—" }}</td>
-          <td class="py-3">{{ o.memberCount }}</td>
-          <td class="py-3">{{ o.projectCount }}</td>
-          <td class="py-3 text-muted-foreground">
+          </UiTableCell>
+          <UiTableCell class="font-mono text-xs">{{ o.ownerEmail ?? "—" }}</UiTableCell>
+          <UiTableCell>{{ o.memberCount }}</UiTableCell>
+          <UiTableCell>{{ o.projectCount }}</UiTableCell>
+          <UiTableCell class="text-muted-foreground">
             {{ new Date(o.createdAt).toLocaleDateString() }}
-          </td>
-        </tr>
-      </tbody>
-    </table>
+          </UiTableCell>
+        </UiTableRow>
+      </UiTableBody>
+    </UiTable>
   </div>
 </template>
