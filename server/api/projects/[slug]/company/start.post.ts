@@ -211,8 +211,7 @@ export default defineEventHandler(async (event) => {
       let oauthSessionToken: string | null = null;
       if (userId) {
         const project = await getProjectFromDb(slug);
-        const ownerOrgId =
-          project?.ownerKind === "org" ? project.ownerId : null;
+        const ownerOrgId = project?.ownerOrgId ?? null;
         resolvedAnthropic = await resolveCredentialForRequest(
           userId,
           ownerOrgId,

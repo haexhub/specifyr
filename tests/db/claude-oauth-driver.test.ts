@@ -266,3 +266,50 @@ test("readCredentialsExpiry: returns null for malformed JSON", async () => {
     assert.equal(await readCredentialsExpiry(home), null);
   });
 });
+
+// ───── readCredentialsState ─────
+
+test("readCredentialsState: 'missing' when file is absent", async () => {
+  const { readCredentialsState } = await import(
+    "../../server/utils/claude-oauth-driver.ts"
+  );
+  await withTmpHome(async (home) => {
+    const r = await readCredentialsState(home);
+    assert.equal(r.kind, "missing");
+  });
+});
+
+test("readCredentialsState: 'present' with expiry when file is valid", async () => {
+  const { readCredentialsState } = await import(
+    "../../server/utils/claude-oauth-driver.ts"
+  );
+  await withTmpHome(async (home) => {
+    const target = path.join(home, ".claude", ".credentials.json");
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    const future = Date.now() + 60_000;
+    await fs.writeFile(
+      target,
+      JSON.stringify({ accessToken: "x", expiresAt: future }),
+    );
+    const r = await readCredentialsState(home);
+    assert.equal(r.kind, "present");
+    assert.equal(
+      r.kind === "present" ? r.expiresAt?.getTime() : null,
+      future,
+    );
+  });
+});
+
+test("readCredentialsState: 'present' with null expiry for malformed JSON", async () => {
+  const { readCredentialsState } = await import(
+    "../../server/utils/claude-oauth-driver.ts"
+  );
+  await withTmpHome(async (home) => {
+    const target = path.join(home, ".claude", ".credentials.json");
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, "not json");
+    const r = await readCredentialsState(home);
+    assert.equal(r.kind, "present");
+    assert.equal(r.kind === "present" ? r.expiresAt : "wrong", null);
+  });
+});

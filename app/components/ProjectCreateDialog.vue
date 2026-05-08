@@ -197,20 +197,20 @@ async function submit() {
             />
           </div>
 
-          <div v-if="orgs.length > 0" class="space-y-1.5">
-            <label for="project-owner" class="text-sm font-medium">Owner</label>
+          <div v-if="orgs.length > 1" class="space-y-1.5">
+            <label for="project-owner" class="text-sm font-medium">Workspace</label>
             <select
               id="project-owner"
               v-model="selectedOwner"
               class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
-              <option value="">Personal (only you)</option>
+              <option value="">Pick a workspace…</option>
               <option v-for="o in orgs" :key="o.id" :value="o.slug">
-                {{ o.name }} (org)
+                {{ o.name }}
               </option>
             </select>
             <p class="text-[11px] text-muted-foreground">
-              Org-owned projects fall back to org-shared LLM credentials when a member has no personal key.
+              Members of this workspace will have access to the project.
             </p>
           </div>
 

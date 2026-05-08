@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Copy, KeyRound, UserPlus } from "lucide-vue-next";
+import { Copy, Crown, KeyRound, UserMinus, UserPlus } from "lucide-vue-next";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 
@@ -12,18 +12,93 @@ interface MemberRow {
 }
 
 interface MembersResponse {
-  org: { id: string; slug: string; name: string; createdAt: string };
+  org: {
+    id: string;
+    slug: string;
+    name: string;
+    ownerUserId: string;
+    createdAt: string;
+  };
   myRole: "admin" | "member";
   members: MemberRow[];
 }
 
 const route = useRoute();
 const slug = computed(() => String(route.params.slug));
+const { me } = useMe();
 
 const { data, refresh } = await useFetch<MembersResponse>(
   () => `/api/orgs/${slug.value}/members`,
   { default: () => null },
 );
+
+const amOwner = computed(
+  () => !!data.value && !!me.value && data.value.org.ownerUserId === me.value.id,
+);
+const amAdmin = computed(() => data.value?.myRole === "admin");
+
+const memberError = ref<string | null>(null);
+
+async function patchRole(userId: string, role: "admin" | "member") {
+  memberError.value = null;
+  try {
+    await $fetch(`/api/orgs/${slug.value}/members/${userId}/role`, {
+      method: "PATCH",
+      body: { role },
+    });
+    await refresh();
+  } catch (err: unknown) {
+    memberError.value =
+      (err as { statusMessage?: string })?.statusMessage ??
+      (err instanceof Error ? err.message : "could not update role");
+  }
+}
+
+async function removeMember(userId: string, label: string) {
+  if (!confirm(`Remove ${label} from this organization?`)) return;
+  memberError.value = null;
+  try {
+    await $fetch(`/api/orgs/${slug.value}/members/${userId}`, {
+      method: "DELETE",
+    });
+    await refresh();
+  } catch (err: unknown) {
+    memberError.value =
+      (err as { statusMessage?: string })?.statusMessage ??
+      (err instanceof Error ? err.message : "could not remove member");
+  }
+}
+
+const transferTarget = ref<string>("");
+const transferring = ref(false);
+const transferError = ref<string | null>(null);
+
+async function transferOwnership() {
+  if (!transferTarget.value) return;
+  if (
+    !confirm(
+      "Transfer ownership? You will keep admin rights but lose owner privileges (you can no longer be promoted back without the new owner transferring it back).",
+    )
+  ) {
+    return;
+  }
+  transferring.value = true;
+  transferError.value = null;
+  try {
+    await $fetch(`/api/orgs/${slug.value}/transfer-ownership`, {
+      method: "POST",
+      body: { newOwnerUserId: transferTarget.value },
+    });
+    transferTarget.value = "";
+    await refresh();
+  } catch (err: unknown) {
+    transferError.value =
+      (err as { statusMessage?: string })?.statusMessage ??
+      (err instanceof Error ? err.message : "could not transfer");
+  } finally {
+    transferring.value = false;
+  }
+}
 
 const inviteEmail = ref("");
 const inviteRole = ref<"admin" | "member">("member");
@@ -106,21 +181,58 @@ async function copyLink() {
             class="flex items-center justify-between gap-3 px-4 py-3"
           >
             <div class="min-w-0">
-              <div class="truncate text-sm font-medium">
-                {{ m.displayName || m.email }}
+              <div class="flex items-center gap-2 text-sm font-medium">
+                <span class="truncate">{{ m.displayName || m.email }}</span>
+                <span
+                  v-if="m.userId === data.org.ownerUserId"
+                  class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-600"
+                  title="Org owner — cannot be removed or demoted; transfer ownership first."
+                >
+                  <Crown class="size-3" /> owner
+                </span>
               </div>
               <div class="truncate font-mono text-xs text-muted-foreground">
                 {{ m.email }}
               </div>
             </div>
-            <span
-              class="rounded-md px-2 py-0.5 text-xs font-medium"
-              :class="m.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'"
-            >
-              {{ m.role }}
-            </span>
+            <div class="flex items-center gap-2">
+              <span
+                class="rounded-md px-2 py-0.5 text-xs font-medium"
+                :class="m.role === 'admin' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'"
+              >
+                {{ m.role }}
+              </span>
+              <template v-if="amAdmin && m.userId !== data.org.ownerUserId">
+                <Button
+                  v-if="m.role === 'member'"
+                  size="sm"
+                  variant="outline"
+                  @click="patchRole(m.userId, 'admin')"
+                >
+                  Promote
+                </Button>
+                <Button
+                  v-else
+                  size="sm"
+                  variant="outline"
+                  @click="patchRole(m.userId, 'member')"
+                >
+                  Demote
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  class="text-destructive hover:bg-destructive/10"
+                  :title="`Remove ${m.email}`"
+                  @click="removeMember(m.userId, m.displayName || m.email)"
+                >
+                  <UserMinus class="size-4" />
+                </Button>
+              </template>
+            </div>
           </li>
         </ul>
+        <p v-if="memberError" class="mt-2 text-sm text-destructive">{{ memberError }}</p>
       </section>
 
       <section v-if="data.myRole === 'admin'" class="mt-8">
@@ -173,6 +285,49 @@ async function copyLink() {
             Expires {{ new Date(inviteResult.expiresAt).toLocaleString() }}
           </p>
         </div>
+      </section>
+
+      <section
+        v-if="amOwner && data.members.filter(m => m.userId !== data.org.ownerUserId).length > 0"
+        class="mt-12 rounded-lg border border-destructive/30 bg-destructive/5 p-4"
+      >
+        <h2 class="text-sm font-semibold uppercase tracking-wide text-destructive">
+          Danger zone
+        </h2>
+        <p class="mt-2 text-sm">
+          Transfer ownership to another member. You'll keep admin rights but
+          lose owner privileges (you'll be removable, the new owner won't).
+        </p>
+        <form
+          class="mt-3 flex flex-wrap items-center gap-2"
+          @submit.prevent="transferOwnership"
+        >
+          <select
+            v-model="transferTarget"
+            class="rounded-md border border-input bg-background px-3 py-2 text-sm"
+            :disabled="transferring"
+          >
+            <option value="">Select new owner…</option>
+            <option
+              v-for="m in data.members.filter(x => x.userId !== data.org.ownerUserId)"
+              :key="m.userId"
+              :value="m.userId"
+            >
+              {{ m.displayName || m.email }} ({{ m.email }})
+            </option>
+          </select>
+          <Button
+            type="submit"
+            variant="destructive"
+            size="sm"
+            :disabled="!transferTarget || transferring"
+          >
+            {{ transferring ? "Transferring…" : "Transfer ownership" }}
+          </Button>
+        </form>
+        <p v-if="transferError" class="mt-2 text-sm text-destructive">
+          {{ transferError }}
+        </p>
       </section>
     </template>
 

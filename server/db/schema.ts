@@ -1,6 +1,7 @@
 import {
   boolean,
   index,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -9,13 +10,20 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-// Mirror of Authelia identity. UPSERT'd by the auth middleware on the
+// Mirror of Authentik identity. UPSERT'd by the auth middleware on the
 // first request from a previously-unseen email. `email` is the natural
-// key — Authelia is the source of truth for who has what address.
+// key — Authentik is the source of truth for who has what address.
+//
+// `isPlatformAdmin` is populated from the `SPECIFYR_PLATFORM_ADMIN_EMAILS`
+// env var on each upsert (see middleware/auth.ts). Storing it on the row
+// rather than re-checking the env on every request keeps later
+// platform-admin gating cheap and lets future UI surface "promote to
+// platform admin" without an env-var round-trip.
 export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: text("email").notNull().unique(),
   displayName: text("display_name"),
+  isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -23,44 +31,52 @@ export const users = pgTable("users", {
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 
-// Project ownership. `slug` matches the on-disk dir name (and the
-// existing artifact-store key); we don't dual-source-of-truth — the
-// filesystem stays the source for project content, this row only
-// records who owns it.
-//
-// owner_kind/owner_id is polymorphic: points at users.id for personal
-// projects, orgs.id for org-shared ones. No FK constraint because of
-// the polymorphism (Postgres can't enforce it natively); integrity is
-// checked at write-time in project-store.ts.
-export const projects = pgTable(
-  "projects",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    slug: text("slug").notNull().unique(),
-    ownerKind: text("owner_kind", { enum: ["user", "org"] }).notNull(),
-    ownerId: uuid("owner_id").notNull(),
-    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  },
-  (t) => ({
-    ownerIdx: index("projects_owner_idx").on(t.ownerKind, t.ownerId),
-  }),
-);
-
-export type Project = typeof projects.$inferSelect;
-export type NewProject = typeof projects.$inferInsert;
-
 // Tenant boundary. Created by any logged-in user; creator becomes
-// admin automatically. `slug` is URL-safe, derived from `name`.
+// owner + admin automatically. `slug` is URL-safe, derived from `name`.
+//
+// `ownerUserId` is immutable except via the dedicated
+// transfer-ownership endpoint, which atomically swaps it and ensures
+// both old and new owners hold an admin membership row. Membership
+// guards key off this column: the owner cannot be removed or demoted.
 export const orgs = pgTable("orgs", {
   id: uuid("id").primaryKey().defaultRandom(),
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
+  ownerUserId: uuid("owner_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
   createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type Org = typeof orgs.$inferSelect;
 export type NewOrg = typeof orgs.$inferInsert;
+
+// Project ownership. `slug` matches the on-disk dir name (and the
+// existing artifact-store key); we don't dual-source-of-truth — the
+// filesystem stays the source for project content, this row only
+// records who owns it.
+//
+// Mandatory-org model: every project belongs to an org. Personal
+// projects no longer exist as a first-class concept — a single-member
+// org with the user as owner is the new "personal" workspace.
+export const projects = pgTable(
+  "projects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    ownerOrgId: uuid("owner_org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    ownerOrgIdx: index("projects_owner_org_idx").on(t.ownerOrgId),
+  }),
+);
+
+export type Project = typeof projects.$inferSelect;
+export type NewProject = typeof projects.$inferInsert;
 
 export const orgMemberships = pgTable(
   "org_memberships",
@@ -205,3 +221,24 @@ export const runnerSessions = pgTable(
 
 export type RunnerSession = typeof runnerSessions.$inferSelect;
 export type NewRunnerSession = typeof runnerSessions.$inferInsert;
+
+// Platform-level settings (one row per `key`). JSONB so each setting
+// can carry its own shape — `registration.policy` is a string,
+// `registration.allowed_domains` is a string[]. Validation lives in
+// the helper layer (server/utils/platform-settings.ts), not the DB.
+//
+// Updating a setting always stamps `updated_by_user_id` for audit, so
+// the platform-admin UI can render "last changed by X". `created_at`
+// is implicit via the row's existence (no explicit column needed
+// because settings are upserted, not appended).
+export const platformSettings = pgTable("platform_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedByUserId: uuid("updated_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+});
+
+export type PlatformSetting = typeof platformSettings.$inferSelect;
+export type NewPlatformSetting = typeof platformSettings.$inferInsert;

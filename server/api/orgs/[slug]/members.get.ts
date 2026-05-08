@@ -17,7 +17,13 @@ export default defineEventHandler(async (event) => {
 
   const members = await listMembers(org.id);
   return {
-    org: { id: org.id, slug: org.slug, name: org.name, createdAt: org.createdAt },
+    org: {
+      id: org.id,
+      slug: org.slug,
+      name: org.name,
+      ownerUserId: org.ownerUserId,
+      createdAt: org.createdAt,
+    },
     myRole: me.role,
     members,
   };

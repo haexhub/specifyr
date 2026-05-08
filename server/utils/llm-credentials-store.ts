@@ -183,6 +183,28 @@ export async function markOAuthAuthorized(
   return row ? summarize(row) : null;
 }
 
+/**
+ * Flips an OAuth credential to `expired` — used by the status endpoint
+ * when it notices the on-disk credentials file is gone (user wiped it
+ * out-of-band, dir got recreated, etc). The DB row still exists so the
+ * UI can render "re-auth required" and offer a re-login button.
+ */
+export async function markOAuthExpired(
+  id: string,
+): Promise<CredentialSummary | null> {
+  const db = getDb();
+  if (!db) return null;
+  const [row] = await db
+    .update(llmCredentials)
+    .set({
+      oauthStatus: "expired",
+      updatedAt: new Date(),
+    })
+    .where(eq(llmCredentials.id, id))
+    .returning();
+  return row ? summarize(row) : null;
+}
+
 export async function deleteCredential(id: string): Promise<boolean> {
   const db = getDb();
   if (!db) return false;

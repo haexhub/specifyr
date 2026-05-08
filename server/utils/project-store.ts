@@ -1,4 +1,4 @@
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { orgMemberships, projects, type Project } from "../db/schema";
 
@@ -10,11 +10,16 @@ import { orgMemberships, projects, type Project } from "../db/schema";
  * This module owns the question "who owns project <slug>?" — used by
  * the auth layer to gate access.
  *
+ * Mandatory-org model: every project belongs to exactly one org. There
+ * is no per-user ownership. The "personal" workspace is a single-member
+ * org with the user as owner. Access is gated by membership in
+ * `owner_org_id`.
+ *
  * Every function returns null/empty when DATABASE_URL is unset, so
- * callers can safely fall back to legacy single-user behavior.
+ * callers can safely fall back to legacy single-user behavior in dev.
  */
 
-export type ProjectOwner = { kind: "user" | "org"; id: string };
+export type ProjectOwner = { ownerOrgId: string };
 
 export async function recordProjectOwnership(
   slug: string,
@@ -25,9 +30,9 @@ export async function recordProjectOwnership(
 
   const [row] = await db
     .insert(projects)
-    .values({ slug, ownerKind: owner.kind, ownerId: owner.id })
+    .values({ slug, ownerOrgId: owner.ownerOrgId })
     .returning();
-  return row;
+  return row ?? null;
 }
 
 export async function getProjectFromDb(slug: string): Promise<Project | null> {
@@ -39,57 +44,41 @@ export async function getProjectFromDb(slug: string): Promise<Project | null> {
 }
 
 /**
- * Slugs of projects the user can access: directly owned
- * (owner_kind='user') OR owned by an org the user is a member of.
+ * Slugs of projects the user can access — every project owned by an org
+ * the user is a member of.
  */
 export async function listProjectSlugsForUser(userId: string): Promise<string[]> {
   const db = getDb();
   if (!db) return [];
 
-  // Two-step rather than a join so the SQL stays trivially readable:
-  // (1) find the user's org ids, (2) match projects against
-  // user-owned OR (org-owned AND in those org ids).
   const memberships = await db
     .select({ orgId: orgMemberships.orgId })
     .from(orgMemberships)
     .where(eq(orgMemberships.userId, userId));
   const orgIds = memberships.map((m) => m.orgId);
-
-  const userOwnedFilter = and(
-    eq(projects.ownerKind, "user"),
-    eq(projects.ownerId, userId),
-  );
-  const filter = orgIds.length === 0
-    ? userOwnedFilter
-    : or(
-        userOwnedFilter,
-        and(eq(projects.ownerKind, "org"), inArray(projects.ownerId, orgIds)),
-      );
+  if (orgIds.length === 0) return [];
 
   const rows = await db
     .select({ slug: projects.slug })
     .from(projects)
-    .where(filter);
+    .where(inArray(projects.ownerOrgId, orgIds));
   return rows.map((r) => r.slug);
 }
 
 /**
- * True iff the user can access the project: either owns it directly
- * or is a member of the owning org.
+ * True iff the user is a member of the project's owning org.
  */
 export async function userOwnsProject(slug: string, userId: string): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
   const project = await getProjectFromDb(slug);
   if (!project) return false;
-  if (project.ownerKind === "user") return project.ownerId === userId;
-  // org-owned: check membership
   const [m] = await db
     .select({ orgId: orgMemberships.orgId })
     .from(orgMemberships)
     .where(
       and(
-        eq(orgMemberships.orgId, project.ownerId),
+        eq(orgMemberships.orgId, project.ownerOrgId),
         eq(orgMemberships.userId, userId),
       ),
     )

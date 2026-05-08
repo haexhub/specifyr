@@ -42,12 +42,17 @@ export async function startOAuthFlowFor(
   ownerId: string,
   displayName: string,
 ): Promise<OAuthFlowStart> {
-  // Sweep stale pending rows. Only one OAuth flow may be active at a
-  // time per owner; the placeholder is just a UI hook until the
-  // spawned CLI succeeds.
+  // Sweep ANY oauth_claude row for this owner before starting a new
+  // flow. Only one OAuth row per owner is supported (single Anthropic
+  // identity), and the unique-name constraint forces that anyway.
+  // - pending rows: a leftover flow the user abandoned
+  // - expired rows: drift-marked because the credentials file went
+  //   missing, and the user just clicked "login again"
+  // - authorized rows: re-auth requested while still valid (unusual,
+  //   but valid intent — drop the old one and start fresh)
   const existing = await listCredentialsFor(ownerKind, ownerId);
   for (const c of existing) {
-    if (c.mode === "oauth_claude" && c.oauthStatus === "pending") {
+    if (c.mode === "oauth_claude") {
       try {
         getClaudeOAuthDriver().cancel(c.id);
       } catch {

@@ -1,13 +1,13 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { users } from "../db/schema";
+import { listOrgsForUser } from "../utils/org-store";
 
 /**
- * Returns the authenticated user's profile, or 401 when no user
- * resolved (auth disabled, headers missing, or DB unconfigured).
- *
- * Phase 1 endpoint — used by the frontend to know who is logged in
- * and to gate UI on the presence of a user record.
+ * Returns the authenticated user's profile + their org memberships.
+ * Mandatory-org model: an empty `memberships[]` triggers the
+ * onboarding redirect on the client (force-create-org). The caller's
+ * `isPlatformAdmin` flag is used by the admin route guard.
  */
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
       id: users.id,
       email: users.email,
       displayName: users.displayName,
+      isPlatformAdmin: users.isPlatformAdmin,
       createdAt: users.createdAt,
     })
     .from(users)
@@ -35,5 +36,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: "user not found" });
   }
 
-  return user;
+  const orgs = await listOrgsForUser(userId);
+  const memberships = orgs.map((o) => ({
+    orgId: o.id,
+    orgSlug: o.slug,
+    orgName: o.name,
+    role: o.role,
+    isOwner: o.ownerUserId === userId,
+  }));
+
+  return {
+    ...user,
+    memberships,
+  };
 });

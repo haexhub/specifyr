@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Building2, KeyRound, LogIn, LogOut, User as UserIcon } from "lucide-vue-next";
+import { Building2, KeyRound, LogIn, LogOut, ShieldCheck, User as UserIcon } from "lucide-vue-next";
 
 const { me, isDevAuth, logout, devLogin } = useMe();
 </script>
@@ -77,6 +77,21 @@ const { me, isDevAuth, logout, devLogin } = useMe();
             </div>
           </div>
         </div>
+      </li>
+      <li v-if="me?.isPlatformAdmin">
+        <NuxtLink
+          to="/admin"
+          class="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 transition hover:bg-amber-500/10"
+        >
+          <ShieldCheck class="mt-0.5 size-5 shrink-0 text-amber-600" />
+          <div>
+            <div class="font-medium">Platform admin</div>
+            <div class="mt-0.5 text-sm text-muted-foreground">
+              All users + orgs, registration policy, future
+              platform-wide settings. Visible only to platform admins.
+            </div>
+          </div>
+        </NuxtLink>
       </li>
     </ul>
   </div>
