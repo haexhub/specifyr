@@ -50,32 +50,35 @@ interface DiskStatus {
   fileExists: boolean;
 }
 
+type ConnectedState = "fresh" | "expired" | "missing";
+
 const flow = ref<FlowState | null>(null);
 const code = ref("");
 const starting = ref(false);
 const submitting = ref(false);
 const error = ref<string | null>(null);
 const expiresAt = ref<string | null>(null);
-const diskStatus = ref<DiskStatus | null>(null);
 
-async function refreshDiskStatus() {
-  if (!props.existing) {
-    diskStatus.value = null;
-    return;
-  }
-  try {
-    diskStatus.value = await $fetch<DiskStatus>(
-      `${props.endpoint}/${props.existing.id}/status`,
-    );
-  } catch {
-    diskStatus.value = null;
-  }
-}
+// Lazy disk-state fetch. URL is reactive on `existing.id`; when there
+// is no existing credential, the URL evaluates to null and useFetch
+// stays idle (no request fired, no SSR payload reserved).
+const { data: diskStatus } = useFetch<DiskStatus>(
+  () =>
+    props.existing
+      ? `${props.endpoint}/${props.existing.id}/status`
+      : null,
+  {
+    default: () => null,
+    watch: [() => props.existing?.id],
+    onResponseError(ctx) {
+      // Don't blow up the page on a transient 4xx/5xx — the card
+      // falls back to the row's `oauthStatus` until the next refresh.
+      ctx.response._data = null;
+    },
+  },
+);
 
-onMounted(refreshDiskStatus);
-watch(() => props.existing?.id, refreshDiskStatus);
-
-const connectedState = computed<"fresh" | "expired" | "missing" | null>(() => {
+const connectedState = computed<ConnectedState | null>(() => {
   if (!props.existing) return null;
   // 'pending' = a flow is mid-air (modal open) or was abandoned. Treat
   // as "no credentials yet" so the under-modal view shows the plain
@@ -83,8 +86,8 @@ const connectedState = computed<"fresh" | "expired" | "missing" | null>(() => {
   if (props.existing.oauthStatus === "pending") return null;
   const ds = diskStatus.value;
   // No disk-state yet (first paint): trust the row's status — if it's
-  // 'authorized' show fresh, otherwise treat as missing. The status
-  // fetch will refine this on next tick.
+  // 'authorized' show fresh, otherwise treat as missing. The fetch
+  // will refine this on next tick.
   if (!ds) {
     return props.existing.oauthStatus === "authorized" ? "fresh" : "missing";
   }
