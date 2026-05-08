@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { X } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 import { DEFAULT_WORKFLOW_ID, type WorkflowSummary } from "~/lib/workflows";
 import type { ProjectListItem } from "~/lib/types";
 

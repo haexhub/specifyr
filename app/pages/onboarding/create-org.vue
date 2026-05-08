@@ -54,7 +54,7 @@ async function submit() {
       <form class="mt-5 space-y-3" @submit.prevent="submit">
         <label class="block text-sm">
           <span class="font-medium">Organization name</span>
-          <UiInput
+          <ShadcnInput
             v-model="name"
             class="mt-1"
             placeholder="Acme Inc"
@@ -63,9 +63,9 @@ async function submit() {
           />
         </label>
         <p v-if="error" class="text-sm text-destructive">{{ error }}</p>
-        <UiButton type="submit" class="w-full" :disabled="submitting">
+        <ShadcnButton type="submit" class="w-full" :disabled="submitting">
           {{ submitting ? "Creating…" : "Create workspace" }}
-        </UiButton>
+        </ShadcnButton>
       </form>
     </div>
   </div>

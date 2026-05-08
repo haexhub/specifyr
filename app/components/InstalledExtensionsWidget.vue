@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { Puzzle, Trash2, AlertCircle, CheckCircle2, Plus, RefreshCw } from "lucide-vue-next";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Button } from "~/components/ui/button";
-import { Badge } from "~/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
+import { Button } from "~/components/shadcn/button";
+import { Badge } from "~/components/shadcn/badge";
 import ConfirmDialog from "~/components/ConfirmDialog.vue";
 
 interface ExtensionInstallRecord {

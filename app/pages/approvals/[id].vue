@@ -2,9 +2,9 @@
 definePageMeta({ layout: "workspace" });
 
 import { Check, X, ArrowUpRight, Loader2, ShieldQuestion, AlertTriangle } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
-import { Badge } from "~/components/ui/badge";
+import { Button } from "~/components/shadcn/button";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
+import { Badge } from "~/components/shadcn/badge";
 
 interface ApprovalDetail {
   requestId: string;

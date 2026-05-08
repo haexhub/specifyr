@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ShieldCheck, ExternalLink } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 import type { HookGate } from "~/lib/hooks";
 
 defineProps<{

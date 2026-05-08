@@ -111,9 +111,9 @@ async function save() {
       </div>
 
       <div class="flex items-center gap-3">
-        <UiButton type="submit" :disabled="saving">
+        <ShadcnButton type="submit" :disabled="saving">
           {{ saving ? "Saving…" : "Save settings" }}
-        </UiButton>
+        </ShadcnButton>
         <span v-if="message" class="text-sm text-primary">{{ message }}</span>
         <span v-if="error" class="text-sm text-destructive">{{ error }}</span>
       </div>

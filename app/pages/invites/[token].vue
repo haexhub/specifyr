@@ -2,7 +2,7 @@
 definePageMeta({ layout: "workspace" });
 
 import { Building2 } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 
 interface InvitePreview {
   orgName: string;

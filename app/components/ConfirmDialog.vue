@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { AlertTriangle, X } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 
 const props = withDefaults(
   defineProps<{

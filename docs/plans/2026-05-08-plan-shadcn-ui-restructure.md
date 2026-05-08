@@ -60,21 +60,24 @@ app/components/
     badge/{Badge.vue, index.ts}
     button/{Button.vue, index.ts}
     …
-  ui/                      ← project-spezifische Wrapper (handgepflegt)
-    Button.vue             → re-exportiert ShadcnButton mit Defaults
-    Input.vue
+  ui/                      ← project-spezifische Wrapper (anfangs LEER)
+    Button.vue             ← entsteht erst, wenn projekt-Defaults nötig sind
     …
 ```
 
 **Auto-Import-Namen:**
-- `<ShadcnButton>` — direkter Zugriff auf den shadcn-Default
-- `<UiButton>` — projekt-spezifischer Wrapper
+- `<ShadcnButton>` — direkter Zugriff auf den shadcn-Default. **Default-
+  Wahl** für neuen Code, solange keine Customisation existiert.
+- `<UiButton>` — projekt-spezifischer Wrapper. Existiert nur, wenn jemand
+  ihn aktiv angelegt hat. Solange `app/components/ui/Button.vue` nicht
+  existiert, ist `<UiButton>` schlicht nicht registriert.
 
-**Regel:** App-Code nutzt `<UiButton>`. `<ShadcnButton>` nur, wenn
-explizit der unstilisiert-default-shadcn-Look gewünscht ist (z.B. in einem
-3rd-party-Vergleichs-Tab oder in Storybook-Variants). Damit ist die Trennung
-beobachtbar im Code-Review: ein Reviewer sieht direkt, wenn jemand
-`<ShadcnButton>` benutzt und kann fragen „warum nicht `<UiButton>`?".
+**Regel:** App-Code nutzt `<ShadcnButton>` standardmäßig. Sobald für eine
+Component projekt-Defaults gewünscht sind (z.B. immer `size="sm"`,
+Loading-Spinner-Pattern), wird ein Wrapper unter `app/components/ui/`
+angelegt UND alle Call-Sites werden in einem dedizierten Commit auf
+`<UiButton>` umgestellt. Dieser Wechsel ist dann sichtbar im Diff und
+review-bar; ein No-Op-Wrapper im Voraus wäre nur Indirection ohne Nutzen.
 
 ## Effort
 
@@ -131,49 +134,29 @@ find app/ -name '*.vue' -o -name '*.ts' | xargs \
 
 → verify: `grep -rln '"~/components/ui/' app/` ist leer.
 
-#### 1.4 No-Op-Wrapper unter neuem `ui/` anlegen
+#### 1.4 `app/components/ui/` bleibt leer (kein Wrapper-Vorrat)
 
-Damit alle Templates die `<UiButton>` etc. via Auto-Import benutzen, muss
-`app/components/ui/` wieder existieren mit Wrapper-Files für jede
-Komponente, die in Templates referenziert wird. Anfangs sind das reine
-Re-Exports — keine Customisation.
+`ui/` ist der Slot für künftige projekt-spezifische Wrapper. Wir legen
+ihn aber **nicht prophylaktisch** mit Pass-Through-Files voll — ein
+Wrapper der nur `<slot/>` weitergibt ist toter Code, der nichts erklärt
+und einer Indirection-Schicht ohne Funktion entspricht.
 
-```vue
-<!-- app/components/ui/Button.vue -->
-<script setup lang="ts">
-import { Button as ShadcnButton } from "~/components/shadcn/button";
-defineOptions({ inheritAttrs: false });
-</script>
+Stattdessen: Templates, die heute `<UiButton>`, `<UiTable>` etc.
+verwenden (in PR #15 die Admin-Pages und Onboarding), werden in 1.3 auf
+`<ShadcnButton>` etc. umgestellt. Ein Wrapper unter `ui/` entsteht erst
+in Phase 2, wenn jemand konkret „alle Buttons im Projekt sollen X
+machen" implementiert.
 
-<template>
-  <ShadcnButton v-bind="$attrs">
-    <slot />
-  </ShadcnButton>
-</template>
-```
-
-Pro currently-used shadcn-Component eine wrapper-Datei. Stand jetzt sind das:
-`Badge`, `Button`, `Card`/`CardContent`/`CardHeader`/`CardTitle`/`CardDescription`/`CardFooter`,
-`Command`-Familie, `Dialog`-Familie, `Input`, `Popover`-Familie, `Select`-Familie,
-`Table`-Familie. Komponenten die noch nicht template-referenziert sind,
-brauchen keinen Wrapper.
-
-> **Dateinamenstrategie:** flach, ohne Subdir. Pfad
-> `app/components/ui/Button.vue` ergibt Auto-Import `<UiButton>`. Bei
-> Sub-Components (z.B. `<Card>` + `<CardHeader>`) entweder einzelne
-> Top-Level-Files (`Card.vue`, `CardHeader.vue`) oder ein Subdir
-> `app/components/ui/card/Card.vue` → `<UiCard>` (Nuxt dedupt das doppelte
-> `Card`).
-
-→ verify: `pnpm dev`, alle Pages rendern ohne Console-Errors.
+→ verify: `pnpm dev`, alle Pages rendern ohne Console-Errors. Im Code
+gibt es keine `<UiX>`-Tags mehr (`grep -rln '<Ui[A-Z]' app/` ist leer).
 
 #### 1.5 Templates-Cleanup (optional, Cosmetic)
 
 Existierende Files mit Pattern `import { Button } from "~/components/shadcn/button"`
-+ Template-Tag `<Button>` können auf den Auto-Import-Namen `<UiButton>`
-umgestellt und der Import gedroppt werden. **Nicht zwingend nötig** — der
-explizite Import ist syntaktisch valide. Saubermachen kann iterativ pro
-File passieren.
++ Template-Tag `<Button>` könnten auf den Auto-Import-Namen
+`<ShadcnButton>` umgestellt und der Import gedroppt werden. **Nicht
+zwingend nötig** — der explizite Import ist syntaktisch valide. Lohnt
+sich nur, wenn eh am File gearbeitet wird.
 
 #### 1.6 Test
 

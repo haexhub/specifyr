@@ -2,8 +2,8 @@
 definePageMeta({ layout: "workspace" });
 
 import { PanelRightOpen, Play } from "lucide-vue-next";
-import { Badge } from "~/components/ui/badge";
-import { Button } from "~/components/ui/button";
+import { Badge } from "~/components/shadcn/badge";
+import { Button } from "~/components/shadcn/button";
 import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
 import SessionList from "~/components/SessionList.vue";
 import ChatStream from "~/components/ChatStream.vue";

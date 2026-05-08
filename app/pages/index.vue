@@ -2,7 +2,7 @@
 definePageMeta({ layout: "workspace" });
 
 import { Plus, FolderOpen } from "lucide-vue-next";
-import { Button } from "~/components/ui/button";
+import { Button } from "~/components/shadcn/button";
 import ProjectCreateDialog from "~/components/ProjectCreateDialog.vue";
 import type { ProjectListItem } from "~/lib/types";
 

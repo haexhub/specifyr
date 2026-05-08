@@ -51,35 +51,35 @@ const { data, pending } = await useFetch<UsersResponse>("/api/admin/users", {
     </p>
 
     <div v-if="pending" class="mt-6 text-sm text-muted-foreground">Loading…</div>
-    <UiTable v-else class="mt-6">
-      <UiTableHeader>
-        <UiTableRow>
-          <UiTableHead>User</UiTableHead>
-          <UiTableHead>Orgs</UiTableHead>
-          <UiTableHead>Joined</UiTableHead>
-          <UiTableHead>Flags</UiTableHead>
-        </UiTableRow>
-      </UiTableHeader>
-      <UiTableBody>
-        <UiTableRow v-for="u in data.users" :key="u.id">
-          <UiTableCell>
+    <ShadcnTable v-else class="mt-6">
+      <ShadcnTableHeader>
+        <ShadcnTableRow>
+          <ShadcnTableHead>User</ShadcnTableHead>
+          <ShadcnTableHead>Orgs</ShadcnTableHead>
+          <ShadcnTableHead>Joined</ShadcnTableHead>
+          <ShadcnTableHead>Flags</ShadcnTableHead>
+        </ShadcnTableRow>
+      </ShadcnTableHeader>
+      <ShadcnTableBody>
+        <ShadcnTableRow v-for="u in data.users" :key="u.id">
+          <ShadcnTableCell>
             <div class="font-medium">{{ u.displayName || u.email }}</div>
             <div class="font-mono text-xs text-muted-foreground">{{ u.email }}</div>
-          </UiTableCell>
-          <UiTableCell>{{ u.orgCount }}</UiTableCell>
-          <UiTableCell class="text-muted-foreground">
+          </ShadcnTableCell>
+          <ShadcnTableCell>{{ u.orgCount }}</ShadcnTableCell>
+          <ShadcnTableCell class="text-muted-foreground">
             {{ new Date(u.createdAt).toLocaleDateString() }}
-          </UiTableCell>
-          <UiTableCell>
+          </ShadcnTableCell>
+          <ShadcnTableCell>
             <span
               v-if="u.isPlatformAdmin"
               class="inline-flex items-center gap-1 rounded-md bg-amber-500/10 px-1.5 py-0.5 text-xs font-medium text-amber-600"
             >
               <ShieldCheck class="size-3" /> platform admin
             </span>
-          </UiTableCell>
-        </UiTableRow>
-      </UiTableBody>
-    </UiTable>
+          </ShadcnTableCell>
+        </ShadcnTableRow>
+      </ShadcnTableBody>
+    </ShadcnTable>
   </div>
 </template>
