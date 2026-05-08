@@ -63,7 +63,14 @@ export async function loadAppConfig(cwd = process.cwd(), { injectBundled = true 
         runner: { ...DEFAULT_APP_CONFIG.runner, ...(saved.runner ?? {}) },
         claude: { ...DEFAULT_APP_CONFIG.claude, ...(saved.claude ?? {}) },
         hermes: { ...DEFAULT_APP_CONFIG.hermes, ...(saved.hermes ?? {}) },
-        acp: { ...DEFAULT_APP_CONFIG.acp, ...(saved.acp ?? {}) }
+        acp: {
+          ...DEFAULT_APP_CONFIG.acp,
+          ...(saved.acp ?? {}),
+          gemini: {
+            ...DEFAULT_APP_CONFIG.acp.gemini,
+            ...(saved.acp?.gemini ?? {})
+          }
+        }
       }
     : structuredClone(DEFAULT_APP_CONFIG);
   if (injectBundled) await injectBundledLocalExtensions(merged, cwd);
