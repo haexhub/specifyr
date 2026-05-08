@@ -35,3 +35,7 @@ tmp/
 
 # Playwright MCP browser cache
 .playwright-mcp/
+
+# Bundled local extensions: cloned at runtime by the Dockerfile prod stage,
+# or by the dev manually for local work. Never tracked here.
+/extensions/

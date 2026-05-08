@@ -1,5 +1,5 @@
 import path from "node:path";
-import { ensureDir, readJson, writeJson } from "../utils/fs.js";
+import { ensureDir, exists, readJson, writeJson } from "../utils/fs.js";
 import { SPECIFYR_DIR } from "./constants.js";
 
 const DEFAULT_APP_CONFIG = {
@@ -20,24 +20,46 @@ const DEFAULT_APP_CONFIG = {
   }
 };
 
+// Extensions that ship with specifyr itself (cloned in Dockerfile prod stage,
+// or available locally during dev). Injected into the resolved localExtensions
+// list at load time when the on-disk path exists and the slug isn't already
+// registered. Not persisted — vanishing from disk silently removes the entry.
+// Paths are resolved relative to `cwd` (= repo root in dev, /app in container).
+const BUNDLED_LOCAL_EXTENSIONS = [
+  { slug: "speckit-company", path: "extensions/speckit-company" }
+];
+
 function configPath(cwd) {
   return path.join(cwd, SPECIFYR_DIR, "config.json");
 }
 
+async function injectBundledLocalExtensions(merged, cwd) {
+  const registered = new Set((merged.localExtensions ?? []).map((e) => e.slug));
+  for (const bundled of BUNDLED_LOCAL_EXTENSIONS) {
+    if (registered.has(bundled.slug)) continue;
+    const absPath = path.resolve(cwd, bundled.path);
+    if (!(await exists(absPath))) continue;
+    merged.localExtensions = [
+      ...(merged.localExtensions ?? []),
+      { slug: bundled.slug, path: absPath, registeredAt: new Date(0).toISOString() }
+    ];
+  }
+}
+
 export async function loadAppConfig(cwd = process.cwd()) {
   const saved = await readJson(configPath(cwd), null);
-  if (!saved) {
-    return structuredClone(DEFAULT_APP_CONFIG);
-  }
-  // shallow-merge with defaults so new fields appear automatically
-  return {
-    ...structuredClone(DEFAULT_APP_CONFIG),
-    ...saved,
-    runner: { ...DEFAULT_APP_CONFIG.runner, ...(saved.runner ?? {}) },
-    claude: { ...DEFAULT_APP_CONFIG.claude, ...(saved.claude ?? {}) },
-    hermes: { ...DEFAULT_APP_CONFIG.hermes, ...(saved.hermes ?? {}) },
-    acp: { ...DEFAULT_APP_CONFIG.acp, ...(saved.acp ?? {}) }
-  };
+  const merged = saved
+    ? {
+        ...structuredClone(DEFAULT_APP_CONFIG),
+        ...saved,
+        runner: { ...DEFAULT_APP_CONFIG.runner, ...(saved.runner ?? {}) },
+        claude: { ...DEFAULT_APP_CONFIG.claude, ...(saved.claude ?? {}) },
+        hermes: { ...DEFAULT_APP_CONFIG.hermes, ...(saved.hermes ?? {}) },
+        acp: { ...DEFAULT_APP_CONFIG.acp, ...(saved.acp ?? {}) }
+      }
+    : structuredClone(DEFAULT_APP_CONFIG);
+  await injectBundledLocalExtensions(merged, cwd);
+  return merged;
 }
 
 export async function saveAppConfig(next, cwd = process.cwd()) {
