@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -242,3 +245,96 @@ export const platformSettings = pgTable("platform_settings", {
 
 export type PlatformSetting = typeof platformSettings.$inferSelect;
 export type NewPlatformSetting = typeof platformSettings.$inferInsert;
+
+// Per-org spec-kit extensions. Cloned from `source_url` into
+// <dataDir>/extensions/orgs/<org_id>/<slug>/ — the FS path is reconstructable
+// from the DB row, so we don't store it. `slug` comes from the cloned
+// extension.yml's `extension.id`, NOT from user input — this prevents an
+// attacker from registering a slug that shadows a bundled extension.
+//
+// Optional encrypted git credentials (HTTPS basic auth) for private repos:
+// the same AES-256-GCM mechanism as secrets-store.ts. NULL credentials
+// mean a public repo; partial NULLs are rejected at the store layer.
+//
+// Visibility: rows are scoped by `org_id` and never bleed across orgs;
+// the resolver (server/utils/extension-install.ts) merges them on top of
+// the deployment-global localExtensions and the bundled set when an
+// owner-org context is known (project-create, project-detail).
+export const orgExtensions = pgTable(
+  "org_extensions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => orgs.id, { onDelete: "cascade" }),
+    slug: text("slug").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    sourceRef: text("source_ref"), // tag/branch/commit; null = default branch
+    credentialUsername: text("credential_username"),
+    credentialIv: text("credential_iv"),
+    credentialTag: text("credential_tag"),
+    credentialData: text("credential_data"),
+    registeredBy: uuid("registered_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    registeredAt: timestamp("registered_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniqueSlugPerOrg: unique("org_extensions_org_slug_uq").on(t.orgId, t.slug),
+    orgIdx: index("org_extensions_org_idx").on(t.orgId),
+  }),
+);
+
+export type OrgExtension = typeof orgExtensions.$inferSelect;
+export type NewOrgExtension = typeof orgExtensions.$inferInsert;
+
+// Fine-grained, additive permissions on top of the admin/member role.
+// A row grants one named permission to one user in one org; admins get
+// every permission implicitly (the check in server/utils/org-permissions
+// short-circuits on role='admin' before reading this table).
+//
+// `permission` is enumerated at the type AND DB level (CHECK constraint)
+// so a typo can't drift past validation. New permissions extend the
+// enum + a code path that uses them.
+//
+// Lifecycle: a delegated grant must vanish if the underlying membership
+// vanishes — otherwise re-adding a previously-removed user resurrects
+// their old `manage_extensions` privilege. The composite FK to
+// `org_memberships(org_id, user_id)` with ON DELETE CASCADE makes
+// membership the single source of authority. Deleting the org or user
+// also cascades, transitively, via that membership row.
+export const orgMemberPermissions = pgTable(
+  "org_member_permissions",
+  {
+    orgId: uuid("org_id").notNull(),
+    userId: uuid("user_id").notNull(),
+    permission: text("permission", { enum: ["manage_extensions"] }).notNull(),
+    grantedBy: uuid("granted_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.orgId, t.userId, t.permission] }),
+    userIdx: index("org_member_permissions_user_idx").on(t.userId),
+    membershipFk: foreignKey({
+      name: "org_member_permissions_membership_fk",
+      columns: [t.orgId, t.userId],
+      foreignColumns: [orgMemberships.orgId, orgMemberships.userId],
+    }).onDelete("cascade"),
+    permissionCheck: check(
+      "org_member_permissions_permission_chk",
+      sql`${t.permission} IN ('manage_extensions')`,
+    ),
+  }),
+);
+
+export type OrgMemberPermission = typeof orgMemberPermissions.$inferSelect;
+export type NewOrgMemberPermission = typeof orgMemberPermissions.$inferInsert;

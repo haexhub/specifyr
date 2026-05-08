@@ -87,7 +87,7 @@ export default defineEventHandler(async (event) => {
 
   let record;
   try {
-    record = await createProjectRecord({ title, description, extensions, workflow });
+    record = await createProjectRecord({ title, description, extensions, workflow, ownerOrgId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Project could not be created.";
     const statusCode = /already exists/i.test(message) ? 409 : 400;

@@ -1,4 +1,5 @@
 import { getMembership, getOrgBySlug } from "./org-store";
+import { hasPermission, type OrgPermission } from "./org-permissions-store";
 import type { Org, OrgMembership } from "../db/schema";
 
 /**
@@ -40,4 +41,23 @@ export async function requireOrgAdmin(
     throw createError({ statusCode: 403, statusMessage: "admin only" });
   }
   return ctx;
+}
+
+/**
+ * Like {@link requireOrgMembership}, but additionally enforces that the
+ * caller either is an admin OR holds the named permission grant. Used
+ * by endpoints (e.g. add/remove org extension) that should be open to
+ * delegated members without making them full admins.
+ */
+export async function requireOrgPermission(
+  event: any,
+  permission: OrgPermission,
+): Promise<{ userId: string; org: Org; membership: OrgMembership }> {
+  const ctx = await requireOrgMembership(event);
+  if (ctx.membership.role === "admin") return ctx;
+  if (await hasPermission(ctx.org.id, ctx.userId, permission)) return ctx;
+  throw createError({
+    statusCode: 403,
+    statusMessage: `requires permission '${permission}' or admin`,
+  });
 }

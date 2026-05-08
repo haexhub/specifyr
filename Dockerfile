@@ -57,6 +57,16 @@ COPY --chown=node:node --from=builder /app/package.json ./package.json
 # disk at boot. Nitro doesn't bundle them, so we copy them explicitly.
 # The plugin resolves them relative to process.cwd() = /app.
 COPY --chown=node:node --from=builder /app/server/db/migrations ./server/db/migrations
+# Bundled local extensions: clone speckit-company so it appears in the workflow
+# picker out-of-the-box. Not auto-installed into projects (kein Default-Workflow);
+# the bundled-extensions injector in src/core/app-config.js merges it into
+# localExtensions whenever the path exists. Override the ref via build-arg,
+# e.g. `--build-arg SPECKIT_COMPANY_REF=v0.1.0` to pin a release tag.
+ARG SPECKIT_COMPANY_REF=main
+RUN git clone --depth 1 --branch ${SPECKIT_COMPANY_REF} \
+        https://github.com/haexhub/speckit-company.git /app/extensions/speckit-company \
+ && rm -rf /app/extensions/speckit-company/.git \
+ && chown -R node:node /app/extensions
 # Mountpoints für Bind-Volumes vorab als node anlegen, falls der Host-Pfad noch leer ist.
 RUN mkdir -p /app/projects /app/.specifyr && chown -R node:node /app/projects /app/.specifyr
 ENV HOST=0.0.0.0 \

@@ -13,6 +13,7 @@ export async function createProjectRecord(options: {
   description: string;
   extensions?: string[];
   workflow?: string;
+  ownerOrgId?: string | null;
 }) {
   const [{ ArtifactStore }, { runCommand }, { ensureDir, slugify }] = await Promise.all([
     importModule<{ ArtifactStore: new (cwd?: string) => any }>("src/core/artifact-store.js"),
@@ -149,7 +150,12 @@ export async function createProjectRecord(options: {
   );
   let extensionRecords: import("./extension-install").ExtensionInstallRecord[] = [];
   if (initResult.ok && chosenExtensions.length > 0) {
-    const { manifest } = await installExtensionsInProject(slug, chosenExtensions, "auto");
+    const { manifest } = await installExtensionsInProject(
+      slug,
+      chosenExtensions,
+      "auto",
+      options.ownerOrgId ?? null
+    );
     extensionRecords = manifest.extensions;
   }
 
