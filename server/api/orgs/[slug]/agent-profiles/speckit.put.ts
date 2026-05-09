@@ -9,7 +9,10 @@ export default defineEventHandler(async (event) => {
   try {
     return await upsertAgentProfileFor("org", org.id, "speckit", body);
   } catch (err) {
-    const message = err instanceof Error ? err.message : "could not save agent profile";
-    throw createError({ statusCode: 400, statusMessage: message });
+    if (err && typeof err === "object" && "statusCode" in err) throw err;
+    throw createError({
+      statusCode: 500,
+      statusMessage: "could not save agent profile",
+    });
   }
 });

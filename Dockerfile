@@ -4,7 +4,9 @@
 # base: node 22 + pnpm (via corepack) + hermes CLI + git/bash for the runner
 # ------------------------------------------------------------------------------
 FROM node:22-alpine AS base
-RUN apk add --no-cache bash git tini docker-cli
+# `curl` is needed by the Hermes installer below; it is NOT in node:22-alpine
+# by default.
+RUN apk add --no-cache bash git tini docker-cli curl
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 RUN corepack enable

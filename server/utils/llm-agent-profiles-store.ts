@@ -120,7 +120,7 @@ async function getCredential(id: string): Promise<LlmCredential | null> {
 function normalizeRole(purpose: AgentProfilePurpose, agentRole: string | undefined): string {
   // agent_role is part of the unique key; collapsing nullish/whitespace to ''
   // for speckit profiles is the convention that lets one composite UNIQUE
-  // constraint cover both shapes (see migration 0010).
+  // constraint cover both shapes (see migration 0009).
   if (purpose !== "company-agent") return "";
   const value = (agentRole ?? "").trim();
   if (!value) {

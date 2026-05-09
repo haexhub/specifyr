@@ -33,10 +33,13 @@ function categoryFor(text) {
 
 function dependenciesFor(text) {
   const deps = new Set();
+  // "blocks" intentionally NOT included: "X blocks T002" means T002 depends
+  // on X, the *opposite* direction from depends/after. Mixing it here would
+  // invert the edge for those tasks. Treat it as a forward edge in a separate
+  // pass if we ever need to honor it.
   const patterns = [
     /\bdepends(?:\s+on)?:?\s*((?:T\d+[,\s]*)+)/gi,
     /\bafter\s+((?:T\d+[,\s]*)+)/gi,
-    /\bblocks?:?\s*((?:T\d+[,\s]*)+)/gi,
   ];
   for (const pattern of patterns) {
     for (const match of text.matchAll(pattern)) {

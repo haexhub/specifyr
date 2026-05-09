@@ -87,6 +87,17 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Resolve the runner factory FIRST — it can throw 400/401 when no
+  // agent profile is configured, and we don't want to mutate session
+  // state (appendMessage / markInProgress / session_started event) for
+  // a turn we won't actually start.
+  const project = await getProjectFromDb(slug);
+  const runnerFactory = await createSpeckitRunnerFactory({
+    userId: event.context.userId,
+    ownerOrgId: project?.ownerOrgId ?? null,
+    runtimeConfig: useRuntimeConfig(),
+  });
+
   // Persist the user message before kickoff so it survives any failure mode.
   const userMessage = await sessionStore.appendMessage(slug, stepId, sid, {
     role: "user",
@@ -110,12 +121,6 @@ export default defineEventHandler(async (event) => {
   // Kick off the broker. This returns once the runner is spawned — the actual run
   // continues in the background. `startSeq` is the seq value BEFORE this turn began,
   // so the client can stream every event from this turn (and only this turn).
-  const project = await getProjectFromDb(slug);
-  const runnerFactory = await createSpeckitRunnerFactory({
-    userId: event.context.userId,
-    ownerOrgId: project?.ownerOrgId ?? null,
-    runtimeConfig: useRuntimeConfig(),
-  });
   const { startSeq } = await broker.startTurn({
     slug,
     stepId,

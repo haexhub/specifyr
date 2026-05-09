@@ -59,14 +59,23 @@ For containerized development with hot module replacement:
 # or
 pnpm run dev:docker
 
-# Access the dev server at http://localhost:4242
-# Edit files locally and see changes instantly
-
 # Useful commands:
 docker compose logs -f          # View logs
 docker compose exec specifyr sh # Shell access
 docker compose down             # Stop containers
 ```
+
+The dev compose bundles two parallel access paths:
+
+- **`http://localhost:4242`** — specifyr direct, bypassing auth. The
+  `SPECIFYR_DEV_USER_EMAIL` env-fallback is the "logged-in user" here, so
+  this is the fastest path for code iteration.
+- **`http://specifyr.localhost`** — full multi-user flow through Traefik
+  → Authentik (UI on `http://auth.localhost`, default login
+  `akadmin` / `akadmin-dev`). Use this to exercise the prod-shape auth
+  topology (forward-auth headers, per-user `users` rows, onboarding gate).
+  Set `SPECIFYR_DEV_USER_EMAIL=` empty in `.env` so the env-fallback does
+  not override the real Authentik headers.
 
 ## ACP (Agent Client Protocol)
 

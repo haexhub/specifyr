@@ -69,7 +69,10 @@ export async function loadAppConfig(cwd = process.cwd(), { injectBundled = true 
           },
           claude: {
             ...DEFAULT_APP_CONFIG.acp.claude,
-            ...(saved.acp?.claude ?? {})
+            // Migration: pre-ACP configs stored claude settings at the top
+            // level (`saved.claude`) instead of under `acp.claude`. Fall back
+            // so users keep their custom binary/args after upgrade.
+            ...(saved.acp?.claude ?? saved.claude ?? {})
           },
           gemini: {
             ...DEFAULT_APP_CONFIG.acp.gemini,

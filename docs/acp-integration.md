@@ -44,7 +44,7 @@ Check that `cwd` resolves to a directory containing `.specifyr/<slug>/`. The ser
 
 **No tools fire / agent says "I can't use tools"**
 
-Speckit runs are ACP-only. Configure the Speckit workflow agent in Settings, and make sure the selected `acp:<name>` entry exists in `.specifyr/config.json` with a working `binary` and `args`.
+Speckit runs are ACP-only. Configure the Speckit workflow agent in Settings, and make sure the selected `acp:<name>` entry exists in `.specifyr/config.json` with a working `binary` (and `args` when the ACP client requires them).
 
 **Approval prompt never appears**
 

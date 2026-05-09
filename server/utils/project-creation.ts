@@ -66,9 +66,26 @@ export async function createProjectRecord(options: {
   // Initialize a git repository in the project directory so coding agents treat it as an
   // independent project root, preventing context bleed from the specifyr platform repo.
   // (specifyr/.gitignore already excludes projects/, so there's no nested-repo issue.)
-  await runCommand("git", ["init", "-b", "main"], { cwd: projectRoot });
-  await runCommand("git", ["config", "user.email", "agent@specifyr.local"], { cwd: projectRoot });
-  await runCommand("git", ["config", "user.name", "specifyr"], { cwd: projectRoot });
+  // Failures used to be silently ignored, which left projects without a repo
+  // boundary while the comment claimed it was required — surface them now.
+  const gitInit = await runCommand("git", ["init", "-b", "main"], { cwd: projectRoot });
+  if (!gitInit.ok) {
+    throw new Error(gitInit.stderr || "Failed to initialize git repository.");
+  }
+  const gitConfigEmail = await runCommand(
+    "git",
+    ["config", "user.email", "agent@specifyr.local"],
+    { cwd: projectRoot }
+  );
+  if (!gitConfigEmail.ok) {
+    throw new Error(gitConfigEmail.stderr || "Failed to set git user.email.");
+  }
+  const gitConfigName = await runCommand("git", ["config", "user.name", "specifyr"], {
+    cwd: projectRoot,
+  });
+  if (!gitConfigName.ok) {
+    throw new Error(gitConfigName.stderr || "Failed to set git user.name.");
+  }
 
   // Write provider-neutral project guidance for ACP-backed coding agents.
   const fs = await import("node:fs/promises");
@@ -86,10 +103,10 @@ export async function createProjectRecord(options: {
     `Dies ist **kein Softwareentwicklungs-Projekt**. Kein Vue/TypeScript/Nuxt-Code.`,
     `Beschränke dich auf Dateien in diesem Verzeichnis.`
   ].join("\n");
-  await fs.writeFile(path.join(projectRoot, "AGENTS.md"), agentsMd).catch(() => {});
+  await fs.writeFile(path.join(projectRoot, "AGENTS.md"), agentsMd);
 
   // Exclude installed extensions from git — they have their own repos.
-  await fs.writeFile(path.join(projectRoot, ".gitignore"), ".specify/extensions/\n").catch(() => {});
+  await fs.writeFile(path.join(projectRoot, ".gitignore"), ".specify/extensions/\n");
 
   // The community catalog is discovery-only by default in spec-kit. Our UI browses extensions
   // from there, so we need to opt-in to installation. Registered with priority 1 to take
