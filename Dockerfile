@@ -10,9 +10,11 @@ RUN apk add --no-cache bash git tini docker-cli curl
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 RUN corepack enable
-# Install Hermes Agent CLI for multi-agent workflows
+# Install Hermes Agent CLI for multi-agent workflows.
+# Pipe to bash (not sh): the upstream installer uses bash-only syntax
+# (e.g. arithmetic `((…))`), which busybox `sh` on Alpine doesn't parse.
 ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
-RUN curl -fsSL $HERMES_INSTALL_URL | sh
+RUN curl -fsSL $HERMES_INSTALL_URL | bash
 WORKDIR /app
 
 # ------------------------------------------------------------------------------
