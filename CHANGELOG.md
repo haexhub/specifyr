@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/haexhub/specifyr/compare/v0.7.0...v0.8.0) (2026-05-09)
+
+
+### Features
+
+* per-owner agent profiles + multi-user dev stack ([#23](https://github.com/haexhub/specifyr/issues/23)) ([3eb5ac4](https://github.com/haexhub/specifyr/commit/3eb5ac4606564a0e54f2886b61ca3d051f7ba09b))
+
 ## [0.7.0](https://github.com/haexhub/specifyr/compare/v0.6.0...v0.7.0) (2026-05-08)
 
 
