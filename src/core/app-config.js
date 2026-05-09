@@ -7,15 +7,14 @@ const DEFAULT_APP_CONFIG = {
   localExtensions: [],
   runner: {
     default: "hermes",
-    fallbackChain: ["acp:gemini", "hermes", "superpowers", "claude"]
-  },
-  claude: {
-    binary: "claude"
+    fallbackChain: ["hermes", "acp:codex"]
   },
   hermes: {
     binary: "hermes"
   },
   acp: {
+    codex: { binary: "codex-acp", args: ["--model", "{model}"] },
+    claude: { binary: "claude-code-acp", args: ["--model", "{model}"] },
     gemini: { binary: "gemini", args: ["--experimental-acp"] }
   }
 };
@@ -61,11 +60,17 @@ export async function loadAppConfig(cwd = process.cwd(), { injectBundled = true 
         ...structuredClone(DEFAULT_APP_CONFIG),
         ...saved,
         runner: { ...DEFAULT_APP_CONFIG.runner, ...(saved.runner ?? {}) },
-        claude: { ...DEFAULT_APP_CONFIG.claude, ...(saved.claude ?? {}) },
-        hermes: { ...DEFAULT_APP_CONFIG.hermes, ...(saved.hermes ?? {}) },
         acp: {
           ...DEFAULT_APP_CONFIG.acp,
           ...(saved.acp ?? {}),
+          codex: {
+            ...DEFAULT_APP_CONFIG.acp.codex,
+            ...(saved.acp?.codex ?? {})
+          },
+          claude: {
+            ...DEFAULT_APP_CONFIG.acp.claude,
+            ...(saved.acp?.claude ?? {})
+          },
           gemini: {
             ...DEFAULT_APP_CONFIG.acp.gemini,
             ...(saved.acp?.gemini ?? {})

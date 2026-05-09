@@ -5,6 +5,7 @@ import type {
   LlmProvider as Provider,
   ProviderMeta,
 } from "~/components/LlmCredentialCard.vue";
+import type { SpeckitAgentProfile } from "~/components/SpeckitAgentProfileCard.vue";
 
 interface OrgLlmResponse {
   org: { id: string; slug: string; name: string };
@@ -39,10 +40,19 @@ const providers: Provider[] = ["anthropic", "openai", "google", "openrouter"];
 const route = useRoute();
 const slug = computed(() => String(route.params.slug));
 const endpoint = computed(() => `/api/orgs/${slug.value}/llm-credentials`);
+const profileEndpoint = computed(() => `/api/orgs/${slug.value}/agent-profiles/speckit`);
 
 const { data, refresh } = await useFetch<OrgLlmResponse>(
   () => endpoint.value,
 );
+const { data: speckitProfile, refresh: refreshSpeckitProfile } =
+  await useFetch<SpeckitAgentProfile | null>(() => profileEndpoint.value, {
+    default: () => null,
+  });
+
+async function refreshAll() {
+  await Promise.all([refresh(), refreshSpeckitProfile()]);
+}
 
 const credsByProvider = computed(() => {
   const grouped: Record<Provider, CredentialRow[]> = {
@@ -102,7 +112,15 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
         :endpoint="`${endpoint}/oauth/anthropic`"
         :delete-endpoint="endpoint"
         :read-only="readOnly"
-        @changed="refresh()"
+        @changed="refreshAll()"
+      />
+
+      <SpeckitAgentProfileCard
+        :profile="speckitProfile"
+        :credentials="data.credentials"
+        :endpoint="profileEndpoint"
+        :read-only="readOnly"
+        @changed="refreshSpeckitProfile()"
       />
 
       <LlmCredentialCard
@@ -114,7 +132,7 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
         :endpoint="endpoint"
         :read-only="readOnly"
         :default-display-name="data.org.name"
-        @changed="refresh()"
+        @changed="refreshAll()"
       />
     </template>
     <p v-else class="mt-4 text-sm text-muted-foreground">Loading…</p>

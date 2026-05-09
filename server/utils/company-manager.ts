@@ -116,6 +116,9 @@ interface DockerRunnerFactoryModule {
     image?: string;
     network?: string;
     secretsResolver?: (agent: unknown) => Record<string, string> | undefined;
+    agentLlmResolver?: (
+      agent: unknown,
+    ) => { provider: string; model: string } | null | undefined;
   }) => (agent: unknown, runtimeMeta?: unknown) => unknown;
 }
 

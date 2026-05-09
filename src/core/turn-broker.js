@@ -56,7 +56,7 @@ export class TurnBroker {
    *          Clients pass this as `since` to the stream endpoint to receive every
    *          event from this turn (and nothing earlier).
    */
-  async startTurn({ slug, stepId, sid, prompt, cwd, claudeSessionId }) {
+  async startTurn({ slug, stepId, sid, prompt, cwd, claudeSessionId, runnerFactory }) {
     const key = keyFor(slug, stepId, sid);
     if (this.running.has(key)) {
       throw new Error("Turn already running for this session");
@@ -101,7 +101,8 @@ export class TurnBroker {
 
     // Mutable ref so cancel() always targets the currently-running child process,
     // even after a session-expiry retry spawns a new runner.
-    let activeRunner = this.runnerFactory({ cwd, onEvent });
+    const makeRunner = runnerFactory ?? this.runnerFactory;
+    let activeRunner = await makeRunner({ cwd, onEvent });
 
     // Mark the boundary between "before this turn" and "this turn's events". Clients
     // reconnecting to a running session use this as the `since` cursor so they replay
@@ -146,7 +147,7 @@ export class TurnBroker {
             assistantText = "";
             toolUseSinceLastText = false;
             toolUses.splice(0);
-            activeRunner = this.runnerFactory({ cwd, onEvent });
+            activeRunner = await makeRunner({ cwd, onEvent });
             result = await activeRunner.run({ prompt: retryPrompt });
           }
         }

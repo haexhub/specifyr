@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { RunScheduler } from "../../src/core/run-scheduler.js";
+import { HermesStreamingRunner } from "../../src/runners/hermes-streaming.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const STUB = path.join(__dirname, "..", "fixtures", "acp-stub-agent.js");
@@ -27,7 +28,7 @@ test("scheduler picks AcpRunner when fallbackChain starts with acp:*", async () 
   assert.equal(typeof runner.cancel, "function", "factory must produce a runner with a cancel() method");
 });
 
-test("scheduler skips acp:* without binary config and falls through", async () => {
+test("scheduler falls back to hermes when acp runner not configured", async () => {
   const sched = new RunScheduler({
     cwd: process.cwd(),
     slug: "x",
@@ -35,12 +36,18 @@ test("scheduler skips acp:* without binary config and falls through", async () =
     graph: { tasks: [] },
     runStore: { initFromGraph: async () => {}, setRunStatus: async () => {} },
     appConfig: {
-      runner: { fallbackChain: ["acp:notconfigured", "claude"] },
+      runner: { fallbackChain: ["acp:notconfigured", "hermes"] },
       acp: {},
-      claude: { binary: "claude" }
+      hermes: { binary: "hermes" }
     }
   });
-  const factory = await sched.pickRunner();
-  // Should have fallen through to claude.
-  assert.equal(sched._runnerName, "claude");
+  // Mock Hermes as available
+  const originalIsAvailable = HermesStreamingRunner.isAvailable;
+  HermesStreamingRunner.isAvailable = async () => true;
+  try {
+    const factory = await sched.pickRunner();
+    assert.equal(sched._runnerName, "hermes");
+  } finally {
+    HermesStreamingRunner.isAvailable = originalIsAvailable;
+  }
 });

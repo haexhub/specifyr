@@ -285,6 +285,42 @@ export const SPEC_KIT_WORKFLOW: WorkflowDefinition = {
   ]
 };
 
+const BUILT_IN_SPEC_KIT_STEP_INSTRUCTIONS: Record<string, string> = {
+  constitution: [
+    "You are running the provider-neutral Spec Kit Constitution step.",
+    "Work inside the current repository. Create or update `.specify/memory/constitution.md`.",
+    "Capture project principles as concrete, testable rules for code quality, testing, UX, performance, security, and delivery.",
+    "If the file already exists, refine it instead of replacing useful existing content.",
+  ].join("\n"),
+  specify: [
+    "You are running the provider-neutral Spec Kit Specify step.",
+    "Work inside `.specify/specs/`. Create or update the current feature spec as `spec.md`.",
+    "Describe what is being built and why: user stories, scenarios, acceptance criteria, constraints, and out-of-scope items.",
+    "Keep implementation details light unless they are required to disambiguate behavior.",
+  ].join("\n"),
+  plan: [
+    "You are running the provider-neutral Spec Kit Plan step.",
+    "Read the current feature spec under `.specify/specs/` and create or update `plan.md` in that feature directory.",
+    "Produce an implementation plan covering architecture, data model, interfaces, dependencies, risks, and validation strategy.",
+    "Prefer concrete technical decisions over vague options, while recording meaningful tradeoffs.",
+  ].join("\n"),
+  tasks: [
+    "You are running the provider-neutral Spec Kit Tasks step.",
+    "Read the current feature `spec.md` and `plan.md`, then create or update `tasks.md` in that feature directory.",
+    "Write executable tasks with stable IDs such as `T001`, clear acceptance criteria, and explicit dependencies when needed.",
+    "Mark tasks that can safely run in parallel with `[P]`.",
+  ].join("\n"),
+  implement: [
+    "You are running the provider-neutral Spec Kit Implement step.",
+    "Execute the selected implementation task in the current repository. Keep changes scoped and verify them when practical.",
+    "Update files directly, run focused checks, and summarize the completed work.",
+  ].join("\n"),
+};
+
+export function loadBuiltInSpecKitStepInstructions(stepId: string): string | null {
+  return BUILT_IN_SPEC_KIT_STEP_INSTRUCTIONS[stepId] ?? null;
+}
+
 // Humanize a command-suffix slug: "create-vision" → "Create Vision"
 function humanizeStepId(id: string): string {
   return id

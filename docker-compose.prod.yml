@@ -6,8 +6,8 @@
 #
 # Unterschied zu dev:
 #   - Image-Target `prod` statt `dev` (kein pnpm dev, kein HMR).
-#   - Kein Source-Bind-Mount; nur Runtime-Daten (projects/, .specifyr/, Credentials) werden
-#     reingereicht. Alles andere ist in der Image-Schicht eingefroren.
+#   - Kein Source-Bind-Mount; nur Runtime-Daten werden reingereicht.
+#   - LLM-Credentials und Speckit-Agent/Profile werden über Settings verwaltet.
 
 services:
   specifyr:
@@ -24,6 +24,8 @@ services:
       PORT: 3000
       NODE_ENV: production
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SPECIFYR_DATA_DIR: /data
+      SPECIFYR_CREDENTIALS_DIR: /credentials
       # Prod-Default: pinned GHCR-Image. Vor `docker compose up` setzen, z.B.
       #   HERMES_AGENT_IMAGE=ghcr.io/haexhub/hermes-agent:sha-abc1234 docker compose -f docker-compose.prod.yml up
       # Ohne expliziten Wert nimmt die Compose-Substitution `:latest` auf der
@@ -34,15 +36,8 @@ services:
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
       APPROVAL_URL_BASE: ${APPROVAL_URL_BASE:-}
     volumes:
-      # Multi-Projekt-Arbeitsbereich: Host-projects/ wird eingehängt, damit Runs am echten
-      # Repo arbeiten. Entferne den Mount, wenn du projects/ stattdessen im Container-Volume
-      # halten willst.
-      - ./projects:/app/projects
-      # Event-/Session-State soll persistieren, ohne den Host zu verschmutzen.
-      - specifyr_state:/app/.specifyr
-      # Host-Login wiederverwenden (Solo-Tool-Default). Für Multi-User später:
-      #   - claude_home:/home/node/.claude
-      - ${HOME}/.claude:/home/node/.claude
+      - specifyr_data:/data
+      - specifyr_credentials:/credentials
       # Docker-Socket: gleiche Begründung wie in docker-compose.yml — erlaubt
       # `docker run` von innen, um Hermes-Agent-Container zu spawnen. Effektiv
       # Host-root für diesen Container; in Multi-User-Deployments revisiten.
@@ -59,6 +54,5 @@ networks:
     driver: bridge
 
 volumes:
-  specifyr_state:
-  # Multi-User-Zukunft:
-  # claude_home:
+  specifyr_data:
+  specifyr_credentials:

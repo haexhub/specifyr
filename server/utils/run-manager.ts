@@ -12,6 +12,7 @@ interface SchedulerModule {
     slug: string;
     projectCwd: string;
     graph: unknown;
+    runnerFactory?: unknown;
   }) => SchedulerInstance;
 }
 

@@ -1,7 +1,6 @@
 import path from "node:path";
 import { EventEmitter } from "node:events";
 import { AcpRunner } from "../runners/acp.js";
-import { ClaudeCodeRunner } from "../runners/claude-code.js";
 import { HermesStreamingRunner } from "../runners/hermes-streaming.js";
 import { RunStore } from "./run-store.js";
 import { loadAppConfig } from "./app-config.js";
@@ -19,9 +18,8 @@ import { loadAppConfig } from "./app-config.js";
  *     and skipped; independent branches continue
  *   - User cancellation kills all in-flight runners and resolves with `paused`
  *
- * Runner selection (v1): Hermes if its binary is available, else Claude Code.
- * Per-project memory isolation for Hermes via `--memory-root` / HOME override
- * (handled inside HermesStreamingRunner).
+ * Runner selection is ACP-only. The HTTP API injects a profile-backed
+ * runnerFactory; CLI callers can still provide an explicit ACP appConfig.
  */
 
 export class RunScheduler extends EventEmitter {
@@ -32,7 +30,8 @@ export class RunScheduler extends EventEmitter {
     graph,
     runStore = new RunStore(cwd),
     maxParallel = 3,
-    appConfig = null
+    appConfig = null,
+    runnerFactory = null,
   } = {}) {
     super();
     this.cwd = cwd;
@@ -44,6 +43,7 @@ export class RunScheduler extends EventEmitter {
     this.abort = false;
     this.inFlight = new Map(); // taskId -> { runner, promise }
     this._injectedAppConfig = appConfig;
+    this._injectedRunnerFactory = runnerFactory;
   }
 
   get byId() {
@@ -55,8 +55,13 @@ export class RunScheduler extends EventEmitter {
 
   async pickRunner() {
     if (this._runnerFactory) return this._runnerFactory;
+    if (this._injectedRunnerFactory) {
+      this._runnerFactory = this._injectedRunnerFactory;
+      this._runnerName = "profile";
+      return this._runnerFactory;
+    }
     const config = this._injectedAppConfig ?? (await loadAppConfig(this.cwd));
-    const chain = config.runner?.fallbackChain ?? ["hermes", "claude"];
+    const chain = config.runner?.fallbackChain ?? ["hermes", "acp:codex"];
     for (const candidate of chain) {
       if (candidate.startsWith("acp:")) {
         const acpKey = candidate.slice("acp:".length);
@@ -70,35 +75,24 @@ export class RunScheduler extends EventEmitter {
             binary: cfg.binary,
             args: cfg.args ?? [],
             memoryRoot: path.join(this.projectCwd, ".specifyr", this.slug, "agent-memory")
-          });
+        });
         return this._runnerFactory;
       }
       if (candidate === "hermes") {
         const available = await HermesStreamingRunner.isAvailable(config.hermes?.binary);
         if (available) {
+          this._runnerName = "hermes";
           this._runnerFactory = (opts) =>
             new HermesStreamingRunner({
               ...opts,
               binary: config.hermes?.binary ?? "hermes",
-              memoryRoot: `${this.projectCwd}/.hermes/memory`
+              memoryRoot: path.join(this.projectCwd, ".specifyr", this.slug, "agent-memory")
             });
-          this._runnerName = "hermes";
           return this._runnerFactory;
         }
-      } else if (candidate === "claude") {
-        this._runnerFactory = (opts) =>
-          new ClaudeCodeRunner({
-            ...opts,
-            binary: config.claude?.binary ?? "claude"
-          });
-        this._runnerName = "claude";
-        return this._runnerFactory;
       }
     }
-    // Safety fallback
-    this._runnerFactory = (opts) => new ClaudeCodeRunner(opts);
-    this._runnerName = "claude";
-    return this._runnerFactory;
+    throw new Error("No runner available — check appConfig.runner.fallbackChain");
   }
 
   get activeRunnerName() {
@@ -106,6 +100,7 @@ export class RunScheduler extends EventEmitter {
   }
 
   async execute() {
+    await this.pickRunner();
     this.emit("run_started", { runner: this.activeRunnerName });
     await this.runStore.setRunStatus(this.slug, {
       status: "running",
@@ -241,19 +236,19 @@ export class RunScheduler extends EventEmitter {
       const runner = factory({
         cwd: this.projectCwd,
         onEvent: async (ev) => {
-          if (ev?.type === "assistant" && Array.isArray(ev.message?.content)) {
-            for (const block of ev.message.content) {
-              if (block?.type === "text" && typeof block.text === "string") {
-                this.emit("task_chunk", { taskId: task.id, text: block.text });
-                this.runStore.appendTaskLog(this.slug, task.id, { kind: "chunk", text: block.text });
-              } else if (block?.type === "tool_use" && block.name) {
-                this.emit("task_event", {
-                  taskId: task.id,
-                  raw: { type: "tool_use", name: block.name, input: block.input }
-                });
-                this.runStore.appendTaskLog(this.slug, task.id, { kind: "tool_call", name: block.name });
-              }
-            }
+          if (
+            ev?.sessionUpdate === "agent_message_chunk" &&
+            ev.content?.type === "text" &&
+            typeof ev.content.text === "string"
+          ) {
+            this.emit("task_chunk", { taskId: task.id, text: ev.content.text });
+            this.runStore.appendTaskLog(this.slug, task.id, { kind: "chunk", text: ev.content.text });
+          } else if (ev?.sessionUpdate === "tool_call") {
+            this.emit("task_event", {
+              taskId: task.id,
+              raw: { type: "tool_call", name: ev.title, input: ev.rawInput }
+            });
+            this.runStore.appendTaskLog(this.slug, task.id, { kind: "tool_call", name: ev.title });
           }
           this.emit("task_event", { taskId: task.id, raw: ev });
         }

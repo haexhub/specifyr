@@ -5,6 +5,7 @@ import type {
   LlmProvider as Provider,
   ProviderMeta,
 } from "~/components/LlmCredentialCard.vue";
+import type { SpeckitAgentProfile } from "~/components/SpeckitAgentProfileCard.vue";
 
 const providerMeta: Record<Provider, ProviderMeta> = {
   anthropic: {
@@ -34,6 +35,14 @@ const { data: credentials, refresh } = await useFetch<CredentialRow[]>(
   "/api/me/llm-credentials",
   { default: () => [] },
 );
+const { data: speckitProfile, refresh: refreshSpeckitProfile } =
+  await useFetch<SpeckitAgentProfile | null>("/api/me/agent-profiles/speckit", {
+    default: () => null,
+  });
+
+async function refreshAll() {
+  await Promise.all([refresh(), refreshSpeckitProfile()]);
+}
 
 const credsByProvider = computed(() => {
   const grouped: Record<Provider, CredentialRow[]> = {
@@ -82,7 +91,14 @@ const anthropicOauth = computed(
       "
       endpoint="/api/me/llm-credentials/oauth/anthropic"
       delete-endpoint="/api/me/llm-credentials"
-      @changed="refresh()"
+      @changed="refreshAll()"
+    />
+
+    <SpeckitAgentProfileCard
+      :profile="speckitProfile"
+      :credentials="credentials ?? []"
+      endpoint="/api/me/agent-profiles/speckit"
+      @changed="refreshSpeckitProfile()"
     />
 
     <LlmCredentialCard
@@ -93,7 +109,7 @@ const anthropicOauth = computed(
       :credentials="credsByProvider[provider] ?? []"
       endpoint="/api/me/llm-credentials"
       default-display-name="Personal"
-      @changed="refresh()"
+      @changed="refreshAll()"
     />
   </div>
 </template>

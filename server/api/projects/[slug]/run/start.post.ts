@@ -12,6 +12,8 @@ import {
   registerScheduler,
   deregisterScheduler
 } from "@su/run-manager";
+import { getProjectFromDb } from "@su/project-store";
+import { createSpeckitRunnerFactory } from "@su/speckit-agent-runner";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -48,7 +50,13 @@ export default defineEventHandler(async (event) => {
   const events = await loadEventStore(slug);
 
   const { RunScheduler } = await getSchedulerModule();
-  const scheduler = new RunScheduler({ cwd, slug, projectCwd: pCwd, graph });
+  const project = await getProjectFromDb(slug);
+  const runnerFactory = await createSpeckitRunnerFactory({
+    userId: event.context.userId,
+    ownerOrgId: project?.ownerOrgId ?? null,
+    runtimeConfig: useRuntimeConfig(),
+  });
+  const scheduler = new RunScheduler({ cwd, slug, projectCwd: pCwd, graph, runnerFactory });
   registerScheduler(slug, scheduler);
 
   const stream = createEventStream(event);

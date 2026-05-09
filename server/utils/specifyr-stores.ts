@@ -28,14 +28,6 @@ export async function loadEventStore(slug: string) {
   return new mod.EventStore(baseDir);
 }
 
-export async function loadClaudeCodeRunner() {
-  const mod = await loadModule<{
-    ClaudeCodeRunner: new (opts?: { binary?: string; cwd?: string; onEvent?: (e: unknown) => void }) => any;
-    extractAssistantText: (event: unknown) => string;
-  }>("src/runners/claude-code.js");
-  return mod;
-}
-
 // Module-scoped singleton — one TurnBroker per Node process. In Nitro dev mode HMR may
 // reset this on file changes (in-flight Claude subprocesses become orphaned but keep running).
 // Acceptable for dev; in production the module loads once and lives for the process lifetime.
@@ -46,10 +38,11 @@ export async function loadTurnBroker() {
     TurnBroker: new (opts: { sessionStore: unknown; runnerFactory: (o: unknown) => unknown }) => any;
   }>("src/core/turn-broker.js");
   const sessionStore = await loadSessionStore();
-  const { ClaudeCodeRunner } = await loadClaudeCodeRunner();
   _turnBroker = new brokerMod.TurnBroker({
     sessionStore,
-    runnerFactory: (opts: any) => new ClaudeCodeRunner(opts)
+    runnerFactory: () => {
+      throw new Error("No Speckit runner profile was provided for this turn.");
+    }
   });
   return _turnBroker;
 }

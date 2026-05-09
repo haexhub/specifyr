@@ -120,6 +120,8 @@ export const orgCredentialParams = z.object({
 });
 
 const PROVIDERS = ["anthropic", "openai", "google", "openrouter"] as const;
+const ACP_RUNNERS = ["acp:claude", "acp:codex"] as const;
+const COMPANY_AGENT_RUNNERS = ["hermes"] as const;
 
 export const llmCredentialCreateSchema = z.object({
   provider: z.enum(PROVIDERS),
@@ -139,5 +141,42 @@ export const oauthCodeSchema = z.object({
   code: z.string().trim().min(4).max(4096),
 });
 
+export const speckitAgentProfileSchema = z.object({
+  runnerKey: z.enum(ACP_RUNNERS),
+  provider: z.enum(PROVIDERS),
+  model: z.string().trim().min(1).max(200),
+  credentialId: z.uuid().nullable(),
+});
+
+// Agent role identifier — must match the role declared in the agent's
+// .specify/org/agents/<role>.md spec. We accept the same shape spec-kit
+// uses (lowercase letters, digits, dashes, underscores) and cap the
+// length so we don't accidentally allow path-traversal-y values.
+const agentRoleString = z
+  .string()
+  .trim()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z0-9_-]+$/);
+
+export const companyAgentProfileSchema = z.object({
+  runnerKey: z.enum(COMPANY_AGENT_RUNNERS),
+  provider: z.enum(PROVIDERS),
+  model: z.string().trim().min(1).max(200),
+  credentialId: z.uuid().nullable(),
+});
+
+export const companyAgentRoleParam = z.object({
+  slug: slugString,
+  role: agentRoleString,
+});
+
+export const orgCompanyAgentRoleParam = z.object({
+  slug: slugString,
+  role: agentRoleString,
+});
+
 export type LlmCredentialCreateInput = z.infer<typeof llmCredentialCreateSchema>;
 export type LlmCredentialPatchInput = z.infer<typeof llmCredentialPatchSchema>;
+export type SpeckitAgentProfileInput = z.infer<typeof speckitAgentProfileSchema>;
+export type CompanyAgentProfileInput = z.infer<typeof companyAgentProfileSchema>;
