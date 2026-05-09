@@ -1,0 +1,20 @@
+# Enables self-registration on the default authentication flow.
+# Mirrors roles/authentik/templates/blueprints/specifyr-self-registration.yaml.j2.
+#
+# specifyr enforces its own registration policy in
+# server/middleware/auth.ts — the IDP is left wide open here.
+version: 1
+metadata:
+  name: specifyr-self-registration
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  - model: authentik_stages_identification.identificationstage
+    identifiers:
+      name: default-authentication-identification
+    attrs:
+      enrollment_flow:
+        !Find [
+          authentik_flows.flow,
+          [slug, "default-source-enrollment-flow"],
+        ]
