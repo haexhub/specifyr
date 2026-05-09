@@ -11,10 +11,15 @@ ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 RUN corepack enable
 # Install Hermes Agent CLI for multi-agent workflows.
-# Pipe to bash (not sh): the upstream installer uses bash-only syntax
+# Run via bash (not sh): the upstream installer uses bash-only syntax
 # (e.g. arithmetic `((…))`), which busybox `sh` on Alpine doesn't parse.
+# Download-then-execute (not `curl … | bash`): a piped download swallows
+# curl's exit code, so a partial/empty response lets bash exit 0 and the
+# image looks healthy without Hermes actually installed.
 ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
-RUN curl -fsSL $HERMES_INSTALL_URL | bash
+RUN curl -fsSL "${HERMES_INSTALL_URL}" -o /tmp/hermes-install.sh \
+ && bash /tmp/hermes-install.sh \
+ && rm -f /tmp/hermes-install.sh
 WORKDIR /app
 
 # ------------------------------------------------------------------------------
