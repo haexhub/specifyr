@@ -37,9 +37,9 @@ import {
 } from "@su/company-manager";
 import { getProjectSecrets } from "@su/secrets-store";
 import {
-  resolveCredentialForRequest,
-  type ResolvedCredential,
-} from "@su/llm-credentials-store";
+  resolveAgentProfileForRequest,
+  type ResolvedAgentProfile,
+} from "@su/llm-agent-profiles-store";
 import { getProjectFromDb } from "@su/project-store";
 import { mintRunnerSession } from "@su/runner-sessions-store";
 import path from "node:path";
@@ -142,6 +142,59 @@ export default defineEventHandler(async (event) => {
       const roles = [...agentMap.keys()];
       await push("roles_loaded", { roles });
 
+      // Validate every role has its own LLM profile BEFORE we burn time
+      // building images. Profiles are owner-scoped (user-personal wins
+      // over project-owner-org); a missing profile is a hard error
+      // surfaced to the UI's runtime page → Agent LLMs.
+      const userId = event.context.userId;
+      if (!userId) {
+        await push("error", {
+          message: "Starting a company requires an authenticated user.",
+        });
+        return;
+      }
+
+      const project = await getProjectFromDb(slug);
+      const ownerOrgId = project?.ownerOrgId ?? null;
+
+      const profilesByRole = new Map<string, ResolvedAgentProfile>();
+      const agentSessionTokens = new Map<string, string>();
+      const missingProfileRoles: string[] = [];
+      for (const role of roles) {
+        const profile = await resolveAgentProfileForRequest(
+          userId,
+          ownerOrgId,
+          "company-agent",
+          role,
+        );
+        if (!profile) {
+          missingProfileRoles.push(role);
+          continue;
+        }
+        profilesByRole.set(role, profile);
+        if (profile.credential.mode === "oauth_claude") {
+          const minted = await mintRunnerSession({
+            userId,
+            owner: {
+              kind: profile.credential.ownerKind,
+              id: profile.credential.ownerId,
+            },
+          });
+          agentSessionTokens.set(role, minted.token);
+        }
+      }
+
+      if (missingProfileRoles.length > 0) {
+        await push("error", {
+          message:
+            `No LLM profile configured for: ${missingProfileRoles.join(", ")}. ` +
+            `Open the project's runtime page → Agent LLMs and pick a provider, model, ` +
+            `and credential for each role before starting the company.`,
+          missingRoles: missingProfileRoles,
+        });
+        return;
+      }
+
       // Purge stale auth.json for every agent. hermes caches the resolved
       // credential (including the token value and auth_type) in auth.json.
       // Without deletion, a prior run's cached OAuth token overrides the
@@ -188,46 +241,52 @@ export default defineEventHandler(async (event) => {
       const opsToken = randomBytes(32).toString("hex");
       const opsUrl = config.companyOpsUrlBase;
       const projectSecrets = await getProjectSecrets(slug);
+      const proxyUrl = config.companyClaudeProxyUrl || undefined;
 
-      // Resolve the LLM credential ONCE up front so the per-agent
-      // secretsResolver below stays sync-friendly (the resolver is
-      // hot-called by the runner factory and must not do per-agent DB
-      // queries). userId comes from the auth middleware — null in
-      // single-user/legacy mode, in which case we fall back to the
-      // existing runtimeConfig + project-secret chain.
-      //
-      // Resolution priority (Phase 5):
-      //   1. user-personal credential
-      //   2. project-owner-org credential (if project is org-owned)
-      //
-      // Phase 6: when the resolved row is `mode='oauth_claude'`, we
-      // mint a short-lived runner_session token and inject IT as the
-      // ANTHROPIC_API_KEY. The haex-claude-proxy (Phase 7) resolves
-      // that token back to (ownerKind, ownerId) and spawns the claude
-      // CLI with the matching credentials directory. The agent itself
-      // never sees the OAuth token, only the throwaway session token.
-      const userId = event.context.userId;
-      let resolvedAnthropic: ResolvedCredential | null = null;
-      let oauthSessionToken: string | null = null;
-      if (userId) {
-        const project = await getProjectFromDb(slug);
-        const ownerOrgId = project?.ownerOrgId ?? null;
-        resolvedAnthropic = await resolveCredentialForRequest(
-          userId,
-          ownerOrgId,
-          "anthropic",
-        );
-        if (resolvedAnthropic?.mode === "oauth_claude") {
-          const minted = await mintRunnerSession({
-            userId,
-            owner: {
-              kind: resolvedAnthropic.ownerKind,
-              id: resolvedAnthropic.ownerId,
-            },
-          });
-          oauthSessionToken = minted.token;
+      // Inject per-provider env for an agent that has its own profile.
+      // Hermes reads the standard provider env vars (ANTHROPIC_API_KEY,
+      // OPENAI_API_KEY, GOOGLE_API_KEY/GEMINI_API_KEY); OpenRouter reuses
+      // the OpenAI vars with a base_url override. oauth_claude routes
+      // through our multi-tenant proxy with a minted session token.
+      const buildEnvForProfile = (
+        profile: ResolvedAgentProfile,
+        sessionToken: string | undefined,
+      ): Record<string, string> => {
+        const env: Record<string, string> = {};
+        const cred = profile.credential;
+        if (cred.mode === "api_key") {
+          if (profile.provider === "anthropic") {
+            env.ANTHROPIC_API_KEY = cred.apiKey;
+            if (cred.baseUrl) env.ANTHROPIC_BASE_URL = cred.baseUrl;
+          } else if (profile.provider === "openai") {
+            env.OPENAI_API_KEY = cred.apiKey;
+            if (cred.baseUrl) env.OPENAI_BASE_URL = cred.baseUrl;
+          } else if (profile.provider === "openrouter") {
+            env.OPENAI_API_KEY = cred.apiKey;
+            env.OPENAI_BASE_URL = cred.baseUrl || "https://openrouter.ai/api/v1";
+          } else if (profile.provider === "google") {
+            env.GOOGLE_API_KEY = cred.apiKey;
+            env.GEMINI_API_KEY = cred.apiKey;
+            if (cred.baseUrl) env.GOOGLE_BASE_URL = cred.baseUrl;
+          }
+        } else {
+          // oauth_claude — Anthropic only, routed through the proxy.
+          const target = cred.baseUrl || proxyUrl;
+          if (!target) {
+            throw new Error(
+              `Agent profile for role '${profile.agentRole}' uses Claude OAuth but COMPANY_CLAUDE_PROXY_URL is not configured.`,
+            );
+          }
+          if (!sessionToken) {
+            throw new Error(
+              `Agent profile for role '${profile.agentRole}' uses Claude OAuth but no runner session was minted.`,
+            );
+          }
+          env.ANTHROPIC_BASE_URL = target;
+          env.ANTHROPIC_API_KEY = sessionToken;
         }
-      }
+        return env;
+      };
 
       const runnerFactory = dockerRunnerFactory({
         projectRoot: pHostCwd,
@@ -237,6 +296,11 @@ export default defineEventHandler(async (event) => {
           return img;
         },
         network: "companies",
+        agentLlmResolver: (agent: any) => {
+          const profile = profilesByRole.get(agent?.role);
+          if (!profile) return null;
+          return { provider: profile.provider, model: profile.model };
+        },
         secretsResolver: (agent: any) => {
           if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
           const env: Record<string, string> = {
@@ -244,41 +308,28 @@ export default defineEventHandler(async (event) => {
             COMPANY_OPS_URL: `${opsUrl}/${slug}`,
           };
 
-          // Resolution priority for the Anthropic credential:
-          //   1a. user-personal api_key (Phase 4) — most specific.
-          //   1b. user-personal oauth_claude — minted session token
-          //       routed through the multi-tenant proxy.
-          //   2.  project-owner-org credential (Phase 5) — same modes,
-          //       fallback for members who didn't add a personal one.
-          //   3.  deployment-wide runtimeConfig + project secrets.
-          //
-          // The legacy "shared OAuth via host ~/.claude" path is
-          // intentionally absent: the proxy is multi-tenant only, and
-          // a request without a per-user OAuth credential goes
-          // straight to the direct Anthropic API path (api_key from
-          // runtimeConfig).
-          const proxyUrl = config.companyClaudeProxyUrl || undefined;
-          if (resolvedAnthropic?.mode === "api_key") {
-            env.ANTHROPIC_API_KEY = resolvedAnthropic.apiKey;
-            if (resolvedAnthropic.baseUrl)
-              env.ANTHROPIC_BASE_URL = resolvedAnthropic.baseUrl;
-          } else if (resolvedAnthropic?.mode === "oauth_claude" && oauthSessionToken && proxyUrl) {
-            // Token IS the API key from the agent's perspective; the
-            // proxy unpacks it server-side. baseUrl on the credential
-            // overrides the deployment proxy when set (per-tenant
-            // proxy fan-out, not currently used but cheap to support).
-            env.ANTHROPIC_BASE_URL = resolvedAnthropic.baseUrl || proxyUrl;
-            env.ANTHROPIC_API_KEY = oauthSessionToken;
-          } else {
-            // Direct API: runtimeConfig takes priority, then project secrets.
-            const apiKey = config.anthropicApiKey || projectSecrets["ANTHROPIC_API_KEY"];
-            if (apiKey) env.ANTHROPIC_API_KEY = apiKey;
-            if (config.anthropicBaseUrl) env.ANTHROPIC_BASE_URL = config.anthropicBaseUrl;
+          // Per-agent profile is mandatory — the upfront validation
+          // above guarantees `profilesByRole` covers every role with a
+          // `secrets:read_env` capability that reaches this point.
+          const profile = profilesByRole.get(agent?.role);
+          if (!profile) {
+            throw new Error(
+              `Internal: no LLM profile resolved for agent role '${agent?.role}'. ` +
+                `This indicates a bug in the upfront validation.`,
+            );
           }
+          Object.assign(
+            env,
+            buildEnvForProfile(profile, agentSessionTokens.get(agent.role)),
+          );
 
-          // Pass through any other non-ANTHROPIC project secrets.
+          // Pass through any other project secrets that don't collide
+          // with the provider-specific keys the profile just set.
+          const reservedPrefixes = ["ANTHROPIC_", "OPENAI_", "GOOGLE_", "GEMINI_"];
           for (const [k, v] of Object.entries(projectSecrets)) {
-            if (v && !k.startsWith("ANTHROPIC_")) env[k] = v;
+            if (!v) continue;
+            if (reservedPrefixes.some((p) => k.startsWith(p))) continue;
+            env[k] = v;
           }
           return env;
         },

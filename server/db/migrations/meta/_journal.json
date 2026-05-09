@@ -64,6 +64,13 @@
       "when": 1778256299925,
       "tag": "0008_org_scoped_extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778328323148,
+      "tag": "0009_llm_agent_profiles",
+      "breakpoints": true
     }
   ]
 }

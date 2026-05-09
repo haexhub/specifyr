@@ -39,13 +39,39 @@ function buildHermesPrompt(workItem, runtimeContext) {
 }
 
 /**
+ * Map an agent-profile provider id to the value Hermes wants for
+ * `--provider`. Our DB enum uses 'google' (LiteLLM convention), but
+ * Hermes' CLI calls Google's models 'gemini'. OpenRouter is an
+ * OpenAI-compatible gateway, so callers should set `--provider openai`
+ * with an OpenRouter base_url.
+ */
+function hermesProviderId(profileProvider) {
+  if (profileProvider === "google") return "gemini";
+  if (profileProvider === "openrouter") return "openai";
+  return profileProvider; // anthropic | openai
+}
+
+/**
+ * Default model namespace for `-m` when the configured model is bare
+ * (no `<vendor>/<id>` prefix). Hermes routes the prefix to its provider
+ * implementation, so it must match `--provider`.
+ */
+function hermesModelNamespace(profileProvider) {
+  if (profileProvider === "google") return "gemini";
+  if (profileProvider === "openrouter") return "openrouter";
+  return profileProvider; // anthropic | openai
+}
+
+/**
  * Build the `hermes chat` CLI argv for a single-shot run inside the
  * container. The prompt is passed as the `-q QUERY` value (NOT via stdin
  * — hermes 0.11 doesn't read stdin in single-query mode).
  *
+ * Provider/model precedence:
+ *   1. explicit `llm.provider` + `llm.model`        (per-agent profile)
+ *   2. legacy `agent.model` from the .md frontmatter (anthropic-only)
+ *
  * Defaults applied:
- *   --provider anthropic        only ANTHROPIC_API_KEY is forwarded today
- *   -m anthropic/<agent.model>  unless agent.model already namespaced
  *   --max-turns 20              safety cap; runner_type:persistent doesn't
  *                               (yet) translate to unbounded turns
  *   --yolo                      skip hermes' own permission prompts; our
@@ -59,13 +85,17 @@ function buildHermesPrompt(workItem, runtimeContext) {
  *                               causing the first-run wizard to fire in
  *                               non-interactive containers.
  */
-function buildHermesChatArgs(prompt, agent) {
-  const model = agent?.model ?? "claude-opus-4-5";
-  const namespacedModel = model.includes("/") ? model : `anthropic/${model}`;
+function buildHermesChatArgs(prompt, agent, llm) {
+  const profileProvider = llm?.provider ?? "anthropic";
+  const provider = hermesProviderId(profileProvider);
+  const model = llm?.model ?? agent?.model ?? "claude-opus-4-5";
+  const namespacedModel = model.includes("/")
+    ? model
+    : `${hermesModelNamespace(profileProvider)}/${model}`;
   return [
     "hermes",
     "chat",
-    "--provider", "anthropic",
+    "--provider", provider,
     "-m", namespacedModel,
     "--max-turns", "20",
     "--yolo",
@@ -139,6 +169,11 @@ export class HermesDockerRunner extends HermesAgentRunner {
       ?? (options.agent?.role
         ? String(options.agent.role).replace(CONTAINER_NAME_SAFE, "_")
         : null);
+    // Optional per-agent LLM override from the agent-profile resolver.
+    // When set, takes precedence over `agent.model` for `-m` and
+    // determines `--provider`. When null, the runner falls back to the
+    // legacy "anthropic + agent.model" defaults.
+    this.llm = options.llm ?? null;
   }
 
   /**
@@ -213,7 +248,7 @@ export class HermesDockerRunner extends HermesAgentRunner {
   /** Run hermes inside the already-running persistent container via docker exec. */
   async #executePersistent(workItem, runtimeContext) {
     const prompt = buildHermesPrompt(workItem, runtimeContext);
-    const cmdArgs = buildHermesChatArgs(prompt, this.agent);
+    const cmdArgs = buildHermesChatArgs(prompt, this.agent, this.llm);
     const result = await this.commandRunner(
       this.dockerCommand,
       ["exec", this.persistentContainerName, ...cmdArgs],
@@ -267,7 +302,7 @@ export class HermesDockerRunner extends HermesAgentRunner {
     });
 
     const prompt = buildHermesPrompt(workItem, runtimeContext);
-    const cmdArgs = buildHermesChatArgs(prompt, this.agent);
+    const cmdArgs = buildHermesChatArgs(prompt, this.agent, this.llm);
     // capabilityFlags(...) places the image as its last entry; everything
     // after that is the container's CMD, which overrides the image's
     // default CMD. No stdin piping — hermes 0.11 reads -q QUERY from argv.
@@ -341,9 +376,15 @@ export class HermesDockerRunner extends HermesAgentRunner {
  * @param {string} [cfg.image]                           single image override
  * @param {string} [cfg.network]                         compose network name
  * @param {(agent) => Object<string,string>} [cfg.secretsResolver]
+ * @param {(agent) => {provider: string, model: string} | null} [cfg.agentLlmResolver]
+ *   Returns the per-agent LLM override (provider + model) for the given
+ *   agent. When null/undefined, the runner falls back to the legacy
+ *   anthropic-only defaults. Provider must be one of the values our
+ *   credential schema accepts (anthropic|openai|google|openrouter); the
+ *   runner translates them to Hermes' `--provider` naming.
  * @returns {(agent, runtimeMeta) => HermesDockerRunner}
  */
-export function dockerRunnerFactory({ projectRoot, imageForRole, image, network, secretsResolver }) {
+export function dockerRunnerFactory({ projectRoot, imageForRole, image, network, secretsResolver, agentLlmResolver }) {
   if (!projectRoot) throw new Error("dockerRunnerFactory: projectRoot required");
   return (agent, runtimeMeta = {}) => {
     const profileDir = hermesHomeForAgent({ projectRoot, role: agent.role });
@@ -353,6 +394,7 @@ export function dockerRunnerFactory({ projectRoot, imageForRole, image, network,
       process.env.HERMES_AGENT_IMAGE ??
       "hermes-agent:dev";
     const secrets = secretsResolver ? secretsResolver(agent) : undefined;
+    const llm = agentLlmResolver ? agentLlmResolver(agent) ?? null : null;
     const rawBinaries = agent?.tools?.binaries ?? [];
     const catalog = runtimeMeta?.catalog;
     const binaryWhitelist = rawBinaries.includes("*") && catalog
@@ -378,6 +420,7 @@ export function dockerRunnerFactory({ projectRoot, imageForRole, image, network,
       persistentContainerName,
       composeProject: slug,
       composeService: role,
+      llm,
     });
   };
 }

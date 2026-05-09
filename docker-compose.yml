@@ -1,16 +1,10 @@
 # Development compose — Nuxt dev server with HMR.
 #
 # Usage:
-#   docker compose up --build            # start dev server on http://localhost:3000
+#   docker compose up --build            # start dev server on http://localhost:4242
 #   docker compose exec specifyr sh     # shell inside the running container
 #
-# Authentifizierung gegen Anthropic (Solo-Tool-Setup):
-#   - Default: Host-Login wird per Bind-Mount (~/.claude) wiederverwendet. Kein zusätzlicher
-#     Login im Container nötig — der Container sieht genau das, was dein Host-`claude` sieht.
-#   - API-Key: Alternativ/ergänzend ANTHROPIC_API_KEY in .env oder Shell setzen.
-#   - Multi-User später: Statt des Bind-Mounts ein benanntes Volume einhängen und
-#     `docker compose exec specifyr claude login` pro Setup ausführen. Siehe Kommentar
-#     an der volumes-Zeile unten.
+# LLM-Credentials und Speckit-Agent/Profile werden in der Settings UI verwaltet.
 
 services:
   specifyr:
@@ -20,23 +14,19 @@ services:
     image: specifyr:dev
     container_name: specifyr-dev
     ports:
-      - "3000:3000"
+      - "4242:3000"
     environment:
       HOST: 0.0.0.0
       PORT: 3000
       NODE_ENV: development
-      # Optional: falls gesetzt, nutzt `claude` diesen Key statt OAuth.
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      # Image-Tag, mit dem hermes-docker.js Agenten-Container spawnt. Default
-      # 'hermes-agent:dev' = lokal selbst gebaut. Für GHCR-Konsum: setze
-      # `HERMES_AGENT_IMAGE=ghcr.io/<owner>/hermes-agent:<tag>` in der Shell
-      # vor `docker compose up`, oder hardcode hier.
+      # Image-Tag für Agent-Container (falls verwendet). Default ist lokal gebaut.
       HERMES_AGENT_IMAGE: ${HERMES_AGENT_IMAGE:-hermes-agent:dev}
       # Pfade zum Laufzeit-Datenverzeichnis (~/.specifyr). Im Container liegt es
       # unter /data; der Docker-Daemon löst Bind-Mount-Sources gegen das HOST-FS auf,
       # daher muss SPECIFYR_HOST_DATA_DIR auf den Host-Pfad zeigen.
       SPECIFYR_DATA_DIR: /data
       SPECIFYR_HOST_DATA_DIR: ${SPECIFYR_HOST_DATA_DIR:-${HOME}/.specifyr}
+      SPECIFYR_CREDENTIALS_DIR: /credentials
       # Host-Pfad zu diesem Repo (= Host-Equivalent von /app im Container).
       # Wird gebraucht, wenn specifyr via /var/run/docker.sock Sibling-Container
       # spawnt: deren Bind-Mount-Sources werden vom Host-Daemon aufgelöst, nicht
@@ -55,6 +45,9 @@ services:
       # URL des lokalen claude-proxy-Containers. Wenn gesetzt, routen alle
       # Hermes-Agenten ihre Anthropic-API-Calls darüber (nutzt Claude-Abo-OAuth).
       COMPANY_CLAUDE_PROXY_URL: http://claude-proxy:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
     volumes:
       # Source bind mount für HMR.
       - .:/app
@@ -65,10 +58,8 @@ services:
       - /app/node_modules
       - /app/.nuxt
       - /app/.output
-      # Host-Login wiederverwenden (Solo-Tool-Default). Für Multi-User später austauschen gegen:
-      #   - claude_home:/home/node/.claude
-      # und das `volumes:`-Block unten einkommentieren + `claude login` im Container ausführen.
-      - ${HOME}/.claude:/home/node/.claude
+      # Per-user/org OAuth credential homes managed by specifyr.
+      - ${HOME}/.specifyr/credentials:/credentials
       # Docker-Socket: erlaubt der specifyr-App, per `docker run` Hermes-Agent-Container
       # zu spawnen. SICHERHEITS-HINWEIS: dieser Mount = effektiv root auf dem Host für
       # alles innerhalb dieses Containers. Acceptabel für Solo-Dev-Setup; in Multi-User-
@@ -82,9 +73,18 @@ services:
       companies:
         aliases:
           - specifyr
+    labels:
+      # Traefik-Routing für den vollen multi-user-Flow:
+      # http://specifyr.localhost → traefik → authentik forward-auth → specifyr
+      traefik.enable: "true"
+      traefik.docker.network: companies
+      traefik.http.routers.specifyr.entrypoints: web
+      traefik.http.routers.specifyr.rule: Host(`specifyr.localhost`)
+      traefik.http.routers.specifyr.middlewares: authentik@docker
+      traefik.http.services.specifyr.loadbalancer.server.port: "3000"
     # UID/GID-Mapping für Bind-Mounts (Linux). Auf macOS/Windows ignoriert Docker das.
-    # Falls dein Host-User nicht UID 1000 hat: `UID=$(id -u) GID=$(id -g) docker compose up`
-    user: "${UID:-1000}:${GID:-1000}"
+    # Falls dein Host-User nicht UID 1000 hat: `USER_UID=$(id -u) USER_GID=$(id -g) docker compose up`
+    user: "${USER_UID:-1000}:${USER_GID:-1000}"
     # Docker-Socket-Gruppe: erlaubt dem node-User im Container, den gemounteten
     # Docker-Socket zu nutzen. DOCKER_GID auf die Host-GID der docker-Gruppe setzen
     # (Standard: 999 auf Ubuntu/Debian). `getent group docker | cut -d: -f3` liefert den Wert.
@@ -95,8 +95,186 @@ services:
     image: haex-claude-proxy:dev
     container_name: claude-proxy
     volumes:
-      - ${HOME}/.claude:/home/node/.claude:ro
-      - ${HOME}/.claude.json:/home/node/.claude.json:ro
+      - ${HOME}/.specifyr/credentials:/credentials:ro
+    networks:
+      - companies
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:17-alpine
+    container_name: specifyr-postgres-dev
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: devpw
+    ports:
+      # Host-Port 5566 für psql/IDEs vom Host. Die App im specifyr-dev-Container
+      # erreicht den Service per Bridge-DNS als `postgres:5432`, nicht über localhost.
+      - "5566:5432"
+    volumes:
+      - specifyr_postgres_data:/var/lib/postgresql/data
+      # Init-Scripts laufen einmalig bei leerem Datenvolume (Postgres-Konvention)
+      # und legen `specifyr` + `authentik` DBs/Rollen an. Mirror der Prod-Topologie:
+      # eine Postgres-Instanz, mehrere Datenbanken pro App.
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d specifyr"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - companies
+    restart: unless-stopped
+
+  # ── Authentik (Identity Provider) ────────────────────────────────────────
+  # Mirror der Prod-Topologie (roles/authentik): server + worker + redis,
+  # gemeinsam genutzte Postgres-Instanz, eigene `authentik`-DB. UI ist in
+  # dev direkt unter http://localhost:9000 erreichbar (kein traefik dazwischen).
+  #
+  # Multi-User-Test in dev:
+  #   1. Authentik-Bootstrap-Login: http://localhost:9000  (akadmin / ${AUTHENTIK_BOOTSTRAP_PASSWORD})
+  #   2. SPECIFYR_DEV_USER_EMAIL in .env leeren, damit auth-middleware NICHT
+  #      automatisch einloggt — sonst überstimmt der env-fallback echte Headers.
+  #   3. Hinweis: forward-auth (Authentik → specifyr Headers) braucht in Prod
+  #      Traefik. In dev kannst du echte Authentik-Headers entweder per curl
+  #      simulieren (wie in tests/api/api.e2e.test.ts) oder traefik dazustellen.
+  authentik-redis:
+    image: redis:alpine
+    container_name: specifyr-authentik-redis
+    command: --save 60 1 --loglevel warning
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 30s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+    volumes:
+      - specifyr_authentik_redis:/data
+    networks:
+      - companies
+    restart: unless-stopped
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_TAG:-2024.10}
+    container_name: specifyr-authentik-server
+    command: server
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentikpw
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-dev-only-change-in-prod-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-akadmin-dev}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-dev-bootstrap-token}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-akadmin@localhost}
+      # AUTHENTIK_COOKIE_DOMAIN bewusst NICHT gesetzt: Browser (insb. Firefox)
+      # lehnen `Domain=localhost` ab, weil `localhost` als eigene TLD gilt und
+      # `auth.localhost` daher keine Subdomain davon ist (RFC 6265 + Public
+      # Suffix List). Ohne den env-var scoped Authentik Cookies auf den exakten
+      # Host (auth.localhost), der Forward-auth-callback setzt sein eigenes
+      # Cookie auf specifyr.localhost — beide getrennt, was für SSO ausreicht.
+    ports:
+      # UI direkt erreichbar auf localhost:9000 (HTTP). Prod nutzt traefik+TLS;
+      # dev geht direkt, weil wir keinen reverse proxy mitlaufen lassen.
+      - "9000:9000"
+      - "9443:9443"
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 30s
+      retries: 3
+      # Erstinitialisierung dauert 2–3 min (django migrations). Solange
+      # nicht `unhealthy` reporten, sonst depends_on-Gates spuckend.
+      start_period: 300s
+    volumes:
+      - specifyr_authentik_media:/media
+      - specifyr_authentik_templates:/templates
+      # Blueprints: provisioniert beim Start automatisch den Proxy-Provider
+      # für specifyr.localhost und enabled self-registration. Mirror der
+      # Prod-blueprints aus roles/authentik/templates/blueprints/.
+      - ./docker/authentik-blueprints:/blueprints/custom:ro
+    depends_on:
+      authentik-redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - companies
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: companies
+      # UI-Router: http://auth.localhost → authentik-server:9000
+      traefik.http.routers.authentik.entrypoints: web
+      traefik.http.routers.authentik.rule: Host(`auth.localhost`)
+      traefik.http.services.authentik.loadbalancer.server.port: "9000"
+      # Forward-auth-Middleware-Definition. Wird via `authentik@docker` von
+      # specifyr (und ggf. weiteren Services) referenziert.
+      traefik.http.middlewares.authentik.forwardauth.address: http://authentik-server:9000/outpost.goauthentik.io/auth/traefik
+      traefik.http.middlewares.authentik.forwardauth.trustForwardHeader: "true"
+      traefik.http.middlewares.authentik.forwardauth.authResponseHeaders: X-authentik-email,X-authentik-username,X-authentik-name
+    restart: unless-stopped
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_IMAGE_TAG:-2024.10}
+    container_name: specifyr-authentik-worker
+    command: worker
+    environment:
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_POSTGRESQL__HOST: postgres
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentikpw
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-dev-only-change-in-prod-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa}
+      # Worker wendet das Bootstrap-Blueprint an, das den akadmin-User auf
+      # Erstinit anlegt — die Vars müssen mit dem server-Service synchron sein.
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-akadmin-dev}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-dev-bootstrap-token}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-akadmin@localhost}
+    volumes:
+      - specifyr_authentik_media:/media
+      - specifyr_authentik_certs:/certs
+      - specifyr_authentik_templates:/templates
+      # Blueprints werden vom WORKER appliziert — selber Mount wie server.
+      - ./docker/authentik-blueprints:/blueprints/custom:ro
+    depends_on:
+      authentik-redis:
+        condition: service_healthy
+      authentik-server:
+        # Wartet bis server `healthy` ist — sonst race auf django migrations.
+        condition: service_healthy
+    networks:
+      - companies
+    restart: unless-stopped
+
+  # ── Traefik (Reverse Proxy + Forward-Auth) ───────────────────────────────
+  # Stellt den vollen multi-user-Flow lokal nach: Browser → traefik
+  # → authentik forward-auth → specifyr (mit X-authentik-* Headers).
+  #
+  # Routing (alle HTTP, kein TLS in dev):
+  #   http://auth.localhost      → authentik-server:9000  (UI/Login)
+  #   http://specifyr.localhost  → specifyr:3000          (mit authentik@docker middleware)
+  #
+  # `*.localhost` löst in modernen Browsern automatisch auf 127.0.0.1
+  # (RFC 6761) — kein /etc/hosts Eintrag nötig. Falls dein OS das nicht
+  # tut, in /etc/hosts ergänzen:
+  #   127.0.0.1  auth.localhost specifyr.localhost
+  traefik:
+    image: traefik:v3
+    container_name: specifyr-traefik
+    command:
+      - --api.insecure=true
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.docker.network=companies
+      - --entrypoints.web.address=:80
+      - --log.level=INFO
+    ports:
+      - "80:80"
+      # Traefik-Dashboard auf localhost:8088 (zum Debuggen der Routes/Middlewares).
+      - "8088:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - companies
     restart: unless-stopped
@@ -106,9 +284,9 @@ networks:
     name: companies
     driver: bridge
 
-# Multi-User-Zukunft: benanntes Volume statt Host-Mount.
-# volumes:
-#   claude_home:
-
-
-
+volumes:
+  specifyr_postgres_data:
+  specifyr_authentik_redis:
+  specifyr_authentik_media:
+  specifyr_authentik_certs:
+  specifyr_authentik_templates:

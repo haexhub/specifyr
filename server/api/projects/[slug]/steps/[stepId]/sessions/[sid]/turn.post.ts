@@ -11,9 +11,12 @@ import { getProjectWorkflowId } from "@su/workflows";
 import {
   SPEC_KIT_WORKFLOW,
   loadInstalledExtensionWorkflow,
+  loadBuiltInSpecKitStepInstructions,
   loadStepCommandBody
 } from "@su/workflow-discovery";
 import { parseBody, parseParams, sessionParams } from "@su/validation";
+import { getProjectFromDb } from "@su/project-store";
+import { createSpeckitRunnerFactory } from "@su/speckit-agent-runner";
 
 const turnSchema = z.object({
   content: z.string().trim().min(1).max(32_000),
@@ -47,11 +50,11 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Prepend the step's slash-command on the very first turn so Claude resolves the right
-  // skill. Same as before — the persisted user message stays as the user typed it; only
-  // the prompt sent to Claude carries the prefix.
+  // Prepend the step command context on the very first turn so the selected ACP
+  // agent receives the workflow instructions. The persisted user message stays
+  // exactly as typed; only the runtime prompt carries the extra context.
   const isFirstUserTurn = (session.messageCount ?? 0) === 0;
-  let promptForClaude = content;
+  let promptForAgent = content;
   if (isFirstUserTurn) {
     const workflowId = await getProjectWorkflowId(slug);
     const workflow =
@@ -70,18 +73,30 @@ export default defineEventHandler(async (event) => {
         `Focus exclusively on this step. Do not suggest actions from later steps or start the company runtime.`,
         `If this step's artifacts already exist, confirm what is done and ask what to adjust or finalize for this step.`
       ].join(" ");
-      // Inject the full command-file body so Claude sees all skill instructions.
-      // Without this, headless `claude -p` only receives the slash-command name.
-      const commandBody = workflowId !== "spec-kit"
-        ? await loadStepCommandBody(slug, workflowId, stepId)
-        : null;
+      // Inject the full command-file body when an extension provides one.
+      const commandBody =
+        workflowId === "spec-kit"
+          ? loadBuiltInSpecKitStepInstructions(stepId)
+          : await loadStepCommandBody(slug, workflowId, stepId);
+      const commandLabel = `Workflow command: ${stepDef.command}`;
       if (commandBody) {
-        promptForClaude = `${stepDef.command}\n\n${commandBody}\n\n---\n\n${workflowCtx}\n\n${content}`;
+        promptForAgent = `${commandLabel}\n\n${commandBody}\n\n---\n\n${workflowCtx}\n\n${content}`;
       } else {
-        promptForClaude = `${stepDef.command}\n\n${workflowCtx}\n\n${content}`;
+        promptForAgent = `${commandLabel}\n\n${workflowCtx}\n\n${content}`;
       }
     }
   }
+
+  // Resolve the runner factory FIRST — it can throw 400/401 when no
+  // agent profile is configured, and we don't want to mutate session
+  // state (appendMessage / markInProgress / session_started event) for
+  // a turn we won't actually start.
+  const project = await getProjectFromDb(slug);
+  const runnerFactory = await createSpeckitRunnerFactory({
+    userId: event.context.userId,
+    ownerOrgId: project?.ownerOrgId ?? null,
+    runtimeConfig: useRuntimeConfig(),
+  });
 
   // Persist the user message before kickoff so it survives any failure mode.
   const userMessage = await sessionStore.appendMessage(slug, stepId, sid, {
@@ -110,9 +125,10 @@ export default defineEventHandler(async (event) => {
     slug,
     stepId,
     sid,
-    prompt: promptForClaude,
+    prompt: promptForAgent,
     cwd: projectCwd(slug),
-    claudeSessionId: session.claudeSessionId ?? null
+    claudeSessionId: session.claudeSessionId ?? null,
+    runnerFactory,
   });
 
   setResponseStatus(event, 202);

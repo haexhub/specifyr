@@ -1,21 +1,25 @@
 # syntax=docker/dockerfile:1.7
 
 # ------------------------------------------------------------------------------
-# base: node 22 + pnpm (via corepack) + claude-code CLI + git/bash for the runner
+# base: node 22 + pnpm (via corepack) + hermes CLI + git/bash for the runner
 # ------------------------------------------------------------------------------
 FROM node:22-alpine AS base
-RUN apk add --no-cache bash git tini docker-cli
+# `curl` is needed by the Hermes installer below; it is NOT in node:22-alpine
+# by default.
+RUN apk add --no-cache bash git tini docker-cli curl
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
-RUN corepack enable && corepack prepare pnpm@latest --activate
-RUN npm install -g @anthropic-ai/claude-code
+RUN corepack enable
+# Install Hermes Agent CLI for multi-agent workflows
+ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
+RUN curl -fsSL $HERMES_INSTALL_URL | sh
 WORKDIR /app
 
 # ------------------------------------------------------------------------------
 # deps: install node_modules once; cached between dev and builder stages
 # ------------------------------------------------------------------------------
 FROM base AS deps
-COPY package.json pnpm-lock.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm install --frozen-lockfile
 

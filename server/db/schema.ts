@@ -190,6 +190,57 @@ export const llmCredentials = pgTable(
 export type LlmCredential = typeof llmCredentials.$inferSelect;
 export type NewLlmCredential = typeof llmCredentials.$inferInsert;
 
+// Agent runtime selection per owner + workflow purpose. Credentials
+// answer "how do we authenticate?"; this table answers "which agent,
+// provider, and model should run this workflow?".
+//
+// `purpose='speckit'` → one profile per owner (the workflow agent).
+// `purpose='company-agent'` → one profile per (owner, agent_role) so
+// the same user can run, e.g., the CEO on Claude and the developer on
+// GPT inside one company. `agent_role` stays '' for speckit so a single
+// composite UNIQUE handles both shapes without partial indexes.
+export const llmAgentProfiles = pgTable(
+  "llm_agent_profiles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerKind: text("owner_kind", { enum: ["user", "org"] }).notNull(),
+    ownerId: uuid("owner_id").notNull(),
+    purpose: text("purpose", { enum: ["speckit", "company-agent"] }).notNull(),
+    agentRole: text("agent_role").notNull().default(""),
+    runnerKey: text("runner_key").notNull(),
+    provider: text("provider", {
+      enum: ["anthropic", "openai", "google", "openrouter"],
+    }).notNull(),
+    model: text("model").notNull(),
+    credentialId: uuid("credential_id").references(() => llmCredentials.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    ownerPurposeRoleIdx: index("llm_agent_profiles_owner_purpose_role_idx").on(
+      t.ownerKind,
+      t.ownerId,
+      t.purpose,
+      t.agentRole,
+    ),
+    uniquePurposeRole: unique("llm_agent_profiles_owner_purpose_role_uq").on(
+      t.ownerKind,
+      t.ownerId,
+      t.purpose,
+      t.agentRole,
+    ),
+  }),
+);
+
+export type LlmAgentProfile = typeof llmAgentProfiles.$inferSelect;
+export type NewLlmAgentProfile = typeof llmAgentProfiles.$inferInsert;
+
 // Short-lived bearer tokens injected into agent containers in place of
 // a real Anthropic API key. The haex-claude-proxy resolves the token
 // against this table at request time, then spawns the `claude` CLI with

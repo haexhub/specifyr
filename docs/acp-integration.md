@@ -44,7 +44,7 @@ Check that `cwd` resolves to a directory containing `.specifyr/<slug>/`. The ser
 
 **No tools fire / agent says "I can't use tools"**
 
-The default fallback chain prefers `acp:gemini`. If you don't have `gemini` installed, the spawned subagent for the actual model still falls through to `hermes` or `claude` per `appConfig.runner.fallbackChain`. Check `specifyr config show`.
+Speckit runs are ACP-only. Configure the Speckit workflow agent in Settings, and make sure the selected `acp:<name>` entry exists in `.specifyr/config.json` with a working `binary` (and `args` when the ACP client requires them).
 
 **Approval prompt never appears**
 

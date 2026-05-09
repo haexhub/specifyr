@@ -1,0 +1,77 @@
+# Provisions the Proxy Provider + Application + Outpost binding for the
+# local-dev specifyr instance. Authentik picks up blueprints from
+# /blueprints/custom at server start; idempotent on subsequent boots.
+#
+# Mirrors roles/authentik/templates/blueprints/specifyr-proxy.yaml.j2 in
+# the ansible deployment, but pointed at http://specifyr.localhost (dev URLs)
+# instead of the prod hostname. HTTP only — traefik in dev runs without TLS.
+
+version: 1
+metadata:
+  name: specifyr-proxy
+  labels:
+    blueprints.goauthentik.io/instantiate: "true"
+entries:
+  - model: authentik_providers_proxy.proxyprovider
+    id: specifyr-proxy
+    identifiers:
+      name: specifyr-proxy
+    attrs:
+      mode: forward_single
+      external_host: http://specifyr.localhost
+      authorization_flow:
+        !Find [
+          authentik_flows.flow,
+          [slug, "default-provider-authorization-implicit-consent"],
+        ]
+      invalidation_flow:
+        !Find [
+          authentik_flows.flow,
+          [slug, "default-provider-invalidation-flow"],
+        ]
+      access_token_validity: hours=24
+
+  - model: authentik_core.application
+    id: specifyr-app
+    identifiers:
+      slug: specifyr
+    attrs:
+      name: specifyr (dev)
+      provider: !KeyOf specifyr-proxy
+      meta_launch_url: http://specifyr.localhost
+      open_in_new_tab: false
+      policy_engine_mode: any
+      group: ""
+
+  # Embedded outpost — bind it to serve our proxy provider AND tell it
+  # the public auth host (browser-side redirect target). Authentik
+  # blueprint reconciliation REPLACES the outpost's providers list, so
+  # if you add another forward-auth app via a separate blueprint, list
+  # its provider here too.
+  - model: authentik_outposts.outpost
+    id: embedded-outpost
+    identifiers:
+      managed: goauthentik.io/outposts/embedded
+    attrs:
+      providers:
+        - !KeyOf specifyr-proxy
+      config:
+        authentik_host: http://auth.localhost
+        # HTTP allowed in dev (no TLS in this stack).
+        authentik_host_insecure: true
+        authentik_host_browser: ""
+        log_level: info
+        object_naming_template: ak-outpost-%(name)s
+        docker_network: null
+        docker_map_ports: true
+        docker_labels: null
+        container_image: null
+        kubernetes_replicas: 1
+        kubernetes_namespace: default
+        kubernetes_ingress_annotations: {}
+        kubernetes_ingress_secret_name: authentik-outpost-tls
+        kubernetes_ingress_class_name: null
+        kubernetes_service_type: ClusterIP
+        kubernetes_disabled_components: []
+        kubernetes_image_pull_secrets: []
+        kubernetes_json_patches: null

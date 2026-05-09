@@ -39,10 +39,10 @@ export async function createProjectRecord(options: {
   await ensureDir(projectsRoot);
 
   // `specify init` is interactive by default (arrow-key menu for AI selection, git-init prompt).
-  // --ai claude and --no-git make it fully non-interactive so spawn() from Nuxt can succeed.
+  // --ai generic and --no-git make it fully non-interactive so spawn() from Nuxt can succeed.
   // We run git init separately below so each project has its own repo boundary — this prevents
-  // Claude Code from walking up to the specifyr root and loading its CLAUDE.md context.
-  const initArgs = ["init", slug, "--ai", "claude", "--no-git"];
+  // coding agents from walking up to the specifyr root and loading platform context.
+  const initArgs = ["init", slug, "--ai", "generic", "--no-git"];
   const initResult = await runCommand("specify", initArgs, { cwd: projectsRoot });
   const workflow = options.workflow ?? "spec-kit";
   const meta = {
@@ -63,17 +63,33 @@ export async function createProjectRecord(options: {
     await ensureDir(projectRoot);
   }
 
-  // Initialize a git repository in the project directory so Claude Code treats it as an
-  // independent project root — preventing context bleed from the specifyr parent CLAUDE.md.
+  // Initialize a git repository in the project directory so coding agents treat it as an
+  // independent project root, preventing context bleed from the specifyr platform repo.
   // (specifyr/.gitignore already excludes projects/, so there's no nested-repo issue.)
-  await runCommand("git", ["init", "-b", "main"], { cwd: projectRoot });
-  await runCommand("git", ["config", "user.email", "agent@specifyr.local"], { cwd: projectRoot });
-  await runCommand("git", ["config", "user.name", "specifyr"], { cwd: projectRoot });
+  // Failures used to be silently ignored, which left projects without a repo
+  // boundary while the comment claimed it was required — surface them now.
+  const gitInit = await runCommand("git", ["init", "-b", "main"], { cwd: projectRoot });
+  if (!gitInit.ok) {
+    throw new Error(gitInit.stderr || "Failed to initialize git repository.");
+  }
+  const gitConfigEmail = await runCommand(
+    "git",
+    ["config", "user.email", "agent@specifyr.local"],
+    { cwd: projectRoot }
+  );
+  if (!gitConfigEmail.ok) {
+    throw new Error(gitConfigEmail.stderr || "Failed to set git user.email.");
+  }
+  const gitConfigName = await runCommand("git", ["config", "user.name", "specifyr"], {
+    cwd: projectRoot,
+  });
+  if (!gitConfigName.ok) {
+    throw new Error(gitConfigName.stderr || "Failed to set git user.name.");
+  }
 
-  // Write a project-scoped CLAUDE.md that establishes company workflow context and prevents
-  // Claude from pulling in specifyr platform knowledge.
+  // Write provider-neutral project guidance for ACP-backed coding agents.
   const fs = await import("node:fs/promises");
-  const claudeMd = [
+  const agentsMd = [
     `# ${title} — Company Workspace`,
     ``,
     `Dieses Projekt ist ein spec-gesteuertes Multi-Agenten-Unternehmen, aufgebaut mit dem speckit-company Framework.`,
@@ -87,28 +103,26 @@ export async function createProjectRecord(options: {
     `Dies ist **kein Softwareentwicklungs-Projekt**. Kein Vue/TypeScript/Nuxt-Code.`,
     `Beschränke dich auf Dateien in diesem Verzeichnis.`
   ].join("\n");
-  await fs.writeFile(path.join(projectRoot, "CLAUDE.md"), claudeMd).catch(() => {});
-
-  // Write project-scoped Claude settings — only allow operations relevant to company workflow.
-  await ensureDir(path.join(projectRoot, ".claude"));
-  const claudeSettings = {
-    permissions: {
-      allow: [
-        "Bash(node scripts/validate.mjs *)",
-        "Bash(git status)",
-        "Bash(git log *)",
-        "Bash(git diff *)",
-        "Bash(ls *)",
-        "Bash(find . *)"
-      ]
-    }
-  };
-  await fs
-    .writeFile(path.join(projectRoot, ".claude", "settings.json"), JSON.stringify(claudeSettings, null, 2))
-    .catch(() => {});
+  await fs.writeFile(path.join(projectRoot, "AGENTS.md"), agentsMd);
 
   // Exclude installed extensions from git — they have their own repos.
-  await fs.writeFile(path.join(projectRoot, ".gitignore"), ".specify/extensions/\n").catch(() => {});
+  // `specify init` may have already written a .gitignore (template defaults,
+  // OS junk patterns); merge the rule in instead of overwriting their content.
+  const gitignorePath = path.join(projectRoot, ".gitignore");
+  const existingGitignore = await fs
+    .readFile(gitignorePath, "utf8")
+    .catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+  const extensionIgnoreRule = ".specify/extensions/";
+  if (!existingGitignore.split(/\r?\n/).includes(extensionIgnoreRule)) {
+    const needsNewline = existingGitignore.length > 0 && !existingGitignore.endsWith("\n");
+    await fs.writeFile(
+      gitignorePath,
+      `${existingGitignore}${needsNewline ? "\n" : ""}${extensionIgnoreRule}\n`
+    );
+  }
 
   // The community catalog is discovery-only by default in spec-kit. Our UI browses extensions
   // from there, so we need to opt-in to installation. Registered with priority 1 to take

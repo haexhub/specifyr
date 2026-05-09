@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { Activity, Network, History, Circle, LayoutList, Send, Square } from "lucide-vue-next";
+import { Activity, Network, History, Circle, LayoutList, Send, Square, Cpu } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
 import { Badge } from "~/components/shadcn/badge";
 import ProjectShell from "~/components/ProjectShell.vue";
 import AgentDetailDrawer from "~/components/AgentDetailDrawer.vue";
 import AgentTaskBoard from "~/components/AgentTaskBoard.vue";
+import CompanyAgentLlmGrid from "~/components/CompanyAgentLlmGrid.vue";
 import { resolveWorkflow, type Workflow } from "~/lib/workflows";
 
 const route = useRoute();
@@ -365,6 +366,23 @@ function closeDispatch() {
         </div>
       </div>
     </Teleport>
+
+        <Card>
+          <CardHeader>
+            <div class="flex items-center gap-2">
+              <Cpu class="size-4 text-primary" />
+              <CardTitle class="text-base">Agent LLMs</CardTitle>
+            </div>
+            <p class="text-xs text-muted-foreground">
+              Pick a provider, model, and credential per agent role. Personal overrides win over
+              org defaults; agents without any profile fall back to the project-wide Anthropic
+              credential.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <CompanyAgentLlmGrid :slug="slug" />
+          </CardContent>
+        </Card>
 
         <Card v-if="!isRunning">
           <CardContent class="py-10 text-center text-sm text-muted-foreground">

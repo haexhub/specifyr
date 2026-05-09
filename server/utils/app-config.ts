@@ -18,8 +18,7 @@ export async function getAppConfigModule() {
       standardExtensions: string[];
       localExtensions: LocalExtensionEntry[];
       runner: { default: string; fallbackChain: string[] };
-      claude: { binary: string };
-      hermes: { binary: string };
+      acp: Record<string, { binary: string; args?: string[] }>;
     }>;
     saveAppConfig: (next: unknown, cwd?: string) => Promise<unknown>;
     setStandardExtensions: (list: string[], cwd?: string) => Promise<string[]>;

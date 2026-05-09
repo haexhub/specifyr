@@ -2,7 +2,6 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { ensureDir, exists, readJson, writeJson } from "../utils/fs.js";
 import { SPECIFY_DIR, SPECIFYR_DIR } from "./constants.js";
-import { ClaudeCodeRunner } from "../runners/claude-code.js";
 
 /**
  * Locates the most recently-touched feature directory under `.specify/specs/`
@@ -23,74 +22,75 @@ async function findTasksMd(projectCwd) {
   return null;
 }
 
-const EXTRACTION_PROMPT = `You are parsing a spec-kit tasks.md file into a structured dependency graph.
-
-Read the tasks.md content provided after the marker and output **only valid JSON** matching this schema, no prose:
-
-{
-  "tasks": [
-    {
-      "id": "T001",
-      "title": "Short task title",
-      "description": "Full task description incl. acceptance criteria",
-      "dependsOn": ["T000"],
-      "parallelSafe": true,
-      "category": "setup|core|test|docs|other"
-    }
-  ]
+function categoryFor(text) {
+  const lower = text.toLowerCase();
+  if (/\b(test|spec|e2e|unit|integration)\b/.test(lower)) return "test";
+  if (/\b(docs?|readme|documentation)\b/.test(lower)) return "docs";
+  if (/\b(setup|install|config|scaffold)\b/.test(lower)) return "setup";
+  if (/\b(api|server|database|schema|ui|component|runtime|runner)\b/.test(lower)) return "core";
+  return "other";
 }
 
-Rules:
-- Keep task IDs exactly as written (T001, T002 etc.). If the file uses different IDs, preserve them.
-- If a task is annotated "[P]" or similar parallel marker, set parallelSafe: true; otherwise false.
-- "dependsOn" may be empty. Only include explicit dependencies — do not infer.
-- Omit any task that's a header/phase marker, not an actual work item.
-- Output ONE JSON object. No markdown, no code fences.
-`;
-
-function extractJsonObject(text) {
-  if (!text) return null;
-  // Strip any markdown code fences
-  const cleaned = text.replace(/^```(?:json)?\n?/gm, "").replace(/\n?```$/gm, "").trim();
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    // try to extract the first balanced JSON object
-    const firstBrace = cleaned.indexOf("{");
-    const lastBrace = cleaned.lastIndexOf("}");
-    if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) return null;
-    try {
-      return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
-    } catch {
-      return null;
+function dependenciesFor(text) {
+  const deps = new Set();
+  // "blocks" intentionally NOT included: "X blocks T002" means T002 depends
+  // on X, the *opposite* direction from depends/after. Mixing it here would
+  // invert the edge for those tasks. Treat it as a forward edge in a separate
+  // pass if we ever need to honor it.
+  //
+  // Capture the trailing clause (up to a sentence terminator), then let the
+  // inner `matchAll(/\bT\d+\b/g)` pull every T-ID out of it. This handles
+  // prose separators like "and"/"&"/"plus" without enumerating them.
+  const patterns = [
+    /\bdepends(?:\s+on)?:?\s*([^.;)\n]+)/gi,
+    /\bafter\s+([^.;)\n]+)/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      for (const dep of String(match[1] ?? "").matchAll(/\bT\d+\b/g)) {
+        deps.add(dep[0]);
+      }
     }
   }
+  return Array.from(deps);
 }
 
 /**
- * Runs a fresh Claude headless call to extract the tasks graph from a markdown file.
- * Returns the parsed graph object. Throws on failure.
+ * Provider-neutral parser for spec-kit tasks.md files.
+ * It recognizes normal markdown task lines containing stable IDs like T001.
  */
-async function extractGraphViaClaude(projectCwd, tasksMdPath) {
+async function extractGraphFromMarkdown(tasksMdPath) {
   const content = await fs.readFile(tasksMdPath, "utf8");
-  const runner = new ClaudeCodeRunner({ cwd: projectCwd });
-  const prompt = `${EXTRACTION_PROMPT}\n\n---TASKS_MD_START---\n${content}\n---TASKS_MD_END---\n`;
-  const { result } = await runner.run({ prompt });
-  const finalText = typeof result?.result === "string" ? result.result : "";
-  const parsed = extractJsonObject(finalText);
-  if (!parsed || !Array.isArray(parsed.tasks)) {
-    throw new Error("Task-Graph-Extraktion: Claude hat kein gültiges JSON geliefert.");
+  const tasks = [];
+  let currentHeading = "other";
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const heading = line.match(/^#{1,6}\s+(.+)$/);
+    if (heading) {
+      currentHeading = heading[1];
+      continue;
+    }
+    const taskMatch = line.match(/^(?:[-*]\s+)?(?:\[[ xX]\]\s+)?(?:\[[Pp]\]\s+)?\b(T\d+)\b[:.)-]?\s*(.+)$/);
+    if (!taskMatch) continue;
+    const id = taskMatch[1];
+    const rest = taskMatch[2].trim();
+    const parallelSafe = /\[[Pp]\]/.test(line);
+    const title = rest.replace(/\s+\((?:depends|after|blocks?).*?\)\s*$/i, "").trim();
+    const description = [rest, `Section: ${currentHeading}`].join("\n");
+    tasks.push({
+      id,
+      title: title || id,
+      description,
+      dependsOn: dependenciesFor(line).filter((dep) => dep !== id),
+      parallelSafe,
+      category: categoryFor(`${currentHeading} ${rest}`),
+    });
   }
-  // Normalize
-  for (const t of parsed.tasks) {
-    t.id = String(t.id ?? "").trim();
-    t.title = String(t.title ?? "").trim();
-    t.description = String(t.description ?? "").trim();
-    t.dependsOn = Array.isArray(t.dependsOn) ? t.dependsOn.map((x) => String(x).trim()).filter(Boolean) : [];
-    t.parallelSafe = Boolean(t.parallelSafe);
-    t.category = String(t.category ?? "other");
+  if (tasks.length === 0) {
+    throw new Error("Task-Graph-Extraktion: tasks.md enthält keine erkennbaren T### Tasks.");
   }
-  return parsed.tasks.filter((t) => t.id);
+  return tasks;
 }
 
 function graphFilePath(cwd, slug) {
@@ -122,7 +122,7 @@ export async function getOrBuildTaskGraph({ cwd = process.cwd(), slug, projectCw
     }
   }
 
-  const tasks = await extractGraphViaClaude(projectCwd, tasksMd);
+  const tasks = await extractGraphFromMarkdown(tasksMd);
   const graph = {
     slug,
     tasksMdPath: path.relative(projectCwd, tasksMd),

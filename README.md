@@ -45,18 +45,46 @@ node ./src/index.js ui
 - Artifacts are plain files under `.specifyr/`.
 - Specs can be authored in `.specify/specs/<slug>/spec.md` and pulled into specifyr with `spec sync <slug>`.
 - specifyr also mirrors every initiative back into `.specify/specs/<slug>/` so the workflow stays compatible with spec-kit-style navigation.
-- The default model provider and Hermes runner are deterministic local implementations so the project works without external services.
-- If `fabric` or `hermes` are installed locally, you can enable them via `config set` and specifyr will use them opportunistically.
+- Speckit workflow runs use an explicit ACP-backed agent profile from Settings: runner, provider, model, and credential.
+- No host CLI credential directory is mounted by default; local and cloud runs use the same Settings-managed auth path.
 - The UI runs through Nuxt. For local development use `pnpm dev` or `node ./src/index.js ui`.
+
+## Development with Docker
+
+For containerized development with hot module replacement:
+
+```bash
+# Start dev environment with source mounting
+./dev.sh
+# or
+pnpm run dev:docker
+
+# Useful commands:
+docker compose logs -f          # View logs
+docker compose exec specifyr sh # Shell access
+docker compose down             # Stop containers
+```
+
+The dev compose bundles two parallel access paths:
+
+- **`http://localhost:4242`** — specifyr direct, bypassing auth. The
+  `SPECIFYR_DEV_USER_EMAIL` env-fallback is the "logged-in user" here, so
+  this is the fastest path for code iteration.
+- **`http://specifyr.localhost`** — full multi-user flow through Traefik
+  → Authentik (UI on `http://auth.localhost`, default login
+  `akadmin` / `akadmin-dev`). Use this to exercise the prod-shape auth
+  topology (forward-auth headers, per-user `users` rows, onboarding gate).
+  Set `SPECIFYR_DEV_USER_EMAIL=` empty in `.env` so the env-fallback does
+  not override the real Authentik headers.
 
 ## ACP (Agent Client Protocol)
 
 specifyr speaks the [Agent Client Protocol](https://agentclientprotocol.com) in two directions:
 
-- **As a client** (input): any ACP-speaking coding agent (Gemini CLI, hermes-acp, claude-code-acp, …) can be a backend. Configure under `runner.fallbackChain` with `acp:<name>` entries plus an `acp.<name>` block specifying `binary` and `args`. See [src/core/app-config.js](src/core/app-config.js).
+- **As a client** (input): any ACP-speaking coding agent (Codex, Claude, Gemini, … via ACP adapters) can be a backend. Configure Speckit agent selection in Settings and the matching `acp.<name>` binary/args in [src/core/app-config.js](src/core/app-config.js) or `.specifyr/config.json`.
 - **As a server** (output): `bin/specifyr-acp` is a stdio agent that external editors like Zed and AionUi can spawn to drive specifyr runs. See [docs/acp-integration.md](docs/acp-integration.md).
 
-Internally specifyr uses ACP `SessionUpdate` shapes as the lingua franca for all runner output, persisted disk events, and SSE stream payloads. Old runners (Claude / Hermes stream-json) are translated at the runner boundary via [src/runners/claude-stream-to-acp.js](src/runners/claude-stream-to-acp.js); ACP-native runners pass through verbatim.
+Internally specifyr uses ACP `SessionUpdate` shapes as the lingua franca for all runner output, persisted disk events, and SSE stream payloads.
 
 ## Company runtime (multi-agent)
 
