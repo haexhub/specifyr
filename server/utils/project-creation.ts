@@ -106,7 +106,23 @@ export async function createProjectRecord(options: {
   await fs.writeFile(path.join(projectRoot, "AGENTS.md"), agentsMd);
 
   // Exclude installed extensions from git — they have their own repos.
-  await fs.writeFile(path.join(projectRoot, ".gitignore"), ".specify/extensions/\n");
+  // `specify init` may have already written a .gitignore (template defaults,
+  // OS junk patterns); merge the rule in instead of overwriting their content.
+  const gitignorePath = path.join(projectRoot, ".gitignore");
+  const existingGitignore = await fs
+    .readFile(gitignorePath, "utf8")
+    .catch((error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    });
+  const extensionIgnoreRule = ".specify/extensions/";
+  if (!existingGitignore.split(/\r?\n/).includes(extensionIgnoreRule)) {
+    const needsNewline = existingGitignore.length > 0 && !existingGitignore.endsWith("\n");
+    await fs.writeFile(
+      gitignorePath,
+      `${existingGitignore}${needsNewline ? "\n" : ""}${extensionIgnoreRule}\n`
+    );
+  }
 
   // The community catalog is discovery-only by default in spec-kit. Our UI browses extensions
   // from there, so we need to opt-in to installation. Registered with priority 1 to take

@@ -25,7 +25,7 @@ async function findTasksMd(projectCwd) {
 function categoryFor(text) {
   const lower = text.toLowerCase();
   if (/\b(test|spec|e2e|unit|integration)\b/.test(lower)) return "test";
-  if (/\b(doc|readme|documentation)\b/.test(lower)) return "docs";
+  if (/\b(docs?|readme|documentation)\b/.test(lower)) return "docs";
   if (/\b(setup|install|config|scaffold)\b/.test(lower)) return "setup";
   if (/\b(api|server|database|schema|ui|component|runtime|runner)\b/.test(lower)) return "core";
   return "other";
@@ -37,9 +37,13 @@ function dependenciesFor(text) {
   // on X, the *opposite* direction from depends/after. Mixing it here would
   // invert the edge for those tasks. Treat it as a forward edge in a separate
   // pass if we ever need to honor it.
+  //
+  // Capture the trailing clause (up to a sentence terminator), then let the
+  // inner `matchAll(/\bT\d+\b/g)` pull every T-ID out of it. This handles
+  // prose separators like "and"/"&"/"plus" without enumerating them.
   const patterns = [
-    /\bdepends(?:\s+on)?:?\s*((?:T\d+[,\s]*)+)/gi,
-    /\bafter\s+((?:T\d+[,\s]*)+)/gi,
+    /\bdepends(?:\s+on)?:?\s*([^.;)\n]+)/gi,
+    /\bafter\s+([^.;)\n]+)/gi,
   ];
   for (const pattern of patterns) {
     for (const match of text.matchAll(pattern)) {
