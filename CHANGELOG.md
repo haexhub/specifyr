@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.9.0](https://github.com/haexhub/specifyr/compare/v0.8.0...v0.9.0) (2026-05-10)
+
+
+### Features
+
+* **docker:** install ACP runner binaries, Claude Code CLI, and speckit-company extension ([#28](https://github.com/haexhub/specifyr/issues/28)) ([8b10e12](https://github.com/haexhub/specifyr/commit/8b10e1244c2ddaad3c35140faa4b3620f66f2252))
+* dynamic model selection dropdown via provider API ([#29](https://github.com/haexhub/specifyr/issues/29)) ([24440b5](https://github.com/haexhub/specifyr/commit/24440b50bc12dd8c3ecf7d00b96064d6d6cf99f7))
+
+
+### Bug Fixes
+
+* **acp:** migrate to claude-agent-acp binary, add spawn error handling and newSessionMeta forwarding ([#27](https://github.com/haexhub/specifyr/issues/27)) ([c9badd9](https://github.com/haexhub/specifyr/commit/c9badd909a9e63ee06d221a90c1937bcd88d8c2e))
+* **ui:** use i18n locale in date formatting to prevent SSR hydration mismatch ([#26](https://github.com/haexhub/specifyr/issues/26)) ([8c319ff](https://github.com/haexhub/specifyr/commit/8c319ff02a0d697d58379af6c5d09a70318c87df))
+
 ## [0.8.0](https://github.com/haexhub/specifyr/compare/v0.7.0...v0.8.0) (2026-05-09)
 
 
