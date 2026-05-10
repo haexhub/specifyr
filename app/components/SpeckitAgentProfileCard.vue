@@ -15,17 +15,31 @@ export interface SpeckitAgentProfile {
   createdAt: string;
   updatedAt: string;
 }
+
+// Each ACP agent speaks one wire protocol; "compatible" providers route to
+// the same agent via base-URL override (e.g. OpenRouter → codex-acp via
+// OPENAI_BASE_URL). The validator in llm-agent-profiles-store.ts mirrors
+// this mapping.
+const PROVIDER_TO_RUNNER: Record<"anthropic" | "openai" | "openrouter", SpeckitRunnerKey> = {
+  anthropic: "acp:claude",
+  openai: "acp:codex",
+  openrouter: "acp:codex",
+};
 </script>
 
 <script setup lang="ts">
 import { Bot, Save } from "lucide-vue-next";
+import ModelSelect from "~/components/ModelSelect.vue";
 import { Button } from "~/components/shadcn/button";
-import { Input } from "~/components/shadcn/input";
 
 const props = defineProps<{
   profile: SpeckitAgentProfile | null;
   credentials: CredentialRow[];
   endpoint: string;
+  // Base path for credentials, used to build the /<id>/models URL.
+  // Personal: "/api/me/llm-credentials".
+  // Org:     "/api/orgs/<slug>/llm-credentials".
+  credentialsEndpoint: string;
   readOnly?: boolean;
 }>();
 
@@ -33,22 +47,32 @@ const emit = defineEmits<{
   changed: [];
 }>();
 
-const runnerOptions: Array<{ value: SpeckitRunnerKey; label: string; provider: LlmProvider }> = [
-  { value: "acp:codex", label: "Codex ACP", provider: "openai" },
-  { value: "acp:claude", label: "Claude ACP", provider: "anthropic" },
-];
+type SpeckitProvider = "anthropic" | "openai" | "openrouter";
 
-const providerOptions: Array<{ value: LlmProvider; label: string }> = [
+const recommendedProviders: Array<{ value: SpeckitProvider; label: string }> = [
   { value: "openai", label: "OpenAI / GPT" },
   { value: "anthropic", label: "Anthropic / Claude" },
 ];
+const experimentalProviders: Array<{ value: SpeckitProvider; label: string }> = [
+  { value: "openrouter", label: "OpenRouter" },
+];
 
-const form = reactive({
-  runnerKey: "acp:codex" as SpeckitRunnerKey,
-  provider: "openai" as LlmProvider,
-  model: "gpt-5.2-codex",
-  credentialId: "",
-});
+interface FormState {
+  provider: SpeckitProvider;
+  model: string;
+  credentialId: string;
+}
+
+function fromProfile(profile: SpeckitAgentProfile | null): FormState {
+  if (!profile) return { provider: "openai", model: "", credentialId: "" };
+  return {
+    provider: profile.provider as SpeckitProvider,
+    model: profile.model,
+    credentialId: profile.credentialId ?? "",
+  };
+}
+
+const form = reactive<FormState>(fromProfile(props.profile));
 const saving = ref(false);
 const error = ref<string | null>(null);
 
@@ -58,31 +82,7 @@ const matchingCredentials = computed(() =>
 
 watch(
   () => props.profile,
-  (profile) => {
-    if (!profile) return;
-    form.runnerKey = profile.runnerKey;
-    form.provider = profile.provider;
-    form.model = profile.model;
-    form.credentialId = profile.credentialId ?? "";
-  },
-  { immediate: true },
-);
-
-watch(
-  () => form.runnerKey,
-  (runnerKey) => {
-    const opt = runnerOptions.find((r) => r.value === runnerKey);
-    if (opt && form.provider !== opt.provider) {
-      form.provider = opt.provider;
-      form.credentialId = "";
-      if (opt.provider === "anthropic" && form.model === "gpt-5.2-codex") {
-        form.model = "claude-sonnet-4-5";
-      }
-      if (opt.provider === "openai" && form.model.startsWith("claude-")) {
-        form.model = "gpt-5.2-codex";
-      }
-    }
-  },
+  (profile) => Object.assign(form, fromProfile(profile)),
 );
 
 watch(
@@ -90,6 +90,7 @@ watch(
   () => {
     if (!matchingCredentials.value.some((c) => c.id === form.credentialId)) {
       form.credentialId = matchingCredentials.value[0]?.id ?? "";
+      form.model = "";
     }
   },
 );
@@ -101,7 +102,7 @@ async function save() {
     await $fetch(props.endpoint, {
       method: "PUT",
       body: {
-        runnerKey: form.runnerKey,
+        runnerKey: PROVIDER_TO_RUNNER[form.provider],
         provider: form.provider,
         model: form.model.trim(),
         credentialId: form.credentialId || null,
@@ -131,34 +132,28 @@ async function save() {
 
     <form class="grid gap-3 px-4 py-4 md:grid-cols-2" @submit.prevent="save">
       <label class="block">
-        <span class="text-xs font-medium">Runner</span>
-        <select
-          v-model="form.runnerKey"
-          class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
-          :disabled="readOnly || saving"
-        >
-          <option v-for="runner in runnerOptions" :key="runner.value" :value="runner.value">
-            {{ runner.label }}
-          </option>
-        </select>
-      </label>
-
-      <label class="block">
         <span class="text-xs font-medium">Provider</span>
         <select
           v-model="form.provider"
           class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           :disabled="readOnly || saving"
         >
-          <option v-for="provider in providerOptions" :key="provider.value" :value="provider.value">
-            {{ provider.label }}
-          </option>
+          <optgroup label="Recommended">
+            <option v-for="p in recommendedProviders" :key="p.value" :value="p.value">
+              {{ p.label }}
+            </option>
+          </optgroup>
+          <optgroup label="Compatible (experimental)">
+            <option v-for="p in experimentalProviders" :key="p.value" :value="p.value">
+              {{ p.label }}
+            </option>
+          </optgroup>
         </select>
-      </label>
-
-      <label class="block">
-        <span class="text-xs font-medium">Model</span>
-        <Input v-model="form.model" class="mt-1" :disabled="readOnly || saving" />
+        <p v-if="form.provider === 'openrouter'" class="mt-1 text-xs text-muted-foreground">
+          Routes via the Codex agent to any OpenAI-compatible model. Coding
+          quality depends on the model's tool-use support — GPT-4-class or
+          Claude-class models recommended.
+        </p>
       </label>
 
       <label class="block">
@@ -174,6 +169,14 @@ async function save() {
           </option>
         </select>
       </label>
+
+      <ModelSelect
+        v-model="form.model"
+        class="md:col-span-2"
+        :credentials-endpoint="credentialsEndpoint"
+        :credential-id="form.credentialId"
+        :disabled="readOnly || saving"
+      />
 
       <p v-if="error" class="md:col-span-2 text-sm text-destructive">{{ error }}</p>
 

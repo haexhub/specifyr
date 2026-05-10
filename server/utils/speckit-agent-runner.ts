@@ -31,6 +31,13 @@ function envForApiKey(input: {
   if (input.provider === "anthropic") {
     env.ANTHROPIC_API_KEY = input.apiKey;
     if (input.baseUrl) env.ANTHROPIC_BASE_URL = input.baseUrl;
+    // claude-agent-acp's getAvailableModels (acp-agent.js) picks the session
+    // model from ANTHROPIC_MODEL → settings.model → models[0]. Neither the
+    // `--model` CLI arg nor `_meta.claudeCode.options.model` survives, because
+    // the wrapper calls `query.setModel(currentModel.value)` right after
+    // initialization. Pinning ANTHROPIC_MODEL is the only env-level lever that
+    // actually wins, and `models[0]` resolves to "default" → claude-opus-4-7.
+    env.ANTHROPIC_MODEL = input.model;
   } else if (input.provider === "openai") {
     env.OPENAI_API_KEY = input.apiKey;
     if (input.baseUrl) env.OPENAI_BASE_URL = input.baseUrl;
@@ -84,6 +91,7 @@ export async function createSpeckitRunnerFactory(input: {
       env?: Record<string, string>;
       memoryRoot?: string;
       onEvent?: (e: unknown) => void;
+      newSessionMeta?: Record<string, unknown>;
     }) => unknown;
   }>("src/runners/acp.js");
 
@@ -128,6 +136,10 @@ export async function createSpeckitRunnerFactory(input: {
       SPECIFYR_AGENT_RUNNER: profile.runnerKey,
       ANTHROPIC_BASE_URL: proxyUrl,
       ANTHROPIC_API_KEY: session.token,
+      // See envForApiKey: claude-agent-acp ignores --model and
+      // `_meta.claudeCode.options.model`; ANTHROPIC_MODEL is the only env
+      // hook its model resolver honors.
+      ANTHROPIC_MODEL: profile.model,
     };
   }
 
@@ -137,6 +149,17 @@ export async function createSpeckitRunnerFactory(input: {
     runner: profile.runnerKey,
   });
 
+  // Belt-and-braces: forward the model via _meta as well. claude-agent-acp
+  // 0.33.x reads it into the SDK's initial `options.model`, but then
+  // `getAvailableModels` calls `query.setModel(...)` based on
+  // ANTHROPIC_MODEL → settings.model → models[0] and overwrites it — which
+  // is why ANTHROPIC_MODEL is set in the env above. We keep this in case a
+  // future agent version honors the meta hint without the env override.
+  const newSessionMeta =
+    profile.runnerKey === "acp:claude"
+      ? { claudeCode: { options: { model: profile.model } } }
+      : undefined;
+
   return ({ cwd, onEvent }: { cwd: string; onEvent?: (e: unknown) => void }) =>
     new AcpRunner({
       binary: acpConfig.binary!,
@@ -145,5 +168,6 @@ export async function createSpeckitRunnerFactory(input: {
       env,
       memoryRoot: path.join(cwd, ".specifyr", "agent-memory", acpName),
       onEvent,
+      newSessionMeta,
     });
 }

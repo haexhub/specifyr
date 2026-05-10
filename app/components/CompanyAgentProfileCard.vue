@@ -25,8 +25,8 @@ export interface AgentMeta {
 
 <script setup lang="ts">
 import { Bot, Save, Trash2, Building2, User } from "lucide-vue-next";
+import ModelSelect from "~/components/ModelSelect.vue";
 import { Button } from "~/components/shadcn/button";
-import { Input } from "~/components/shadcn/input";
 
 const props = defineProps<{
   agent: AgentMeta;
@@ -38,6 +38,10 @@ const props = defineProps<{
   // Endpoints for PUT/DELETE on this role.
   userEndpoint: string;        // e.g. /api/me/agent-profiles/company-agents/<role>
   orgEndpoint: string | null;  // null = project has no owning org with creds; org form is hidden
+  // Base credential endpoints, used to fetch /<id>/models for the
+  // dynamic model dropdown.
+  userCredentialsEndpoint: string;       // e.g. /api/me/llm-credentials
+  orgCredentialsEndpoint: string | null; // e.g. /api/orgs/<slug>/llm-credentials
   canEditOrg: boolean;         // user is admin of project's owning org
 }>();
 
@@ -93,6 +97,7 @@ watch(
   () => {
     if (!userMatchingCreds.value.some((c) => c.id === userForm.credentialId)) {
       userForm.credentialId = userMatchingCreds.value[0]?.id ?? "";
+      userForm.model = "";
     }
   },
 );
@@ -101,6 +106,7 @@ watch(
   () => {
     if (!orgMatchingCreds.value.some((c) => c.id === orgForm.credentialId)) {
       orgForm.credentialId = orgMatchingCreds.value[0]?.id ?? "";
+      orgForm.model = "";
     }
   },
 );
@@ -201,10 +207,6 @@ async function clearScope(scope: "user" | "org") {
           </select>
         </label>
         <label class="block">
-          <span class="text-xs font-medium">Model</span>
-          <Input v-model="userForm.model" class="mt-1" placeholder="e.g. claude-sonnet-4-5" :disabled="userSaving" />
-        </label>
-        <label class="block">
           <span class="text-xs font-medium">Credential</span>
           <select
             v-model="userForm.credentialId"
@@ -217,6 +219,12 @@ async function clearScope(scope: "user" | "org") {
             </option>
           </select>
         </label>
+        <ModelSelect
+          v-model="userForm.model"
+          :credentials-endpoint="userCredentialsEndpoint"
+          :credential-id="userForm.credentialId"
+          :disabled="userSaving"
+        />
 
         <p v-if="userError" class="md:col-span-3 text-sm text-destructive">{{ userError }}</p>
 
@@ -256,10 +264,6 @@ async function clearScope(scope: "user" | "org") {
           </select>
         </label>
         <label class="block">
-          <span class="text-xs font-medium">Model</span>
-          <Input v-model="orgForm.model" class="mt-1" placeholder="e.g. claude-sonnet-4-5" :disabled="!canEditOrg || orgSaving" />
-        </label>
-        <label class="block">
           <span class="text-xs font-medium">Credential</span>
           <select
             v-model="orgForm.credentialId"
@@ -272,6 +276,13 @@ async function clearScope(scope: "user" | "org") {
             </option>
           </select>
         </label>
+        <ModelSelect
+          v-if="orgCredentialsEndpoint"
+          v-model="orgForm.model"
+          :credentials-endpoint="orgCredentialsEndpoint"
+          :credential-id="orgForm.credentialId"
+          :disabled="!canEditOrg || orgSaving"
+        />
 
         <p v-if="orgError" class="md:col-span-3 text-sm text-destructive">{{ orgError }}</p>
 

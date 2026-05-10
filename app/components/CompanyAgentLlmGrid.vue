@@ -86,6 +86,8 @@ async function refreshAll() {
       :org-credentials="orgCredentials"
       :user-endpoint="`/api/me/agent-profiles/company-agents/${entry.role}`"
       :org-endpoint="ownerOrgSlug ? `/api/orgs/${ownerOrgSlug}/agent-profiles/company-agents/${entry.role}` : null"
+      user-credentials-endpoint="/api/me/llm-credentials"
+      :org-credentials-endpoint="ownerOrgSlug ? `/api/orgs/${ownerOrgSlug}/llm-credentials` : null"
       :can-edit-org="canEditOrg"
       @changed="refreshAll()"
     />

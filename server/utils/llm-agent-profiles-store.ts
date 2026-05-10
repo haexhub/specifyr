@@ -190,11 +190,21 @@ export async function upsertAgentProfileFor(
     if (!runnerKey.startsWith("acp:")) {
       throw new Error("Speckit agent profiles must use an ACP runner.");
     }
-    if (runnerKey === "acp:claude" && patch.provider !== "anthropic") {
-      throw new Error("Claude ACP profiles must use the Anthropic provider.");
+    // Validate by API family, not provider identity. Each ACP agent speaks
+    // exactly one wire protocol; any provider that speaks the same protocol
+    // (e.g. OpenRouter for OpenAI) can route through it via base-URL override
+    // — speckit-agent-runner.ts wires OPENAI_BASE_URL etc. accordingly.
+    const ANTHROPIC_COMPATIBLE: AgentProfileProvider[] = ["anthropic"];
+    const OPENAI_COMPATIBLE: AgentProfileProvider[] = ["openai", "openrouter"];
+    if (runnerKey === "acp:claude" && !ANTHROPIC_COMPATIBLE.includes(patch.provider)) {
+      throw new Error(
+        `Claude ACP profiles require an Anthropic-compatible provider (${ANTHROPIC_COMPATIBLE.join(", ")}).`,
+      );
     }
-    if (runnerKey === "acp:codex" && patch.provider !== "openai") {
-      throw new Error("Codex ACP profiles must use the OpenAI provider.");
+    if (runnerKey === "acp:codex" && !OPENAI_COMPATIBLE.includes(patch.provider)) {
+      throw new Error(
+        `Codex ACP profiles require an OpenAI-compatible provider (${OPENAI_COMPATIBLE.join(", ")}).`,
+      );
     }
   } else if (purpose === "company-agent") {
     if (runnerKey !== "hermes") {

@@ -38,6 +38,7 @@ const { data: credentials, refresh } = await useFetch<CredentialRow[]>(
 const { data: speckitProfile, refresh: refreshSpeckitProfile } =
   await useFetch<SpeckitAgentProfile | null>("/api/me/agent-profiles/speckit", {
     default: () => null,
+    transform: (r) => r ?? null,
   });
 
 async function refreshAll() {
@@ -98,6 +99,7 @@ const anthropicOauth = computed(
       :profile="speckitProfile"
       :credentials="credentials ?? []"
       endpoint="/api/me/agent-profiles/speckit"
+      credentials-endpoint="/api/me/llm-credentials"
       @changed="refreshSpeckitProfile()"
     />
 
