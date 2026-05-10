@@ -42,7 +42,20 @@ new AgentSideConnection(
         },
       };
     },
-    async newSession() {
+    async newSession(params) {
+      // Echo any received `_meta` back so tests can assert the client
+      // forwarded it. The ACP SDK validates sessionUpdate shapes strictly,
+      // so we encode the received meta into a text agent_message_chunk
+      // prefixed with `__META__` for the test to parse.
+      if (params?._meta !== undefined) {
+        await client.sessionUpdate({
+          sessionId: "stub-session-1",
+          update: {
+            sessionUpdate: "agent_message_chunk",
+            content: { type: "text", text: `__META__${JSON.stringify(params._meta)}` },
+          },
+        });
+      }
       return { sessionId: "stub-session-1" };
     },
     async authenticate() {

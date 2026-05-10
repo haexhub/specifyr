@@ -31,3 +31,35 @@ test("AcpRunner abort signal kills the agent", async () => {
   ac.abort();
   await assert.rejects(promise, /abort/i);
 });
+
+test("AcpRunner rejects (not crashes) when binary is missing on PATH", async () => {
+  const runner = new AcpRunner({
+    binary: "definitely-not-a-real-binary-xyz-12345",
+    cwd: process.cwd()
+  });
+  await assert.rejects(
+    runner.run({ prompt: "hello" }),
+    /ACP agent spawn failed.*not found on PATH/
+  );
+});
+
+test("AcpRunner forwards newSessionMeta as _meta on session/new", async () => {
+  const events = [];
+  const meta = { claudeCode: { options: { model: "claude-sonnet-4-6" } } };
+  const runner = new AcpRunner({
+    binary: "node",
+    args: [STUB],
+    cwd: process.cwd(),
+    onEvent: (e) => events.push(e),
+    newSessionMeta: meta
+  });
+  await runner.run({ prompt: "hello" });
+  // The stub encodes the received `_meta` into a __META__-prefixed text chunk
+  // emitted from newSession() — see tests/fixtures/acp-stub-agent.js.
+  const echoed = events
+    .filter((e) => e.sessionUpdate === "agent_message_chunk" && typeof e.content?.text === "string")
+    .map((e) => e.content.text)
+    .find((t) => t.startsWith("__META__"));
+  assert.ok(echoed, "stub should echo _meta back via newSession");
+  assert.deepEqual(JSON.parse(echoed.slice("__META__".length)), meta);
+});
