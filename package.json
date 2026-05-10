@@ -1,6 +1,6 @@
 {
   "name": "specifyr",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "Spec-driven multi-agent builder with a local timeline UI.",
   "type": "module",
   "packageManager": "pnpm@10.28.2",
