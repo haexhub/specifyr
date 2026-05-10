@@ -20,6 +20,25 @@ ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
 RUN curl -fsSL "${HERMES_INSTALL_URL}" -o /tmp/hermes-install.sh \
  && bash /tmp/hermes-install.sh \
  && rm -f /tmp/hermes-install.sh
+# Install the Claude Code CLI. The OAuth start endpoint
+# (server/utils/claude-oauth-driver.ts) spawns `claude auth login --claudeai`
+# as a subprocess to drive the per-owner Anthropic OAuth flow, so the binary
+# must be on PATH inside the container. Pinned to match the version we test
+# against on the host; override via --build-arg for a bump.
+ARG CLAUDE_CODE_VERSION=2.1.126
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+
+# ACP runner binaries. RunScheduler/SpeckitAgentRunner spawn one of these per
+# turn depending on the user's agent profile (acp:claude / acp:codex /
+# acp:gemini). Defaults in src/core/app-config.js match the bin names below.
+# Pinned; override via --build-arg.
+ARG CLAUDE_AGENT_ACP_VERSION=0.33.1
+ARG CODEX_ACP_VERSION=0.0.43
+ARG GEMINI_CLI_VERSION=0.41.2
+RUN npm install -g \
+        @agentclientprotocol/claude-agent-acp@${CLAUDE_AGENT_ACP_VERSION} \
+        @agentclientprotocol/codex-acp@${CODEX_ACP_VERSION} \
+        @google/gemini-cli@${GEMINI_CLI_VERSION}
 WORKDIR /app
 
 # ------------------------------------------------------------------------------
@@ -39,6 +58,15 @@ FROM base AS dev
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node . .
 RUN mkdir -p /app/.nuxt /app/.output && chown node:node /app/.nuxt /app/.output
+# Bundled local extensions: gleiche Logik wie im prod-Stage. Im dev versteckt
+# der `.:/app` Bind-Mount in docker-compose.yml diesen Pfad, deshalb ist
+# `/app/extensions` dort als anonymes Volume markiert — sonst sähe der
+# Container nur das (leere) Host-Verzeichnis statt des Clones.
+ARG SPECKIT_COMPANY_REF=main
+RUN git clone --depth 1 --branch ${SPECKIT_COMPANY_REF} \
+        https://github.com/haexhub/speckit-company.git /app/extensions/speckit-company \
+ && rm -rf /app/extensions/speckit-company/.git \
+ && chown -R node:node /app/extensions
 ENV HOST=0.0.0.0 \
     PORT=3000 \
     NODE_ENV=development
