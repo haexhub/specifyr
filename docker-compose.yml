@@ -58,10 +58,11 @@ services:
       - /app/node_modules
       - /app/.nuxt
       - /app/.output
-      # Bundled local extensions werden im Dockerfile-dev-Stage geklont. Ohne dieses
-      # anonymous volume würde der Bind-Mount oben (`.:/app`) den Clone verstecken
-      # und der Container sähe nur ein leeres `extensions/` vom Host.
-      - /app/extensions
+      # Bundled local extensions werden im Dockerfile-dev-Stage geklont. Ein named volume
+      # statt anonymous volume — Docker Compose recreated anonymous volumes bei jedem
+      # `docker compose up --build`, was den Clone aus dem Image jedes Mal neu kopiert
+      # statt persistent zu halten.
+      - specifyr_extensions:/app/extensions
       # Per-user/org OAuth credential homes managed by specifyr.
       - ${HOME}/.specifyr/credentials:/credentials
       # Docker-Socket: erlaubt der specifyr-App, per `docker run` Hermes-Agent-Container
@@ -304,3 +305,4 @@ volumes:
   specifyr_authentik_media:
   specifyr_authentik_certs:
   specifyr_authentik_templates:
+  specifyr_extensions:
