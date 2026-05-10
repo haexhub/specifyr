@@ -48,6 +48,7 @@ const { data, refresh } = await useFetch<OrgLlmResponse>(
 const { data: speckitProfile, refresh: refreshSpeckitProfile } =
   await useFetch<SpeckitAgentProfile | null>(() => profileEndpoint.value, {
     default: () => null,
+    transform: (r) => r ?? null,
   });
 
 async function refreshAll() {
@@ -119,6 +120,7 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
         :profile="speckitProfile"
         :credentials="data.credentials"
         :endpoint="profileEndpoint"
+        :credentials-endpoint="endpoint"
         :read-only="readOnly"
         @changed="refreshSpeckitProfile()"
       />
