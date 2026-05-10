@@ -63,7 +63,9 @@ const orgCredentials = computed<CredentialRow[]>(
 const canEditOrg = computed(() => orgCredsData.value?.myRole === "admin");
 
 async function refreshAll() {
-  await Promise.all([refreshAggregate(), refreshUserCreds(), refreshOrgCreds()]);
+  const tasks: Promise<unknown>[] = [refreshAggregate(), refreshUserCreds()];
+  if (ownerOrgSlug.value) tasks.push(refreshOrgCreds());
+  await Promise.all(tasks);
 }
 </script>
 

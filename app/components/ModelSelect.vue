@@ -22,12 +22,13 @@ let fetchToken = 0;
 async function load(credentialId: string) {
   models.value = [];
   error.value = null;
+  const token = ++fetchToken;
   if (!credentialId) {
     loading.value = false;
+    if (props.modelValue) emit("update:modelValue", "");
     return;
   }
   loading.value = true;
-  const token = ++fetchToken;
   try {
     const res = await $fetch<{ models: ModelChoice[] }>(
       `${props.credentialsEndpoint}/${credentialId}/models`,
