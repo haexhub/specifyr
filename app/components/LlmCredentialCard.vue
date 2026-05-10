@@ -48,6 +48,7 @@ const emit = defineEmits<{
   changed: [];
 }>();
 
+const { locale } = useI18n();
 const formOpen = ref(false);
 const form = reactive({
   displayName: props.defaultDisplayName ?? "Default",
@@ -221,7 +222,7 @@ async function remove(c: CredentialRow) {
           <div class="mt-0.5 truncate text-xs text-muted-foreground">
             {{ c.hasKey ? "key set" : "no key" }}
             <template v-if="c.baseUrl"> · {{ c.baseUrl }}</template>
-            · added {{ new Date(c.createdAt).toLocaleDateString() }}
+            · added {{ new Date(c.createdAt).toLocaleDateString(locale) }}
           </div>
         </div>
         <template v-if="!readOnly">
