@@ -12,7 +12,7 @@ import { acpPermissionToCapability, capabilityDecisionToAcpOutcome } from "../ac
  * (turn-broker.js:104) and RunScheduler (run-scheduler.js:64) expect.
  */
 export class AcpRunner {
-  constructor({ binary, args = [], cwd = process.cwd(), env, memoryRoot, onEvent, approvalService, slug, agent } = {}) {
+  constructor({ binary, args = [], cwd = process.cwd(), env, memoryRoot, onEvent, approvalService, slug, agent, newSessionMeta } = {}) {
     if (!binary) throw new Error("AcpRunner: binary is required");
     this.binary = binary;
     this.args = args;
@@ -23,6 +23,11 @@ export class AcpRunner {
     this.approvalService = approvalService;
     this.slug = slug;
     this.agent = agent;
+    // Forwarded as `_meta` on the ACP session/new request. claude-agent-acp
+    // reads `_meta.claudeCode.options.*` (see acp-agent.js: `userProvidedOptions`)
+    // to set query options like `model` — there is NO CLI flag for the model
+    // in the new package, so this is the only way to pin it.
+    this.newSessionMeta = newSessionMeta;
     this.child = null;
   }
 
@@ -42,6 +47,25 @@ export class AcpRunner {
     let stderr = "";
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (c) => { stderr += c; });
+
+    // Async spawn failures (ENOENT when binary isn't on PATH, EACCES, ...)
+    // arrive as an "error" event. Without a listener Node escalates them to
+    // uncaughtException and crashes the host process. Capture and surface as
+    // a normal rejection from run().
+    const spawnErrorPromise = new Promise((_, reject) => {
+      child.once("error", (err) => {
+        const detail = err.code === "ENOENT"
+          ? `binary '${this.binary}' not found on PATH`
+          : err.message;
+        reject(Object.assign(new Error(`ACP agent spawn failed: ${detail}`), { cause: err }));
+      });
+    });
+    // Swallow unhandled-rejection if run() exits via the happy path.
+    spawnErrorPromise.catch(() => {});
+
+    // stdin EPIPE when the child dies before we finish writing the
+    // initial protocol frames would otherwise also become uncaught.
+    child.stdin.on("error", () => {});
 
     const onEvent = this.onEvent;
     const { approvalService, slug, agent } = this;
@@ -89,15 +113,24 @@ export class AcpRunner {
     }
 
     try {
-      await conn.initialize({
-        protocolVersion: 1,
-        clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false }
-      });
-      const newSession = await conn.newSession({ cwd: this.cwd, mcpServers: [] });
-      const promptResult = await conn.prompt({
-        sessionId: newSession.sessionId,
-        prompt: [{ type: "text", text: prompt }]
-      });
+      const promptResult = await Promise.race([
+        spawnErrorPromise,
+        (async () => {
+          await conn.initialize({
+            protocolVersion: 1,
+            clientCapabilities: { fs: { readTextFile: true, writeTextFile: true }, terminal: false }
+          });
+          const newSession = await conn.newSession({
+            cwd: this.cwd,
+            mcpServers: [],
+            ...(this.newSessionMeta ? { _meta: this.newSessionMeta } : {})
+          });
+          return conn.prompt({
+            sessionId: newSession.sessionId,
+            prompt: [{ type: "text", text: prompt }]
+          });
+        })()
+      ]);
       child.kill();
       return {
         claudeSessionId: null,

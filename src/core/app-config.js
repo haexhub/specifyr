@@ -14,7 +14,7 @@ const DEFAULT_APP_CONFIG = {
   },
   acp: {
     codex: { binary: "codex-acp", args: ["--model", "{model}"] },
-    claude: { binary: "claude-code-acp", args: ["--model", "{model}"] },
+    claude: { binary: "claude-agent-acp", args: ["--model", "{model}"] },
     gemini: { binary: "gemini", args: ["--experimental-acp"] }
   }
 };
@@ -67,13 +67,21 @@ export async function loadAppConfig(cwd = process.cwd(), { injectBundled = true 
             ...DEFAULT_APP_CONFIG.acp.codex,
             ...(saved.acp?.codex ?? {})
           },
-          claude: {
-            ...DEFAULT_APP_CONFIG.acp.claude,
+          claude: (() => {
             // Migration: pre-ACP configs stored claude settings at the top
             // level (`saved.claude`) instead of under `acp.claude`. Fall back
             // so users keep their custom binary/args after upgrade.
-            ...(saved.acp?.claude ?? saved.claude ?? {})
-          },
+            const savedClaude = saved.acp?.claude ?? saved.claude ?? {};
+            // Migration: the legacy default binary `claude-code-acp` (from
+            // @zed-industries/claude-code-acp) was renamed upstream to
+            // `claude-agent-acp` (@agentclientprotocol/claude-agent-acp). Users
+            // who never customised their binary kept the old default in their
+            // saved config; rewrite to the new default so the container's
+            // pre-installed binary is found at spawn time.
+            const merged = { ...DEFAULT_APP_CONFIG.acp.claude, ...savedClaude };
+            if (merged.binary === "claude-code-acp") merged.binary = "claude-agent-acp";
+            return merged;
+          })(),
           gemini: {
             ...DEFAULT_APP_CONFIG.acp.gemini,
             ...(saved.acp?.gemini ?? {})
