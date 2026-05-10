@@ -58,6 +58,10 @@ services:
       - /app/node_modules
       - /app/.nuxt
       - /app/.output
+      # Bundled local extensions werden im Dockerfile-dev-Stage geklont. Ohne dieses
+      # anonymous volume würde der Bind-Mount oben (`.:/app`) den Clone verstecken
+      # und der Container sähe nur ein leeres `extensions/` vom Host.
+      - /app/extensions
       # Per-user/org OAuth credential homes managed by specifyr.
       - ${HOME}/.specifyr/credentials:/credentials
       # Docker-Socket: erlaubt der specifyr-App, per `docker run` Hermes-Agent-Container
@@ -94,10 +98,20 @@ services:
   claude-proxy:
     image: haex-claude-proxy:dev
     container_name: claude-proxy
+    environment:
+      # Multi-tenant session-token resolver. Without this the proxy
+      # returns 503 on every /v1/messages because it can't map the
+      # incoming runner-session token to an OAuth credentials dir.
+      # Reuses specifyr's Postgres on the shared `companies` network.
+      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:devpw@postgres:5432/specifyr}
     volumes:
-      - ${HOME}/.specifyr/credentials:/credentials:ro
+      # Must be RW so spawned `claude` can refresh OAuth tokens in-place.
+      - ${HOME}/.specifyr/credentials:/credentials
     networks:
       - companies
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   postgres:
