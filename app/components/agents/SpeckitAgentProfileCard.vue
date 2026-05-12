@@ -16,17 +16,18 @@ export interface SpeckitAgentProfile {
   updatedAt: string;
 }
 
-// Each ACP agent speaks one wire protocol; "compatible" providers route to
-// the same agent via base-URL override (e.g. OpenRouter → codex-acp via
-// OPENAI_BASE_URL). The validator in llm-agent-profiles-store.ts mirrors
-// this mapping.
+// Each ACP agent speaks one wire protocol; the speckit UI only offers the
+// native providers per agent. OpenRouter is intentionally NOT listed here:
+// codex-acp 0.0.43 ignores the model override and forces gpt-5.5 regardless
+// of the selected OpenRouter slug, so exposing it was misleading. The backend
+// validator still accepts `openrouter` so existing stored profiles don't
+// crash and so a future generic Chat-Completions ACP runner can re-enable it.
 const PROVIDER_TO_RUNNER: Record<
-  "anthropic" | "openai" | "openrouter" | "google",
+  "anthropic" | "openai" | "google",
   SpeckitRunnerKey
 > = {
   anthropic: "acp:claude",
   openai: "acp:codex",
-  openrouter: "acp:codex",
   google: "acp:gemini",
 };
 </script>
@@ -50,15 +51,12 @@ const emit = defineEmits<{
   changed: [];
 }>();
 
-type SpeckitProvider = "anthropic" | "openai" | "openrouter" | "google";
+type SpeckitProvider = "anthropic" | "openai" | "google";
 
-const recommendedProviders: Array<{ value: SpeckitProvider; label: string }> = [
+const providers: Array<{ value: SpeckitProvider; label: string }> = [
   { value: "openai", label: "OpenAI / GPT" },
   { value: "anthropic", label: "Anthropic / Claude" },
   { value: "google", label: "Google / Gemini" },
-];
-const experimentalProviders: Array<{ value: SpeckitProvider; label: string }> = [
-  { value: "openrouter", label: "OpenRouter" },
 ];
 
 interface FormState {
@@ -179,22 +177,10 @@ const saving = computed(() => status.value === "saving");
           class="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           :disabled="readOnly || saving"
         >
-          <optgroup label="Recommended">
-            <option v-for="p in recommendedProviders" :key="p.value" :value="p.value">
-              {{ p.label }}
-            </option>
-          </optgroup>
-          <optgroup label="Compatible (experimental)">
-            <option v-for="p in experimentalProviders" :key="p.value" :value="p.value">
-              {{ p.label }}
-            </option>
-          </optgroup>
+          <option v-for="p in providers" :key="p.value" :value="p.value">
+            {{ p.label }}
+          </option>
         </select>
-        <p v-if="form.provider === 'openrouter'" class="mt-1 text-xs text-muted-foreground">
-          Routes via the Codex agent to any OpenAI-compatible model. Coding
-          quality depends on the model's tool-use support — GPT-4-class or
-          Claude-class models recommended.
-        </p>
       </label>
 
       <label class="block">
