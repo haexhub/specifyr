@@ -52,6 +52,21 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
     pnpm rebuild
 
 # ------------------------------------------------------------------------------
+# prod-deps: production-only node_modules for the prod runtime image. Built
+# separately from `deps` so we don't ship devDependencies (nuxt, tailwind,
+# vue-tsc, tsx, vitest, …) into the runtime layer. All bare specifiers
+# dynamically imported from src/core/*.js and src/runners/*.js (notably
+# @agentclientprotocol/sdk, chokidar, drizzle-orm, zod) live under
+# `dependencies` in package.json, so --prod is safe.
+# ------------------------------------------------------------------------------
+FROM base AS prod-deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm install --prod --frozen-lockfile --ignore-scripts && \
+    pnpm approve-builds && \
+    pnpm rebuild
+
+# ------------------------------------------------------------------------------
 # dev: Nuxt dev server with HMR. Source is expected as a bind mount at /app.
 # --chown sorgt dafür, dass anonyme Volumes (/app/node_modules, /app/.nuxt) dem
 # node-User gehören — sonst scheitern Schreibzugriffe zur Laufzeit.
@@ -98,7 +113,7 @@ FROM base AS prod
 COPY --chown=node:node --from=builder /app/.output ./.output
 COPY --chown=node:node --from=builder /app/src ./src
 COPY --chown=node:node --from=builder /app/package.json ./package.json
-COPY --chown=node:node --from=deps /app/node_modules ./node_modules
+COPY --chown=node:node --from=prod-deps /app/node_modules ./node_modules
 # Drizzle's runtime migrator (server/plugins/db.ts) reads SQL files from
 # disk at boot. Nitro doesn't bundle them, so we copy them explicitly.
 # The plugin resolves them relative to process.cwd() = /app.

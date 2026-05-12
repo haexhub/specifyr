@@ -51,6 +51,21 @@ export function parseParams<T>(event: H3Event, schema: z.ZodType<T>): T {
   return result.data;
 }
 
+/**
+ * Sentinel for domain-level validation errors thrown from store/service code.
+ *
+ * Route handlers catch these and map them to a 400 with the original message
+ * (user-facing reasons like "Selected credential is disabled."), while any
+ * other error class is treated as a server fault: logged and surfaced as a
+ * generic 500 so internals (DB driver messages, stack hints) don't leak.
+ */
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ValidationError";
+  }
+}
+
 /* ---------- shared schemas ---------- */
 
 export const paginationSchema = z.object({
