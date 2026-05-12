@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/haexhub/specifyr/compare/v0.9.0...v0.10.0) (2026-05-12)
+
+
+### Features
+
+* **speckit:** add Google/Gemini as a native provider option ([#34](https://github.com/haexhub/specifyr/issues/34)) ([646c715](https://github.com/haexhub/specifyr/commit/646c715268c0d15fe3628a0ab44f89502373b6e5))
+
 ## [0.9.0](https://github.com/haexhub/specifyr/compare/v0.8.0...v0.9.0) (2026-05-10)
 
 
