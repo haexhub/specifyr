@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { CredentialRow, LlmProvider } from "~/components/settings/LlmCredentialCard.vue";
 
-export type SpeckitRunnerKey = "acp:claude" | "acp:codex";
+export type SpeckitRunnerKey = "acp:claude" | "acp:codex" | "acp:gemini";
 
 export interface SpeckitAgentProfile {
   id: string;
@@ -20,10 +20,14 @@ export interface SpeckitAgentProfile {
 // the same agent via base-URL override (e.g. OpenRouter → codex-acp via
 // OPENAI_BASE_URL). The validator in llm-agent-profiles-store.ts mirrors
 // this mapping.
-const PROVIDER_TO_RUNNER: Record<"anthropic" | "openai" | "openrouter", SpeckitRunnerKey> = {
+const PROVIDER_TO_RUNNER: Record<
+  "anthropic" | "openai" | "openrouter" | "google",
+  SpeckitRunnerKey
+> = {
   anthropic: "acp:claude",
   openai: "acp:codex",
   openrouter: "acp:codex",
+  google: "acp:gemini",
 };
 </script>
 
@@ -46,11 +50,12 @@ const emit = defineEmits<{
   changed: [];
 }>();
 
-type SpeckitProvider = "anthropic" | "openai" | "openrouter";
+type SpeckitProvider = "anthropic" | "openai" | "openrouter" | "google";
 
 const recommendedProviders: Array<{ value: SpeckitProvider; label: string }> = [
   { value: "openai", label: "OpenAI / GPT" },
   { value: "anthropic", label: "Anthropic / Claude" },
+  { value: "google", label: "Google / Gemini" },
 ];
 const experimentalProviders: Array<{ value: SpeckitProvider; label: string }> = [
   { value: "openrouter", label: "OpenRouter" },
