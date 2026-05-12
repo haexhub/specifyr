@@ -235,5 +235,3 @@ const saving = computed(() => status.value === "saving");
     </form>
   </section>
 </template>
-</content>
-</invoke>
