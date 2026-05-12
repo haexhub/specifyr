@@ -15,7 +15,7 @@ const DEFAULT_APP_CONFIG = {
   acp: {
     codex: { binary: "codex-acp", args: ["--model", "{model}"] },
     claude: { binary: "claude-agent-acp", args: ["--model", "{model}"] },
-    gemini: { binary: "gemini", args: ["--experimental-acp"] }
+    gemini: { binary: "gemini", args: ["--experimental-acp", "--model", "{model}"] }
   }
 };
 
@@ -82,10 +82,23 @@ export async function loadAppConfig(cwd = process.cwd(), { injectBundled = true 
             if (merged.binary === "claude-code-acp") merged.binary = "claude-agent-acp";
             return merged;
           })(),
-          gemini: {
-            ...DEFAULT_APP_CONFIG.acp.gemini,
-            ...(saved.acp?.gemini ?? {})
-          }
+          gemini: (() => {
+            // Migration: earlier versions stored args without `--model {model}`,
+            // so the gemini-cli fell back to its built-in default and ignored
+            // the user's configured speckit model. Upgrade saved configs that
+            // still hold the legacy default to the new one; leave anything a
+            // user explicitly customised alone.
+            const savedGemini = saved.acp?.gemini ?? {};
+            const merged = { ...DEFAULT_APP_CONFIG.acp.gemini, ...savedGemini };
+            if (
+              Array.isArray(savedGemini.args) &&
+              savedGemini.args.length === 1 &&
+              savedGemini.args[0] === "--experimental-acp"
+            ) {
+              merged.args = DEFAULT_APP_CONFIG.acp.gemini.args;
+            }
+            return merged;
+          })()
         }
       }
     : structuredClone(DEFAULT_APP_CONFIG);
