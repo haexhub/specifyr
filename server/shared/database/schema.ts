@@ -15,11 +15,14 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-// Pre-existing Postgres role for haex-claude-proxy. Angelegt durch die
-// Ansible-Role mit GRANTs auf runner_sessions + llm_credentials. Hier nur
-// als `existing()` referenziert, damit Drizzle Policies auf diese Rolle
-// targeten kann ohne die Rolle selbst zu generieren (sonst kollidiert das
-// CREATE ROLE mit dem ansible-managed Lifecycle).
+// Pre-existing Postgres role for haex-claude-proxy. CREATE ROLE +
+// Passwort-Lifecycle managt die Ansible-Role (Passwort lebt in
+// secrets.yml, gehört nicht in Migrations). Table-level GRANTs auf
+// runner_sessions + llm_credentials kommen aus einer Drizzle-Migration
+// (siehe migrations/0001_grant_claude_proxy_access.sql), damit Schema-
+// Änderungen + zugehörige Rechte atomar zusammen ausgerollt werden.
+// Hier nur als `existing()` referenziert, damit Drizzle Policies auf
+// diese Rolle targeten kann ohne die Rolle selbst zu generieren.
 export const haexClaudeProxyRole = pgRole("haex_claude_proxy").existing();
 
 // Mirror of Authentik identity. UPSERT'd by the auth middleware on the

@@ -8,6 +8,13 @@
       "when": 1778625893266,
       "tag": "0000_baseline",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778628302955,
+      "tag": "0001_grant_claude_proxy_access",
+      "breakpoints": true
     }
   ]
 }
