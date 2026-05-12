@@ -7,6 +7,7 @@ import {
   type LlmCredential,
 } from "../database/schema";
 import { decryptString } from "./secrets-store";
+import { ValidationError } from "./validation";
 
 export type AgentProfileOwnerKind = "user" | "org";
 export type AgentProfilePurpose = "speckit" | "company-agent";
@@ -77,21 +78,23 @@ function usableCredentialForProfile(
   credential: LlmCredential | null,
 ): LlmCredential {
   if (!credential) {
-    throw new Error("Selected credential does not exist.");
+    throw new ValidationError("Selected credential does not exist.");
   }
   if (
     credential.ownerKind !== profile.ownerKind ||
     credential.ownerId !== profile.ownerId
   ) {
-    throw new Error("Selected credential belongs to a different owner.");
+    throw new ValidationError(
+      "Selected credential belongs to a different owner.",
+    );
   }
   if (credential.provider !== profile.provider) {
-    throw new Error(
+    throw new ValidationError(
       "Selected credential provider does not match the agent profile provider.",
     );
   }
   if (!credential.enabled) {
-    throw new Error("Selected credential is disabled.");
+    throw new ValidationError("Selected credential is disabled.");
   }
   if (credential.mode === "api_key") {
     if (
@@ -99,20 +102,24 @@ function usableCredentialForProfile(
       !credential.apiKeyTag ||
       !credential.apiKeyData
     ) {
-      throw new Error("Selected API key credential is incomplete.");
+      throw new ValidationError("Selected API key credential is incomplete.");
     }
     return credential;
   }
   if (credential.mode === "oauth_claude") {
     if (credential.provider !== "anthropic") {
-      throw new Error("OAuth credentials are only supported for Anthropic.");
+      throw new ValidationError(
+        "OAuth credentials are only supported for Anthropic.",
+      );
     }
     if (credential.oauthStatus !== "authorized") {
-      throw new Error("Selected Claude OAuth credential is not authorized.");
+      throw new ValidationError(
+        "Selected Claude OAuth credential is not authorized.",
+      );
     }
     return credential;
   }
-  throw new Error("Selected credential mode is not supported.");
+  throw new ValidationError("Selected credential mode is not supported.");
 }
 
 async function getCredential(id: string): Promise<LlmCredential | null> {
@@ -136,7 +143,9 @@ function normalizeRole(
   if (purpose !== "company-agent") return "";
   const value = (agentRole ?? "").trim();
   if (!value) {
-    throw new Error("agentRole is required for purpose='company-agent'.");
+    throw new ValidationError(
+      "agentRole is required for purpose='company-agent'.",
+    );
   }
   return value;
 }
@@ -200,7 +209,9 @@ export async function upsertAgentProfileFor(
 
   if (purpose === "speckit") {
     if (!runnerKey.startsWith("acp:")) {
-      throw new Error("Speckit agent profiles must use an ACP runner.");
+      throw new ValidationError(
+        "Speckit agent profiles must use an ACP runner.",
+      );
     }
     // Validate by API family, not provider identity. Each ACP agent speaks
     // exactly one wire protocol; any provider that speaks the same protocol
@@ -213,7 +224,7 @@ export async function upsertAgentProfileFor(
       runnerKey === "acp:claude" &&
       !ANTHROPIC_COMPATIBLE.includes(patch.provider)
     ) {
-      throw new Error(
+      throw new ValidationError(
         `Claude ACP profiles require an Anthropic-compatible provider (${ANTHROPIC_COMPATIBLE.join(", ")}).`,
       );
     }
@@ -221,7 +232,7 @@ export async function upsertAgentProfileFor(
       runnerKey === "acp:codex" &&
       !OPENAI_COMPATIBLE.includes(patch.provider)
     ) {
-      throw new Error(
+      throw new ValidationError(
         `Codex ACP profiles require an OpenAI-compatible provider (${OPENAI_COMPATIBLE.join(", ")}).`,
       );
     }
@@ -229,20 +240,20 @@ export async function upsertAgentProfileFor(
       runnerKey === "acp:gemini" &&
       !GOOGLE_COMPATIBLE.includes(patch.provider)
     ) {
-      throw new Error(
+      throw new ValidationError(
         `Gemini ACP profiles require a Google-compatible provider (${GOOGLE_COMPATIBLE.join(", ")}).`,
       );
     }
   } else if (purpose === "company-agent") {
     if (runnerKey !== "hermes") {
-      throw new Error(
+      throw new ValidationError(
         "Company-agent profiles currently only support the 'hermes' runner.",
       );
     }
   } else {
-    throw new Error(`Unknown agent profile purpose: ${purpose}`);
+    throw new ValidationError(`Unknown agent profile purpose: ${purpose}`);
   }
-  if (!model) throw new Error("Model is required.");
+  if (!model) throw new ValidationError("Model is required.");
 
   if (patch.credentialId) {
     const provisional: AgentProfileSummary = {
@@ -325,7 +336,7 @@ async function resolveProfileCredential(
   profile: AgentProfileSummary,
 ): Promise<RuntimeCredential> {
   if (!profile.credentialId) {
-    throw new Error("Agent profile has no credential selected.");
+    throw new ValidationError("Agent profile has no credential selected.");
   }
   const credential = usableCredentialForProfile(
     profile,

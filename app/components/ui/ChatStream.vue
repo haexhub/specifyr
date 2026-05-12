@@ -270,9 +270,9 @@ async function send() {
     streamError.value =
       err?.statusCode === 409
         ? t("chat.turnError409")
-        : err instanceof Error
-        ? err.message
-        : t("chat.turnStartError");
+        : err?.data?.statusMessage
+        ?? err?.statusMessage
+        ?? (err instanceof Error ? err.message : t("chat.turnStartError"));
   }
 }
 
@@ -294,7 +294,10 @@ async function retryInterruptedTurn() {
     draft.value = "";
     openStream(sid, resp.startSeq);
   } catch (err: any) {
-    streamError.value = err instanceof Error ? err.message : t("chat.retryError");
+    streamError.value =
+      err?.data?.statusMessage
+      ?? err?.statusMessage
+      ?? (err instanceof Error ? err.message : t("chat.retryError"));
   }
 }
 
