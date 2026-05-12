@@ -97,7 +97,7 @@ COPY --chown=node:node --from=builder /app/package.json ./package.json
 # Drizzle's runtime migrator (server/plugins/db.ts) reads SQL files from
 # disk at boot. Nitro doesn't bundle them, so we copy them explicitly.
 # The plugin resolves them relative to process.cwd() = /app.
-COPY --chown=node:node --from=builder /app/server/db/migrations ./server/db/migrations
+COPY --chown=node:node --from=builder /app/server/shared/database/migrations ./server/shared/database/migrations
 # Bundled local extensions: clone speckit-company so it appears in the workflow
 # picker out-of-the-box. Not auto-installed into projects (kein Default-Workflow);
 # the bundled-extensions injector in src/core/app-config.js merges it into
