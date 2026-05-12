@@ -104,6 +104,7 @@ export async function createSpeckitRunnerFactory(input: {
       memoryRoot?: string;
       onEvent?: (e: unknown) => void;
       newSessionMeta?: Record<string, unknown>;
+      desiredModel?: string;
     }) => unknown;
   }>("src/runners/acp.js");
 

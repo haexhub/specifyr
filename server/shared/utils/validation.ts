@@ -120,7 +120,7 @@ export const orgCredentialParams = z.object({
 });
 
 const PROVIDERS = ["anthropic", "openai", "google", "openrouter"] as const;
-const ACP_RUNNERS = ["acp:claude", "acp:codex"] as const;
+const ACP_RUNNERS = ["acp:claude", "acp:codex", "acp:gemini"] as const;
 const COMPANY_AGENT_RUNNERS = ["hermes"] as const;
 
 export const llmCredentialCreateSchema = z.object({
