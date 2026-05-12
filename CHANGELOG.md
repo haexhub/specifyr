@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/haexhub/specifyr/compare/v0.10.2...v0.11.0) (2026-05-12)
+
+
+### Features
+
+* **oauth:** persist anthropic credentials encrypted in DB, drop FS mount ([#42](https://github.com/haexhub/specifyr/issues/42)) ([3f1a96a](https://github.com/haexhub/specifyr/commit/3f1a96a7f5de8004d1d6b6f69d5a2336461be636))
+
 ## [0.10.2](https://github.com/haexhub/specifyr/compare/v0.10.1...v0.10.2) (2026-05-12)
 
 
