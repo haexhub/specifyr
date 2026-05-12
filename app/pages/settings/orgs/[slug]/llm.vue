@@ -4,8 +4,8 @@ import type {
   CredentialRow,
   LlmProvider as Provider,
   ProviderMeta,
-} from "~/components/LlmCredentialCard.vue";
-import type { SpeckitAgentProfile } from "~/components/SpeckitAgentProfileCard.vue";
+} from "~/components/settings/LlmCredentialCard.vue";
+import type { SpeckitAgentProfile } from "~/components/agents/SpeckitAgentProfileCard.vue";
 
 interface OrgLlmResponse {
   org: { id: string; slug: string; name: string };
@@ -101,7 +101,7 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
     </p>
 
     <template v-if="data">
-      <AnthropicOAuthCard
+      <AuthAnthropicOAuthCard
         :existing="
           anthropicOauth
             ? {
@@ -116,7 +116,7 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
         @changed="refreshAll()"
       />
 
-      <SpeckitAgentProfileCard
+      <AgentsSpeckitAgentProfileCard
         :profile="speckitProfile"
         :credentials="data.credentials"
         :endpoint="profileEndpoint"
@@ -125,7 +125,7 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
         @changed="refreshSpeckitProfile()"
       />
 
-      <LlmCredentialCard
+      <SettingsLlmCredentialCard
         v-for="provider in providers"
         :key="provider"
         :provider="provider"

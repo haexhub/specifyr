@@ -12,7 +12,7 @@ import { acpPermissionToCapability, capabilityDecisionToAcpOutcome } from "../ac
  * (turn-broker.js:104) and RunScheduler (run-scheduler.js:64) expect.
  */
 export class AcpRunner {
-  constructor({ binary, args = [], cwd = process.cwd(), env, memoryRoot, onEvent, approvalService, slug, agent, newSessionMeta } = {}) {
+  constructor({ binary, args = [], cwd = process.cwd(), env, memoryRoot, onEvent, approvalService, slug, agent, newSessionMeta, desiredModel } = {}) {
     if (!binary) throw new Error("AcpRunner: binary is required");
     this.binary = binary;
     this.args = args;
@@ -28,6 +28,12 @@ export class AcpRunner {
     // to set query options like `model` — there is NO CLI flag for the model
     // in the new package, so this is the only way to pin it.
     this.newSessionMeta = newSessionMeta;
+    // codex-acp does NOT honor model via _meta or --model: its newSession
+    // calls threadStart({ model: null }) (dist/index.js:19209) and the Rust
+    // codex falls back to its hardcoded default (gpt-5.5). To override, we
+    // call session/set_model after newSession with the modelId returned in
+    // availableModels (format: `<name>[<effort>]`).
+    this.desiredModel = desiredModel;
     this.child = null;
   }
 
@@ -46,7 +52,13 @@ export class AcpRunner {
     this.child = child;
     let stderr = "";
     child.stderr.setEncoding("utf8");
-    child.stderr.on("data", (c) => { stderr += c; });
+    child.stderr.on("data", (c) => {
+      stderr += c;
+      // Surface upstream agent errors (e.g. codex "unknown model", 401) to
+      // server logs — otherwise they only appear in the eventual throw, and
+      // not at all on the silent "(keine Antwort)" path.
+      process.stderr.write(`[acp:${this.binary}] ${c}`);
+    });
 
     // Async spawn failures (ENOENT when binary isn't on PATH, EACCES, ...)
     // arrive as an "error" event. Without a listener Node escalates them to
@@ -125,6 +137,26 @@ export class AcpRunner {
             mcpServers: [],
             ...(this.newSessionMeta ? { _meta: this.newSessionMeta } : {})
           });
+          if (this.desiredModel && newSession.models?.availableModels?.length) {
+            const wanted = this.desiredModel;
+            const match = newSession.models.availableModels.find(
+              (m) => m.modelId === wanted || m.modelId.startsWith(`${wanted}[`)
+            );
+            if (match && match.modelId !== newSession.models.currentModelId) {
+              try {
+                await conn.unstable_setSessionModel({
+                  sessionId: newSession.sessionId,
+                  modelId: match.modelId
+                });
+              } catch (err) {
+                process.stderr.write(`[acp:${this.binary}] setSessionModel failed: ${err?.message ?? err}\n`);
+              }
+            } else if (!match) {
+              process.stderr.write(
+                `[acp:${this.binary}] desired model '${wanted}' not in availableModels: ${newSession.models.availableModels.map((m) => m.modelId).join(", ")}\n`
+              );
+            }
+          }
           return conn.prompt({
             sessionId: newSession.sessionId,
             prompt: [{ type: "text", text: prompt }]

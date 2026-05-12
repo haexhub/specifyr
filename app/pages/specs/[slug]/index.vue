@@ -3,14 +3,14 @@ import { ChevronRight, Trash2, Check, AlertTriangle, Loader2 } from "lucide-vue-
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
 import { Button } from "~/components/shadcn/button";
 import { Badge } from "~/components/shadcn/badge";
-import ConfirmDialog from "~/components/ConfirmDialog.vue";
-import ProjectShell from "~/components/ProjectShell.vue";
-import NotificationLogWidget from "~/components/NotificationLogWidget.vue";
-import NotificationDrawer from "~/components/NotificationDrawer.vue";
-import InstalledExtensionsWidget from "~/components/InstalledExtensionsWidget.vue";
-import { type StepId, type StepStatus } from "~/lib/steps";
-import { resolveWorkflow, type Workflow } from "~/lib/workflows";
-import type { StepState, NotificationEvent } from "~/lib/types";
+import ConfirmDialog from "~/components/ui/ConfirmDialog.vue";
+import ProjectShell from "~/components/projects/ProjectShell.vue";
+import NotificationLogWidget from "~/components/ui/NotificationLogWidget.vue";
+import NotificationDrawer from "~/components/ui/NotificationDrawer.vue";
+import InstalledExtensionsWidget from "~/components/settings/InstalledExtensionsWidget.vue";
+import { type StepId, type StepStatus } from "~/utils/steps";
+import { resolveWorkflow, type Workflow } from "~/utils/workflows";
+import type { StepState, NotificationEvent } from "~/types/types";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -129,7 +129,7 @@ async function deleteProject() {
     </Card>
   </div>
 
-  <ProjectShell
+  <ProjectsProjectShell
     v-else-if="project"
     :slug="slug"
     :project-title="project.title"
@@ -230,20 +230,20 @@ async function deleteProject() {
         </Card>
 
     <div class="grid gap-6 lg:grid-cols-2">
-      <NotificationLogWidget
+      <UiNotificationLogWidget
         :events="events ?? []"
         :loading="eventsLoading"
         @open-drawer="notificationDrawerOpen = true"
       />
-      <InstalledExtensionsWidget :slug="slug" />
+      <SettingsInstalledExtensionsWidget :slug="slug" />
     </div>
 
-    <NotificationDrawer
+    <UiNotificationDrawer
       v-model:open="notificationDrawerOpen"
       :events="events ?? []"
     />
 
-    <ConfirmDialog
+    <UiConfirmDialog
       v-model:open="deleteDialogOpen"
       :title="$t('specIndex.deleteTitle', { title: project.title })"
       :message="$t('specIndex.deleteMessage')"
@@ -253,5 +253,5 @@ async function deleteProject() {
       :busy="deleting"
       @confirm="deleteProject"
     />
-  </ProjectShell>
+  </ProjectsProjectShell>
 </template>

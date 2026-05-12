@@ -3,22 +3,44 @@ import { fileURLToPath } from "node:url";
 
 export default defineNuxtConfig({
   nitro: {
+    scanDirs: [
+      fileURLToPath(new URL("./server/auth", import.meta.url)),
+      fileURLToPath(new URL("./server/admin", import.meta.url)),
+      fileURLToPath(new URL("./server/settings", import.meta.url)),
+      fileURLToPath(new URL("./server/projects", import.meta.url)),
+      fileURLToPath(new URL("./server/agents", import.meta.url)),
+      fileURLToPath(new URL("./server/shared", import.meta.url)),
+    ],
     alias: {
       "@su": fileURLToPath(new URL("./server/shared/utils", import.meta.url)),
+      "@db": fileURLToPath(new URL("./server/shared/database", import.meta.url)),
     },
     typescript: {
       tsConfig: {
-        compilerOptions: { paths: { "@su/*": ["../server/shared/utils/*"] } },
+        compilerOptions: {
+          paths: {
+            "@su/*": ["../server/shared/utils/*"],
+            "@db/*": ["../server/shared/database/*"],
+          },
+        },
       },
     },
   },
   typescript: {
     tsConfig: {
-      compilerOptions: { paths: { "@su/*": ["../server/shared/utils/*"] } },
+      compilerOptions: {
+        paths: {
+          "@su/*": ["../server/shared/utils/*"],
+          "@db/*": ["../server/shared/database/*"],
+        },
+      },
     },
   },
   compatibilityDate: "2025-01-01",
   devtools: { enabled: true },
+  imports: {
+    dirs: ["composables/**"],
+  },
   css: ["~/assets/css/tailwind.css"],
   components: [
     {

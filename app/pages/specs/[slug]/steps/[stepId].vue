@@ -1,18 +1,16 @@
 <script setup lang="ts">
-definePageMeta({ layout: "workspace" });
-
 import { PanelRightOpen, Play } from "lucide-vue-next";
 import { Badge } from "~/components/shadcn/badge";
 import { Button } from "~/components/shadcn/button";
-import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
-import SessionList from "~/components/SessionList.vue";
-import ChatStream from "~/components/ChatStream.vue";
-import ArtifactViewer from "~/components/ArtifactViewer.vue";
-import HookGateBanner from "~/components/HookGateBanner.vue";
-import { stepById, type StepId, type StepStatus } from "~/lib/steps";
-import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/lib/workflows";
-import { gatesForStep } from "~/lib/hooks";
-import type { SessionMetadata, StepState } from "~/lib/types";
+import ProjectStepSidebar from "~/components/projects/ProjectStepSidebar.vue";
+import SessionList from "~/components/ui/SessionList.vue";
+import ChatStream from "~/components/ui/ChatStream.vue";
+import ArtifactViewer from "~/components/ui/ArtifactViewer.vue";
+import HookGateBanner from "~/components/common/HookGateBanner.vue";
+import { stepById, type StepId, type StepStatus } from "~/utils/steps";
+import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/utils/workflows";
+import { gatesForStep } from "~/utils/hooks";
+import type { SessionMetadata, StepState } from "~/types/types";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -259,14 +257,14 @@ const nextStep = computed(() => {
   </div>
 
   <div v-else class="flex h-screen">
-    <ProjectStepSidebar
+    <ProjectsProjectStepSidebar
       :slug="slug"
       :project-title="project?.title"
       :active-step-id="step.id"
       :workflow="workflow"
     >
       <ClientOnly>
-        <SessionList
+        <UiSessionList
           :slug="slug"
           :step-id="step.id"
           :sessions="sessions"
@@ -277,7 +275,7 @@ const nextStep = computed(() => {
           @select="selectSession"
         />
       </ClientOnly>
-    </ProjectStepSidebar>
+    </ProjectsProjectStepSidebar>
 
     <ClientOnly>
       <template #fallback>
@@ -315,7 +313,7 @@ const nextStep = computed(() => {
         {{ runActionError }}
       </div>
 
-      <HookGateBanner :gates="hookGates" @use-command="handleGateUseCommand" />
+      <CommonHookGateBanner :gates="hookGates" @use-command="handleGateUseCommand" />
 
       <div
         v-if="currentStepStatus === 'stale'"
@@ -325,7 +323,7 @@ const nextStep = computed(() => {
       </div>
 
       <div class="flex flex-1 flex-col overflow-hidden">
-        <ChatStream
+        <UiChatStream
           ref="chatStreamRef"
           :slug="slug"
           :step-id="step.id"
@@ -371,7 +369,7 @@ const nextStep = computed(() => {
           :class="artifactResizing ? 'bg-primary' : 'bg-transparent group-hover:bg-primary/40'"
         />
       </div>
-      <ArtifactViewer
+      <UiArtifactViewer
         :slug="slug"
         :candidates="artifactCandidates"
         :reload-token="artifactReloadToken"

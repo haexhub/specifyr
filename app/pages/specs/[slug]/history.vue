@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ArrowLeft, Filter } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
-import ProjectShell from "~/components/ProjectShell.vue";
-import { resolveWorkflow, type Workflow } from "~/lib/workflows";
+import ProjectShell from "~/components/projects/ProjectShell.vue";
+import { resolveWorkflow, type Workflow } from "~/utils/workflows";
 
 const route = useRoute();
 const slug = computed(() => route.params.slug as string);
@@ -101,7 +101,7 @@ function shortPath(p: string | null): string {
 </script>
 
 <template>
-  <ProjectShell
+  <ProjectsProjectShell
     :slug="slug"
     :project-title="project?.title"
     :workflow="workflow"
@@ -221,5 +221,5 @@ function shortPath(p: string | null): string {
         </ul>
       </CardContent>
     </Card>
-  </ProjectShell>
+  </ProjectsProjectShell>
 </template>

@@ -23,7 +23,7 @@ import {
   CommandItem,
   CommandList
 } from "~/components/shadcn/command";
-import type { ProjectListItem } from "~/lib/types";
+import type { ProjectListItem } from "~/types/types";
 
 interface CatalogExtensionDetail {
   id: string;

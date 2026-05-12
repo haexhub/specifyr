@@ -1,4 +1,4 @@
-import { pruneExpiredRunnerSessions } from "../utils/runner-sessions-store";
+import { pruneExpiredRunnerSessions } from "../shared/utils/runner-sessions-store";
 
 const PRUNE_INTERVAL_MS = 15 * 60 * 1000; // 15 min
 
@@ -16,9 +16,7 @@ export default defineNitroPlugin((nitroApp) => {
     try {
       const removed = await pruneExpiredRunnerSessions();
       if (removed > 0) {
-        console.info(
-          `[runner-sessions] pruned ${removed} expired session(s)`,
-        );
+        console.info(`[runner-sessions] pruned ${removed} expired session(s)`);
       }
     } catch (err) {
       console.warn("[runner-sessions] prune failed:", err);

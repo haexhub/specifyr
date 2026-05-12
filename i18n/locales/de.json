@@ -182,10 +182,11 @@
     "turnStartError": "Turn konnte nicht gestartet werden.",
     "retryNoMessage": "Keine User-Nachricht zum Wiederholen gefunden.",
     "retryError": "Retry fehlgeschlagen.",
-    "placeholder": "Nachricht tippen… (Cmd/Ctrl+Enter zum Senden)",
+    "placeholder": "Nachricht tippen… (Enter zum Senden)",
     "shortcut": "{key} senden",
     "stop": "Stopp",
     "send": "Senden",
+    "newLine": "neue Zeile",
     "thinking": "Denkt nach…",
     "copy": "Kopieren"
   },

@@ -465,7 +465,7 @@ async function unregisterLocalExtension(slug: string) {
             <p v-if="localError" class="mt-2 text-xs text-destructive">{{ localError }}</p>
           </div>
 
-          <LocalExtensionPicker v-model:open="pickerOpen" @select="onPickerSelect" />
+          <SettingsLocalExtensionPicker v-model:open="pickerOpen" @select="onPickerSelect" />
         </CardContent>
       </Card>
 

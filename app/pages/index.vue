@@ -3,8 +3,8 @@ definePageMeta({ layout: "workspace" });
 
 import { Plus, FolderOpen } from "lucide-vue-next";
 import { Button } from "~/components/shadcn/button";
-import ProjectCreateDialog from "~/components/ProjectCreateDialog.vue";
-import type { ProjectListItem } from "~/lib/types";
+import ProjectCreateDialog from "~/components/projects/ProjectCreateDialog.vue";
+import type { ProjectListItem } from "~/types/types";
 
 const dialogOpen = ref(false);
 const refreshProjects = inject<() => Promise<void>>("refreshProjects", async () => {});
@@ -29,7 +29,7 @@ async function handleCreated() {
   <div class="flex h-full items-center justify-center px-8 py-12">
     <div class="w-full max-w-xl text-center">
       <div class="mx-auto mb-6 inline-flex size-24 items-center justify-center rounded-lg bg-primary/10 text-primary">
-        <SpecifyrLogo size="hero" :show-text="false" />
+        <CommonSpecifyrLogo size="hero" :show-text="false" />
       </div>
 
       <h1 class="text-3xl font-semibold tracking-tight">specifyr</h1>
@@ -54,6 +54,6 @@ async function handleCreated() {
       </p>
     </div>
 
-    <ProjectCreateDialog v-model:open="dialogOpen" @created="handleCreated" />
+    <ProjectsProjectCreateDialog v-model:open="dialogOpen" @created="handleCreated" />
   </div>
 </template>

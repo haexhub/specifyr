@@ -1,4 +1,4 @@
-import { loadSessionStore } from "../utils/specifyr-stores";
+import { loadSessionStore } from "../shared/utils/specifyr-stores";
 
 /**
  * Nitro startup plugin. Walks every persisted session whose status was "running" at
@@ -17,7 +17,7 @@ export default defineNitroPlugin(async () => {
     if (interrupted.length > 0) {
       // eslint-disable-next-line no-console
       console.info(
-        `[turn-broker] Marked ${interrupted.length} stuck "running" session(s) as "interrupted" after restart.`
+        `[turn-broker] Marked ${interrupted.length} stuck "running" session(s) as "interrupted" after restart.`,
       );
     }
   } catch (err) {
