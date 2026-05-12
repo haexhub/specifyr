@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.2](https://github.com/haexhub/specifyr/compare/v0.10.1...v0.10.2) (2026-05-12)
+
+
+### Bug Fixes
+
+* **prod:** ship node_modules and surface real errors on turn POST ([#40](https://github.com/haexhub/specifyr/issues/40)) ([b70d2a6](https://github.com/haexhub/specifyr/commit/b70d2a60a8b10f982c8bd6705c7383f35db3eaa6))
+
 ## [0.10.1](https://github.com/haexhub/specifyr/compare/v0.10.0...v0.10.1) (2026-05-12)
 
 
