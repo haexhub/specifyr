@@ -87,13 +87,18 @@ RUN pnpm build
 
 # ------------------------------------------------------------------------------
 # prod: minimal runtime. Ships .output/ AND src/ — the server dynamically imports
-# src/core/*.js at runtime (see server/utils/specifyr-stores.ts loadModule()), so
-# Nitro's bundle alone is not self-contained.
+# src/core/*.js and src/runners/*.js at runtime (see specifyr-stores.ts /
+# speckit-agent-runner.ts loadModule()), so Nitro's bundle alone is not
+# self-contained: Node's ESM resolver walks up from /app/src/... and only finds
+# bare imports like "@agentclientprotocol/sdk" or "chokidar" when /app/node_modules
+# exists. Nitro's bundled copy under .output/server/node_modules is invisible
+# from that location.
 # ------------------------------------------------------------------------------
 FROM base AS prod
 COPY --chown=node:node --from=builder /app/.output ./.output
 COPY --chown=node:node --from=builder /app/src ./src
 COPY --chown=node:node --from=builder /app/package.json ./package.json
+COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 # Drizzle's runtime migrator (server/plugins/db.ts) reads SQL files from
 # disk at boot. Nitro doesn't bundle them, so we copy them explicitly.
 # The plugin resolves them relative to process.cwd() = /app.
