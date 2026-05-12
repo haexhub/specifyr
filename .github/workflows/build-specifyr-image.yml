@@ -75,6 +75,13 @@ jobs:
 
       - name: Set up QEMU (multi-arch emulation for arm64 builds)
         uses: docker/setup-qemu-action@v3
+        with:
+          # Pin a newer QEMU image. The default (qemu-v7) hangs/SIGILLs on
+          # `npm install -g @anthropic-ai/claude-code` under arm64 emulation —
+          # newer Node 22 / V8 builds use CPU instructions that older QEMU
+          # user-mode doesn't emulate (qemu: uncaught target signal 4 - core
+          # dumped). v9+ ships the fix.
+          image: tonistiigi/binfmt:qemu-v9.2.2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

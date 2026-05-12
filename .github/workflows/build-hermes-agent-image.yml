@@ -57,6 +57,10 @@ jobs:
 
       - name: Set up QEMU (multi-arch emulation for arm64 builds)
         uses: docker/setup-qemu-action@v3
+        with:
+          # See build-specifyr-image.yml — default qemu-v7 SIGILLs on the
+          # `npm install -g @anthropic-ai/claude-code` step on arm64.
+          image: tonistiigi/binfmt:qemu-v9.2.2
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
