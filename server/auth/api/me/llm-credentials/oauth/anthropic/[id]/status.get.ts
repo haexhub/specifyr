@@ -30,10 +30,16 @@ export default defineEventHandler(async (event) => {
 
   const hasBlob = !!owned.oauthCredentialsData;
   const expiresAt = owned.oauthExpiresAt;
+  const oauthStatus =
+    owned.oauthStatus === "authorized" &&
+    expiresAt &&
+    expiresAt.getTime() < Date.now()
+      ? "expired"
+      : owned.oauthStatus;
 
   return {
     id,
-    oauthStatus: owned.oauthStatus,
+    oauthStatus,
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
     fileExists: hasBlob,
   };

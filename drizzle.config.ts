@@ -2,8 +2,8 @@ import { defineConfig } from "drizzle-kit";
 
 // drizzle-kit reads this for schema-diff and migration generation.
 // Local workflow:
-//   1. edit server/db/schema.ts
-//   2. pnpm drizzle-kit generate    -> writes server/db/migrations/<n>_<name>.sql
+//   1. edit server/shared/database/schema.ts
+//   2. pnpm drizzle-kit generate    -> writes server/shared/database/migrations/<n>_<name>.sql
 //   3. server/plugins/db.ts applies pending migrations on next boot
 export default defineConfig({
   schema: "./server/shared/database/schema.ts",

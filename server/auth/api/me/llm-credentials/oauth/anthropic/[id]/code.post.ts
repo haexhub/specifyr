@@ -45,21 +45,27 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: message });
   }
 
+  // finally guarantees tmp-HOME cleanup even if readCredentialsRawAndExpiry
+  // or markOAuthAuthorized throws — otherwise plaintext credentials.json
+  // would linger in /tmp.
   const home = oauthTempHome(id);
-  const payload = await readCredentialsRawAndExpiry(home);
-  if (!payload) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: "credentials.json was not written by the CLI",
-    });
+  try {
+    const payload = await readCredentialsRawAndExpiry(home);
+    if (!payload) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: "credentials.json was not written by the CLI",
+      });
+    }
+
+    const updated = await markOAuthAuthorized(id, new Date(), payload);
+
+    return {
+      id,
+      oauthStatus: updated?.oauthStatus ?? "authorized",
+      expiresAt: payload.expiresAt ? payload.expiresAt.toISOString() : null,
+    };
+  } finally {
+    await removeOauthTempHome(id).catch(() => {});
   }
-
-  const updated = await markOAuthAuthorized(id, new Date(), payload);
-  await removeOauthTempHome(id).catch(() => {});
-
-  return {
-    id,
-    oauthStatus: updated?.oauthStatus ?? "authorized",
-    expiresAt: payload.expiresAt ? payload.expiresAt.toISOString() : null,
-  };
 });

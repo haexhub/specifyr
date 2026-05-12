@@ -211,11 +211,21 @@ export const llmCredentials = pgTable(
     // auf Code-Ebene via existing WHERE-Klauseln. Der proxy MUSS vor jedem
     // Query `SET LOCAL app.current_owner_kind/id` setzen, sonst sieht er
     // nichts (NULL-Setting → Filter trifft nicht zu).
-    pgPolicy("llm_credentials_proxy_owner_isolation", {
+    // Least-privilege: separate SELECT + UPDATE statt FOR ALL. Proxy
+    // braucht weder INSERT noch DELETE — Specifyr legt Rows an, Proxy
+    // schreibt nur refreshte Tokens via UPDATE zurück.
+    pgPolicy("llm_credentials_proxy_owner_isolation_select", {
       as: "permissive",
-      for: "all",
+      for: "select",
       to: haexClaudeProxyRole,
       using: sql`(owner_kind = current_setting('app.current_owner_kind', true) AND owner_id::text = current_setting('app.current_owner_id', true))`,
+    }),
+    pgPolicy("llm_credentials_proxy_owner_isolation_update", {
+      as: "permissive",
+      for: "update",
+      to: haexClaudeProxyRole,
+      using: sql`(owner_kind = current_setting('app.current_owner_kind', true) AND owner_id::text = current_setting('app.current_owner_id', true))`,
+      withCheck: sql`(owner_kind = current_setting('app.current_owner_kind', true) AND owner_id::text = current_setting('app.current_owner_id', true))`,
     }),
   ],
 ).enableRLS();
