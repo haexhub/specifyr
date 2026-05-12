@@ -307,6 +307,32 @@ export type CredentialsDiskState =
   | { kind: "present"; expiresAt: Date | null };
 
 /**
+ * Liest den rohen JSON-Inhalt von `.credentials.json` und parsed daraus
+ * den expires_at, falls vorhanden. Wird vom code.post.ts-Endpoint
+ * aufgerufen, um den OAuth-Token nach erfolgreichem Login einmalig
+ * auszulesen, zu verschlüsseln und in die DB zu schreiben. Anschließend
+ * wird das tmp-HOME via removeOauthTempHome aufgeräumt.
+ *
+ * Rückgabe `null` wenn das File nicht existiert oder leer ist.
+ */
+export async function readCredentialsRawAndExpiry(
+  home: string,
+): Promise<{ raw: string; expiresAt: Date | null } | null> {
+  const p = path.join(home, ".claude", ".credentials.json");
+  let raw: string;
+  try {
+    raw = await fs.readFile(p, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+  if (!raw.trim()) return null;
+  const state = await readCredentialsState(home);
+  const expiresAt = state.kind === "present" ? state.expiresAt : null;
+  return { raw, expiresAt };
+}
+
+/**
  * Reads `.credentials.json` from a finished OAuth flow's HOME and
  * returns its disk state. The CLI writes the file with several keys;
  * the exact shape varies between versions, so we accept both

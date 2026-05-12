@@ -5,71 +5,22 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1778068035973,
-      "tag": "0000_users",
+      "when": 1778625893266,
+      "tag": "0000_baseline",
       "breakpoints": true
     },
     {
       "idx": 1,
       "version": "7",
-      "when": 1778068752620,
-      "tag": "0001_projects",
+      "when": 1778628302955,
+      "tag": "0001_grant_claude_proxy_access",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "7",
-      "when": 1778069000618,
-      "tag": "0002_orgs",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1778105318917,
-      "tag": "0003_llm_credentials",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1778152996491,
-      "tag": "0004_drop_default_model",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "7",
-      "when": 1778158657651,
-      "tag": "0005_runner_sessions",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "7",
-      "when": 1778237013699,
-      "tag": "0006_mandatory_org_schema",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "7",
-      "when": 1778237730553,
-      "tag": "0007_platform_settings",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "7",
-      "when": 1778256299925,
-      "tag": "0008_org_scoped_extensions",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "7",
-      "when": 1778328323148,
-      "tag": "0009_llm_agent_profiles",
+      "when": 1778628612253,
+      "tag": "0002_pale_spyke",
       "breakpoints": true
     }
   ]

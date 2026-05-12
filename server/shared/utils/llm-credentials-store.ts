@@ -2,6 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb } from "../database/client";
 import { llmCredentials, type LlmCredential } from "../database/schema";
 import { decryptString, encryptString } from "./secrets-store";
+import { removeOauthTempHome } from "./data-dirs";
 
 /**
  * LLM credential CRUD with at-rest encryption for the api_key field.
@@ -161,24 +162,39 @@ export async function createOAuthClaudeCredential(input: {
 }
 
 /**
- * Phase 8: stamp the credential as fully authorized once the spawned
- * `claude auth login` flow finished and the credentials.json was
- * parsed. authorizedAt is what we'd surface in the UI as "logged in
- * since X" later.
+ * Markiert ein oauth_claude-Credential als authorisiert UND persistiert
+ * den verschlüsselten Token-Payload direkt in der DB. Der Klartext ist
+ * der raw JSON-Inhalt von `~/.claude/.credentials.json`, den die Claude-
+ * CLI nach erfolgreichem Login geschrieben hat. Nach dem persist räumt
+ * der Caller das ephemerale tmp-HOME via removeOauthTempHome() weg.
+ *
+ * Wir speichern bewusst den vollständigen credentials.json-Blob (nicht
+ * nur access_token/refresh_token einzeln) — claude erwartet beim Spawn
+ * die Datei wieder bit-exakt zurück, inkl. Felder die wir hier nicht
+ * kennen müssen (org_id-claim, scopes, etc.).
  */
 export async function markOAuthAuthorized(
   id: string,
   authorizedAt: Date,
+  payload?: { raw: string; expiresAt: Date | null },
 ): Promise<CredentialSummary | null> {
   const db = getDb();
   if (!db) return null;
+  const update: Partial<typeof llmCredentials.$inferInsert> = {
+    oauthStatus: "authorized",
+    oauthAuthorizedAt: authorizedAt,
+    updatedAt: new Date(),
+  };
+  if (payload) {
+    const enc = await encryptString(payload.raw);
+    update.oauthCredentialsIv = enc.iv;
+    update.oauthCredentialsTag = enc.tag;
+    update.oauthCredentialsData = enc.data;
+    update.oauthExpiresAt = payload.expiresAt;
+  }
   const [row] = await db
     .update(llmCredentials)
-    .set({
-      oauthStatus: "authorized",
-      oauthAuthorizedAt: authorizedAt,
-      updatedAt: new Date(),
-    })
+    .set(update)
     .where(eq(llmCredentials.id, id))
     .returning();
   return row ? summarize(row) : null;
@@ -213,6 +229,12 @@ export async function deleteCredential(id: string): Promise<boolean> {
     .delete(llmCredentials)
     .where(eq(llmCredentials.id, id))
     .returning({ id: llmCredentials.id });
+  // Falls für diese cred-id ein OAuth-Flow noch tmp-Reste hatte (Cancel,
+  // Abort, oder Re-Start-Sweep), räume sie hier auf. Idempotent, no-op
+  // wenn nichts da ist oder die ID gar kein UUID-Format hat.
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+    await removeOauthTempHome(id).catch(() => {});
+  }
   return result.length > 0;
 }
 

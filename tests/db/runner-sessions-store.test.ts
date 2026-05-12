@@ -15,7 +15,7 @@ test(
   async () => {
     await withDb(async () => {
       const { mintRunnerSession } = await import(
-        "../../server/utils/runner-sessions-store.ts"
+        "../../server/shared/utils/runner-sessions-store.ts"
       );
       const u = await seedUser();
       const minted = await mintRunnerSession({
@@ -34,7 +34,7 @@ test(
   async () => {
     await withDb(async () => {
       const { mintRunnerSession } = await import(
-        "../../server/utils/runner-sessions-store.ts"
+        "../../server/shared/utils/runner-sessions-store.ts"
       );
       const u = await seedUser();
       const before = Date.now();
@@ -55,10 +55,10 @@ test(
   async () => {
     await withDb(async () => {
       const { mintRunnerSession, lookupRunnerSession } = await import(
-        "../../server/utils/runner-sessions-store.ts"
+        "../../server/shared/utils/runner-sessions-store.ts"
       );
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme", u.id);
@@ -81,7 +81,7 @@ test(
   async () => {
     await withDb(async () => {
       const { lookupRunnerSession } = await import(
-        "../../server/utils/runner-sessions-store.ts"
+        "../../server/shared/utils/runner-sessions-store.ts"
       );
       const r = await lookupRunnerSession("not-a-real-token");
       assert.equal(r, null);
@@ -99,7 +99,7 @@ test(
         lookupRunnerSession,
         revokeRunnerSession,
         _findSessionRow,
-      } = await import("../../server/utils/runner-sessions-store.ts");
+      } = await import("../../server/shared/utils/runner-sessions-store.ts");
       const u = await seedUser();
       const minted = await mintRunnerSession({
         userId: u.id,
@@ -121,9 +121,9 @@ test(
   async () => {
     await withDb(async (db) => {
       const { mintRunnerSession, lookupRunnerSession } = await import(
-        "../../server/utils/runner-sessions-store.ts"
+        "../../server/shared/utils/runner-sessions-store.ts"
       );
-      const { runnerSessions } = await import("../../server/db/schema.ts");
+      const { runnerSessions } = await import("../../server/shared/database/schema.ts");
       const { eq } = await import("drizzle-orm");
       const u = await seedUser();
       const minted = await mintRunnerSession({
@@ -146,8 +146,8 @@ test(
   async () => {
     await withDb(async (db) => {
       const { mintRunnerSession, pruneExpiredRunnerSessions, _findSessionRow } =
-        await import("../../server/utils/runner-sessions-store.ts");
-      const { runnerSessions } = await import("../../server/db/schema.ts");
+        await import("../../server/shared/utils/runner-sessions-store.ts");
+      const { runnerSessions } = await import("../../server/shared/database/schema.ts");
       const { eq } = await import("drizzle-orm");
       const u = await seedUser();
 
@@ -189,9 +189,9 @@ test(
   async () => {
     await withDb(async (db) => {
       const { mintRunnerSession, _findSessionRow } = await import(
-        "../../server/utils/runner-sessions-store.ts"
+        "../../server/shared/utils/runner-sessions-store.ts"
       );
-      const { users } = await import("../../server/db/schema.ts");
+      const { users } = await import("../../server/shared/database/schema.ts");
       const { eq } = await import("drizzle-orm");
       const u = await seedUser();
       const minted = await mintRunnerSession({

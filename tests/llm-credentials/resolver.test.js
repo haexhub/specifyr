@@ -19,10 +19,10 @@ const skipReason = !process.env.DATABASE_URL
 
 test("resolveCredentialForUser: empty → null", { skip: skipReason }, async () => {
   process.env.SPECIFYR_SECRET_KEY ||= crypto.randomBytes(32).toString("hex");
-  const { getDb, closeDb } = await import("../../server/db/client.ts");
-  const { users, llmCredentials } = await import("../../server/db/schema.ts");
+  const { getDb, closeDb } = await import("../../server/shared/database/client.ts");
+  const { users, llmCredentials } = await import("../../server/shared/database/schema.ts");
   const { resolveCredentialForUser } = await import(
-    "../../server/utils/llm-credentials-store.ts"
+    "../../server/shared/utils/llm-credentials-store.ts"
   );
 
   const db = getDb();
@@ -47,10 +47,10 @@ test(
   { skip: skipReason },
   async () => {
     process.env.SPECIFYR_SECRET_KEY ||= crypto.randomBytes(32).toString("hex");
-    const { getDb, closeDb } = await import("../../server/db/client.ts");
-    const { users, llmCredentials } = await import("../../server/db/schema.ts");
+    const { getDb, closeDb } = await import("../../server/shared/database/client.ts");
+    const { users, llmCredentials } = await import("../../server/shared/database/schema.ts");
     const { createApiKeyCredential, resolveCredentialForUser } = await import(
-      "../../server/utils/llm-credentials-store.ts"
+      "../../server/shared/utils/llm-credentials-store.ts"
     );
 
     const db = getDb();

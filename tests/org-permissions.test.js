@@ -21,10 +21,10 @@ async function setup() {
   process.env.SPECIFYR_SECRET_KEY ||= crypto.randomBytes(32).toString("hex");
   const { cleanDb } = await import("./helpers/db.ts");
   await cleanDb();
-  const { getDb } = await import("../server/db/client.ts");
+  const { getDb } = await import("../server/shared/database/client.ts");
   const db = getDb();
   if (!db) throw new Error("DB unavailable");
-  const { users, orgs, orgMemberships } = await import("../server/db/schema.ts");
+  const { users, orgs, orgMemberships } = await import("../server/shared/database/schema.ts");
 
   const tag = Math.random().toString(36).slice(2, 8);
   const [admin] = await db.insert(users).values({ email: `admin-${tag}@local` }).returning();
@@ -43,26 +43,26 @@ async function setup() {
 
 test("hasPermission: admin short-circuits to true", { skip: skipReason }, async () => {
   const { admin, org } = await setup();
-  const { hasPermission } = await import("../server/utils/org-permissions-store.ts");
+  const { hasPermission } = await import("../server/shared/utils/org-permissions-store.ts");
   assert.equal(await hasPermission(org.id, admin.id, "manage_extensions"), true);
 });
 
 test("hasPermission: non-member is always false", { skip: skipReason }, async () => {
   const { stranger, org } = await setup();
-  const { hasPermission } = await import("../server/utils/org-permissions-store.ts");
+  const { hasPermission } = await import("../server/shared/utils/org-permissions-store.ts");
   assert.equal(await hasPermission(org.id, stranger.id, "manage_extensions"), false);
 });
 
 test("hasPermission: member without grant is false", { skip: skipReason }, async () => {
   const { member, org } = await setup();
-  const { hasPermission } = await import("../server/utils/org-permissions-store.ts");
+  const { hasPermission } = await import("../server/shared/utils/org-permissions-store.ts");
   assert.equal(await hasPermission(org.id, member.id, "manage_extensions"), false);
 });
 
 test("grantPermission + hasPermission: member with grant is true", { skip: skipReason }, async () => {
   const { admin, member, org } = await setup();
   const { grantPermission, hasPermission } = await import(
-    "../server/utils/org-permissions-store.ts"
+    "../server/shared/utils/org-permissions-store.ts"
   );
   await grantPermission({
     orgId: org.id,
@@ -76,7 +76,7 @@ test("grantPermission + hasPermission: member with grant is true", { skip: skipR
 test("grantPermission: idempotent re-grant", { skip: skipReason }, async () => {
   const { admin, member, org } = await setup();
   const { grantPermission, listPermissions } = await import(
-    "../server/utils/org-permissions-store.ts"
+    "../server/shared/utils/org-permissions-store.ts"
   );
   await grantPermission({
     orgId: org.id,
@@ -96,7 +96,7 @@ test("grantPermission: idempotent re-grant", { skip: skipReason }, async () => {
 
 test("grantPermission: non-member throws", { skip: skipReason }, async () => {
   const { admin, stranger, org } = await setup();
-  const { grantPermission } = await import("../server/utils/org-permissions-store.ts");
+  const { grantPermission } = await import("../server/shared/utils/org-permissions-store.ts");
   await assert.rejects(
     () =>
       grantPermission({
@@ -112,7 +112,7 @@ test("grantPermission: non-member throws", { skip: skipReason }, async () => {
 test("revokePermission: removes the grant", { skip: skipReason }, async () => {
   const { admin, member, org } = await setup();
   const { grantPermission, revokePermission, hasPermission } = await import(
-    "../server/utils/org-permissions-store.ts"
+    "../server/shared/utils/org-permissions-store.ts"
   );
   await grantPermission({
     orgId: org.id,
@@ -126,7 +126,7 @@ test("revokePermission: removes the grant", { skip: skipReason }, async () => {
 
 test("revokePermission: idempotent on missing grant", { skip: skipReason }, async () => {
   const { member, org } = await setup();
-  const { revokePermission } = await import("../server/utils/org-permissions-store.ts");
+  const { revokePermission } = await import("../server/shared/utils/org-permissions-store.ts");
   await revokePermission(org.id, member.id, "manage_extensions");
   await revokePermission(org.id, member.id, "manage_extensions");
 });

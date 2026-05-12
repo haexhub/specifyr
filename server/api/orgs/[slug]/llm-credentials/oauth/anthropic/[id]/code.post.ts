@@ -2,10 +2,10 @@ import {
   getCredentialOwnedBy,
   markOAuthAuthorized,
 } from "@su/llm-credentials-store";
-import { ownerCredentialsHome } from "@su/data-dirs";
+import { oauthTempHome, removeOauthTempHome } from "@su/data-dirs";
 import {
   getClaudeOAuthDriver,
-  readCredentialsExpiry,
+  readCredentialsRawAndExpiry,
 } from "@su/claude-oauth-driver";
 import { requireOrgAdmin } from "@su/org-auth";
 import {
@@ -38,19 +38,29 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: message });
   }
 
-  const home = ownerCredentialsHome("org", org.id);
-  const expiresAt = await readCredentialsExpiry(home);
-  if (!expiresAt) {
-    throw createError({
-      statusCode: 500,
-      statusMessage: "credentials.json was not written by the CLI",
-    });
-  }
+  // CLI hat die credentials.json im tmp-HOME geschrieben. Einmal auslesen,
+  // verschlüsselt in DB persistieren, dann tmp-HOME wegräumen.
+  // finally garantiert, dass das tmp-HOME auch bei Fehlern in
+  // readCredentialsRawAndExpiry/markOAuthAuthorized abgeräumt wird —
+  // sonst bleibt plaintext credentials.json in /tmp liegen.
+  const home = oauthTempHome(id);
+  try {
+    const payload = await readCredentialsRawAndExpiry(home);
+    if (!payload) {
+      throw createError({
+        statusCode: 500,
+        statusMessage: "credentials.json was not written by the CLI",
+      });
+    }
 
-  const updated = await markOAuthAuthorized(id, new Date());
-  return {
-    id,
-    oauthStatus: updated?.oauthStatus ?? "authorized",
-    expiresAt: expiresAt.toISOString(),
-  };
+    const updated = await markOAuthAuthorized(id, new Date(), payload);
+
+    return {
+      id,
+      oauthStatus: updated?.oauthStatus ?? "authorized",
+      expiresAt: payload.expiresAt ? payload.expiresAt.toISOString() : null,
+    };
+  } finally {
+    await removeOauthTempHome(id).catch(() => {});
+  }
 });

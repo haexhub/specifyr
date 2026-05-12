@@ -1,1 +1,0 @@
-ALTER TABLE "llm_credentials" DROP COLUMN "default_model";

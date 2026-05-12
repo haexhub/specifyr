@@ -53,7 +53,7 @@ test(
   async () => {
     await withDb(async () => {
       const { requireOrgMembership } = await import(
-        "../../server/utils/org-auth.ts"
+        "../../server/shared/utils/org-auth.ts"
       );
       await assert.rejects(
         requireOrgMembership(makeEvent({ slug: "anything" })),
@@ -69,7 +69,7 @@ test(
   async () => {
     await withDb(async () => {
       const { requireOrgMembership } = await import(
-        "../../server/utils/org-auth.ts"
+        "../../server/shared/utils/org-auth.ts"
       );
       const u = await seedUser();
       await assert.rejects(
@@ -86,7 +86,7 @@ test(
   async () => {
     await withDb(async () => {
       const { requireOrgMembership } = await import(
-        "../../server/utils/org-auth.ts"
+        "../../server/shared/utils/org-auth.ts"
       );
       const u = await seedUser();
       await assert.rejects(
@@ -105,10 +105,10 @@ test(
   async () => {
     await withDb(async () => {
       const { requireOrgMembership } = await import(
-        "../../server/utils/org-auth.ts"
+        "../../server/shared/utils/org-auth.ts"
       );
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const admin = await seedUser("admin");
       const stranger = await seedUser("stranger");
@@ -129,10 +129,10 @@ test(
   async () => {
     await withDb(async () => {
       const { requireOrgMembership } = await import(
-        "../../server/utils/org-auth.ts"
+        "../../server/shared/utils/org-auth.ts"
       );
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme", u.id);
@@ -152,13 +152,13 @@ test(
   async () => {
     await withDb(async () => {
       const { requireOrgAdmin } = await import(
-        "../../server/utils/org-auth.ts"
+        "../../server/shared/utils/org-auth.ts"
       );
       const {
         createOrgWithAdmin,
         createInvite,
         acceptInvite,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const admin = await seedUser("admin");
       const member = await seedUser("member");
       const org = await createOrgWithAdmin("Acme", admin.id);

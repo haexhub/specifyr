@@ -14,7 +14,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential } = await import(
-        "../../server/utils/llm-credentials-store.ts"
+        "../../server/shared/utils/llm-credentials-store.ts"
       );
       const u = await seedUser();
       const c = await createApiKeyCredential({
@@ -40,7 +40,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential, listCredentialsFor } = await import(
-        "../../server/utils/llm-credentials-store.ts"
+        "../../server/shared/utils/llm-credentials-store.ts"
       );
       const a = await seedUser("owner-a");
       const b = await seedUser("owner-b");
@@ -74,7 +74,7 @@ test(
         createApiKeyCredential,
         updateApiKeyCredential,
         getDecryptedApiKey,
-      } = await import("../../server/utils/llm-credentials-store.ts");
+      } = await import("../../server/shared/utils/llm-credentials-store.ts");
       const u = await seedUser();
       const c = await createApiKeyCredential({
         ownerKind: "user",
@@ -104,7 +104,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential, deleteCredential } = await import(
-        "../../server/utils/llm-credentials-store.ts"
+        "../../server/shared/utils/llm-credentials-store.ts"
       );
       const u = await seedUser();
       const c = await createApiKeyCredential({
@@ -126,7 +126,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential, getCredentialOwnedBy } = await import(
-        "../../server/utils/llm-credentials-store.ts"
+        "../../server/shared/utils/llm-credentials-store.ts"
       );
       const a = await seedUser("a");
       const b = await seedUser("b");
@@ -149,9 +149,9 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential, resolveCredentialForRequest } =
-        await import("../../server/utils/llm-credentials-store.ts");
+        await import("../../server/shared/utils/llm-credentials-store.ts");
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme", u.id);
@@ -185,9 +185,9 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential, resolveCredentialForRequest } =
-        await import("../../server/utils/llm-credentials-store.ts");
+        await import("../../server/shared/utils/llm-credentials-store.ts");
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme", u.id);
@@ -216,9 +216,9 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential, resolveCredentialForRequest } =
-        await import("../../server/utils/llm-credentials-store.ts");
+        await import("../../server/shared/utils/llm-credentials-store.ts");
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme", u.id);
@@ -248,9 +248,9 @@ test(
         createApiKeyCredential,
         updateApiKeyCredential,
         resolveCredentialForRequest,
-      } = await import("../../server/utils/llm-credentials-store.ts");
+      } = await import("../../server/shared/utils/llm-credentials-store.ts");
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme", u.id);
@@ -287,7 +287,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createApiKeyCredential, resolveCredentialForRequest } =
-        await import("../../server/utils/llm-credentials-store.ts");
+        await import("../../server/shared/utils/llm-credentials-store.ts");
       const u = await seedUser();
       await createApiKeyCredential({
         ownerKind: "user",
@@ -310,9 +310,9 @@ test(
   async () => {
     await withDb(async (db) => {
       const { resolveCredentialForRequest } = await import(
-        "../../server/utils/llm-credentials-store.ts"
+        "../../server/shared/utils/llm-credentials-store.ts"
       );
-      const { llmCredentials } = await import("../../server/db/schema.ts");
+      const { llmCredentials } = await import("../../server/shared/database/schema.ts");
       const u = await seedUser();
       // No CRUD helper for oauth_claude rows yet (Phase 8 adds the
       // OAuth flow). Insert directly so we can pin Phase 6 resolver
@@ -347,9 +347,9 @@ test(
   async () => {
     await withDb(async (db) => {
       const { resolveCredentialForRequest } = await import(
-        "../../server/utils/llm-credentials-store.ts"
+        "../../server/shared/utils/llm-credentials-store.ts"
       );
-      const { llmCredentials } = await import("../../server/db/schema.ts");
+      const { llmCredentials } = await import("../../server/shared/database/schema.ts");
       const u = await seedUser();
       await db.insert(llmCredentials).values({
         ownerKind: "user",
@@ -379,7 +379,7 @@ test(
         createApiKeyCredential,
         updateApiKeyCredential,
         resolveCredentialForRequest,
-      } = await import("../../server/utils/llm-credentials-store.ts");
+      } = await import("../../server/shared/utils/llm-credentials-store.ts");
       const u = await seedUser();
       const older = await createApiKeyCredential({
         ownerKind: "user",

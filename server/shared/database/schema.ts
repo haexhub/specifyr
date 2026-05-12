@@ -5,6 +5,8 @@ import {
   foreignKey,
   index,
   jsonb,
+  pgPolicy,
+  pgRole,
   pgTable,
   primaryKey,
   text,
@@ -12,6 +14,16 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+
+// Pre-existing Postgres role for haex-claude-proxy. CREATE ROLE +
+// Passwort-Lifecycle managt die Ansible-Role (Passwort lebt in
+// secrets.yml, gehört nicht in Migrations). Table-level GRANTs auf
+// runner_sessions + llm_credentials kommen aus einer Drizzle-Migration
+// (siehe migrations/0001_grant_claude_proxy_access.sql), damit Schema-
+// Änderungen + zugehörige Rechte atomar zusammen ausgerollt werden.
+// Hier nur als `existing()` referenziert, damit Drizzle Policies auf
+// diese Rolle targeten kann ohne die Rolle selbst zu generieren.
+export const haexClaudeProxyRole = pgRole("haex_claude_proxy").existing();
 
 // Mirror of Authentik identity. UPSERT'd by the auth middleware on the
 // first request from a previously-unseen email. `email` is the natural
@@ -150,13 +162,22 @@ export const llmCredentials = pgTable(
     apiKeyTag: text("api_key_tag"),
     apiKeyData: text("api_key_data"),
 
-    // oauth_claude mode (Phase 8): tokens live in
-    // <dataDir>/credentials/<owner_kind>/<owner_id>/.claude/credentials.json;
-    // this row only tracks the high-level state.
+    // oauth_claude mode: OAuth-Credentials werden AES-256-GCM-verschlüsselt
+    // direkt in der DB persistiert (kein FS, kein Volume-Mount mehr). Der
+    // Plaintext ist das raw JSON aus `~/.claude/.credentials.json`, das die
+    // Claude-CLI während des OAuth-Logins schreibt. Master-Key kommt aus
+    // SPECIFYR_SECRET_KEY (siehe secrets-store.ts).
     oauthStatus: text("oauth_status", {
       enum: ["pending", "authorized", "expired"],
     }),
     oauthAuthorizedAt: timestamp("oauth_authorized_at", { withTimezone: true }),
+    oauthCredentialsIv: text("oauth_credentials_iv"),
+    oauthCredentialsTag: text("oauth_credentials_tag"),
+    oauthCredentialsData: text("oauth_credentials_data"),
+    // Optional Ablaufzeitpunkt aus dem OAuth-Response. Bei Anthropic Pro/Max
+    // ist der refresh_token langlebig, der access_token läuft alle paar Min
+    // ab — der claude-proxy refresht beim Spawn und schreibt zurück.
+    oauthExpiresAt: timestamp("oauth_expires_at", { withTimezone: true }),
 
     // base_url: per-provider override or the gateway URL (openrouter
     // points at https://openrouter.ai/api/v1). Stored on the credential
@@ -171,21 +192,43 @@ export const llmCredentials = pgTable(
       .notNull()
       .defaultNow(),
   },
-  (t) => ({
-    ownerIdx: index("llm_credentials_owner_idx").on(
+  (t) => [
+    index("llm_credentials_owner_idx").on(
       t.ownerKind,
       t.ownerId,
       t.provider,
       t.enabled,
     ),
-    uniqueDisplayName: unique("llm_credentials_owner_provider_name_uq").on(
+    unique("llm_credentials_owner_provider_name_uq").on(
       t.ownerKind,
       t.ownerId,
       t.provider,
       t.displayName,
     ),
-  }),
-);
+    // RLS für haex-claude-proxy: er darf nur Zeilen sehen/refreshen, deren
+    // Owner per Session-Setting freigeschaltet ist. Specifyr (postgres user)
+    // umgeht RLS implizit als Tabellen-Owner — Owner-Filter dort weiterhin
+    // auf Code-Ebene via existing WHERE-Klauseln. Der proxy MUSS vor jedem
+    // Query `SET LOCAL app.current_owner_kind/id` setzen, sonst sieht er
+    // nichts (NULL-Setting → Filter trifft nicht zu).
+    // Least-privilege: separate SELECT + UPDATE statt FOR ALL. Proxy
+    // braucht weder INSERT noch DELETE — Specifyr legt Rows an, Proxy
+    // schreibt nur refreshte Tokens via UPDATE zurück.
+    pgPolicy("llm_credentials_proxy_owner_isolation_select", {
+      as: "permissive",
+      for: "select",
+      to: haexClaudeProxyRole,
+      using: sql`(owner_kind = current_setting('app.current_owner_kind', true) AND owner_id::text = current_setting('app.current_owner_id', true))`,
+    }),
+    pgPolicy("llm_credentials_proxy_owner_isolation_update", {
+      as: "permissive",
+      for: "update",
+      to: haexClaudeProxyRole,
+      using: sql`(owner_kind = current_setting('app.current_owner_kind', true) AND owner_id::text = current_setting('app.current_owner_id', true))`,
+      withCheck: sql`(owner_kind = current_setting('app.current_owner_kind', true) AND owner_id::text = current_setting('app.current_owner_id', true))`,
+    }),
+  ],
+).enableRLS();
 
 export type LlmCredential = typeof llmCredentials.$inferSelect;
 export type NewLlmCredential = typeof llmCredentials.$inferInsert;

@@ -17,7 +17,7 @@ import crypto from "node:crypto";
 import path from "node:path";
 import { sql } from "drizzle-orm";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
-import { getDb, closeDb } from "../../server/db/client.ts";
+import { getDb, closeDb } from "../../server/shared/database/client.ts";
 
 // SPECIFYR_SECRET_KEY is required by secrets-store.ts. Generate a stable
 // per-process one if not provided so encryption tests can roundtrip.
@@ -42,7 +42,7 @@ async function ensureMigrations(): Promise<void> {
   const db = getDb();
   if (!db) return;
   await migrate(db, {
-    migrationsFolder: path.resolve(process.cwd(), "server/db/migrations"),
+    migrationsFolder: path.resolve(process.cwd(), "server/shared/database/migrations"),
   });
   _migrationsApplied = true;
 }
@@ -105,7 +105,7 @@ export async function seedUser(
 ): Promise<{ id: string; email: string }> {
   const db = getDb();
   if (!db) throw new Error("DB not configured");
-  const { users } = await import("../../server/db/schema.ts");
+  const { users } = await import("../../server/shared/database/schema.ts");
   const email = `${emailPrefix}-${Date.now()}-${Math.random()
     .toString(36)
     .slice(2, 8)}@local`;

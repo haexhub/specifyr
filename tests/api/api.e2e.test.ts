@@ -35,16 +35,13 @@ if (!process.env.DATABASE_URL) {
   // specific user via headers. Strip it for the test process.
   delete process.env.SPECIFYR_DEV_USER_EMAIL;
 
-  // OAuth tests redirect SPECIFYR_CREDENTIALS_DIR to a per-run
-  // tmpdir + swap CLAUDE_BIN to a deterministic shell stub so the
-  // real claude CLI is never invoked. Both env vars must be set
-  // BEFORE setup() spawns Nuxt — that's why this lives here at
-  // module load time, not in beforeAll.
-  const oauthCredentialsDir = path.join(
-    os.tmpdir(),
-    `specifyr-oauth-e2e-${crypto.randomBytes(6).toString("hex")}`,
-  );
-  process.env.SPECIFYR_CREDENTIALS_DIR = oauthCredentialsDir;
+  // OAuth tests swap CLAUDE_BIN to a deterministic shell stub so the
+  // real claude CLI is never invoked. Das ephemerale HOME landet im
+  // neuen Modell unter os.tmpdir()/specifyr-oauth/<credentialId> und
+  // wird vom Store selbst angelegt + nach Persist gelöscht — kein
+  // CREDENTIALS_DIR-Override mehr nötig. CLAUDE_BIN muss vor setup()
+  // gesetzt sein, deshalb hier am Module-Load.
+  const oauthTmpRoot = path.join(os.tmpdir(), "specifyr-oauth");
   process.env.CLAUDE_BIN = fileURLToPath(
     new URL("./fixtures/fake-claude.sh", import.meta.url),
   );
@@ -457,7 +454,7 @@ if (!process.env.DATABASE_URL) {
       // that wrote one in test N doesn't bleed into test N+1's
       // "starts pending" assertion.
       beforeEach(async () => {
-        await fs.rm(oauthCredentialsDir, { recursive: true, force: true });
+        await fs.rm(oauthTmpRoot, { recursive: true, force: true });
       });
 
       it("start: returns the auth URL parsed from the (fake) CLI stdout", async () => {
@@ -622,7 +619,7 @@ if (!process.env.DATABASE_URL) {
       }
 
       beforeEach(async () => {
-        await fs.rm(oauthCredentialsDir, { recursive: true, force: true });
+        await fs.rm(oauthTmpRoot, { recursive: true, force: true });
       });
 
       it("admin starts a flow and member sees pending status (read-only)", async () => {
