@@ -1,24 +1,22 @@
-import {
-  getCredentialOwnedBy,
-  markOAuthAuthorized,
-  markOAuthExpired,
-} from "@su/llm-credentials-store";
-import { ownerCredentialsHome } from "@su/data-dirs";
-import { readCredentialsState } from "@su/claude-oauth-driver";
+import { getCredentialOwnedBy } from "@su/llm-credentials-store";
 import { idUuidParam, parseParams } from "@su/validation";
 
 /**
  * Polled by the frontend every ~2s while a flow is open AND on the
- * settings page when reviewing connected credentials. The on-disk
- * `.credentials.json` is the source of truth — the DB row is a cache
- * that can drift (e.g. user wiped the dir, CLI refreshed the token).
+ * settings page when reviewing connected credentials.
  *
- * Drift handling:
- *   - file present + DB pending → mark authorized
- *   - file missing + DB authorized → mark expired
+ * Source of truth ist jetzt die DB-Row: das tmp-HOME existiert nur
+ * während des aktiven OAuth-Flows (zwischen startLogin und submitCode)
+ * und wird danach gelöscht. Status wird aus oauthStatus + dem
+ * Vorhandensein von oauthCredentialsData abgeleitet:
+ *   - row.oauthCredentialsData NULL          → pending (flow läuft noch)
+ *   - row.oauthCredentialsData gesetzt       → authorized
+ *   - row.oauthExpiresAt in der Vergangenheit → expired (proxy refresht
+ *     beim nächsten Spawn — falls das fehlschlägt, schreibt der proxy
+ *     den Row zurück auf NULL → "expired" stays bis re-auth).
  *
- * Returned `fileExists` lets the UI distinguish "expired but file
- * present (CLI will refresh)" from "missing (re-auth required)".
+ * `fileExists` bleibt für UI-Kompatibilität, mappt jetzt auf "DB hat
+ * den verschlüsselten Blob".
  */
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -30,24 +28,13 @@ export default defineEventHandler(async (event) => {
   const owned = await getCredentialOwnedBy(id, "user", userId);
   if (!owned) throw createError({ statusCode: 404, statusMessage: "not found" });
 
-  const home = ownerCredentialsHome("user", userId);
-  const disk = await readCredentialsState(home);
-  const fileExists = disk.kind === "present";
-  const expiresAt = disk.kind === "present" ? disk.expiresAt : null;
-
-  let oauthStatus = owned.oauthStatus;
-  if (fileExists && oauthStatus !== "authorized") {
-    await markOAuthAuthorized(id, new Date());
-    oauthStatus = "authorized";
-  } else if (!fileExists && oauthStatus === "authorized") {
-    await markOAuthExpired(id);
-    oauthStatus = "expired";
-  }
+  const hasBlob = !!owned.oauthCredentialsData;
+  const expiresAt = owned.oauthExpiresAt;
 
   return {
     id,
-    oauthStatus,
+    oauthStatus: owned.oauthStatus,
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
-    fileExists,
+    fileExists: hasBlob,
   };
 });

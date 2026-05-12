@@ -15,7 +15,7 @@ import {
   getCredentialOwnedBy,
   listCredentialsFor,
 } from "./llm-credentials-store";
-import { ownerCredentialsHome } from "./data-dirs";
+import { oauthTempHome, removeOauthTempHome } from "./data-dirs";
 import { getClaudeOAuthDriver } from "./claude-oauth-driver";
 
 export type OAuthFlowStart = {
@@ -58,6 +58,9 @@ export async function startOAuthFlowFor(
       } catch {
         /* not in memory */
       }
+      // tmp-Home des abgebrochenen Flows auch wegräumen — sonst sammelt
+      // sich /tmp/specifyr-oauth/<id>/.claude/.credentials.json an.
+      await removeOauthTempHome(c.id).catch(() => {});
       await deleteCredential(c.id);
     }
   }
@@ -68,12 +71,16 @@ export async function startOAuthFlowFor(
     displayName,
   });
 
-  const home = ownerCredentialsHome(ownerKind, ownerId);
+  // Ephemeral HOME pro flow: claude-CLI schreibt hier rein, code.post.ts
+  // liest nach submitCode den Inhalt aus, verschlüsselt + persistiert in
+  // DB, räumt das Verzeichnis weg.
+  const home = oauthTempHome(cred.id);
   let url: string;
   try {
     const r = await getClaudeOAuthDriver().startLogin({ id: cred.id, home });
     url = r.url;
   } catch (err) {
+    await removeOauthTempHome(cred.id).catch(() => {});
     await deleteCredential(cred.id).catch(() => {});
     throw err;
   }

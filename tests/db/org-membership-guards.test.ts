@@ -16,7 +16,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createOrgWithAdmin, updateMembershipRole } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const owner = await seedUser("owner");
       const org = await createOrgWithAdmin("Acme", owner.id);
@@ -37,7 +37,7 @@ test(
         createInvite,
         acceptInvite,
         updateMembershipRole,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const owner = await seedUser("owner");
       const member = await seedUser("member");
       const org = await createOrgWithAdmin("Acme", owner.id);
@@ -67,7 +67,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createOrgWithAdmin, removeMembership } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const owner = await seedUser("owner");
       const org = await createOrgWithAdmin("Acme", owner.id);
@@ -88,7 +88,7 @@ test(
         createInvite,
         acceptInvite,
         removeMembership,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const owner = await seedUser("owner");
       const co = await seedUser("co");
       const org = await createOrgWithAdmin("Acme", owner.id);
@@ -118,7 +118,7 @@ test(
         getMembership,
         transferOrgOwnership,
         getOrgBySlug,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const owner = await seedUser("owner");
       const heir = await seedUser("heir");
       const org = await createOrgWithAdmin("Acme", owner.id);
@@ -150,7 +150,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createOrgWithAdmin, transferOrgOwnership } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const owner = await seedUser("owner");
       const stranger = await seedUser("stranger");
@@ -174,7 +174,7 @@ test(
         acceptInvite,
         transferOrgOwnership,
         removeMembership,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const owner = await seedUser("owner");
       const heir = await seedUser("heir");
       const org = await createOrgWithAdmin("Acme", owner.id);

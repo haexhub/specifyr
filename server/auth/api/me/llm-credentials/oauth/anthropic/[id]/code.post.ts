@@ -2,10 +2,10 @@ import {
   getCredentialOwnedBy,
   markOAuthAuthorized,
 } from "@su/llm-credentials-store";
-import { ownerCredentialsHome } from "@su/data-dirs";
+import { oauthTempHome, removeOauthTempHome } from "@su/data-dirs";
 import {
   getClaudeOAuthDriver,
-  readCredentialsExpiry,
+  readCredentialsRawAndExpiry,
 } from "@su/claude-oauth-driver";
 import {
   idUuidParam,
@@ -45,19 +45,21 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: message });
   }
 
-  const home = ownerCredentialsHome("user", userId);
-  const expiresAt = await readCredentialsExpiry(home);
-  if (!expiresAt) {
+  const home = oauthTempHome(id);
+  const payload = await readCredentialsRawAndExpiry(home);
+  if (!payload) {
     throw createError({
       statusCode: 500,
       statusMessage: "credentials.json was not written by the CLI",
     });
   }
 
-  const updated = await markOAuthAuthorized(id, new Date());
+  const updated = await markOAuthAuthorized(id, new Date(), payload);
+  await removeOauthTempHome(id).catch(() => {});
+
   return {
     id,
     oauthStatus: updated?.oauthStatus ?? "authorized",
-    expiresAt: expiresAt.toISOString(),
+    expiresAt: payload.expiresAt ? payload.expiresAt.toISOString() : null,
   };
 });

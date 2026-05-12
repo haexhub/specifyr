@@ -27,10 +27,10 @@ async function seedOrg() {
   );
   const { cleanDb } = await import("./helpers/db.ts");
   await cleanDb();
-  const { getDb } = await import("../server/db/client.ts");
+  const { getDb } = await import("../server/shared/database/client.ts");
   const db = getDb();
   if (!db) throw new Error("DB unavailable");
-  const { users, orgs } = await import("../server/db/schema.ts");
+  const { users, orgs } = await import("../server/shared/database/schema.ts");
   const tag = Math.random().toString(36).slice(2, 8);
   const [user] = await db.insert(users).values({ email: `u-${tag}@local` }).returning();
   const [org] = await db
@@ -43,7 +43,7 @@ async function seedOrg() {
 // Pure function — runs without a DB.
 test("orgExtensionPath: deterministic per (orgId, slug)", async () => {
   process.env.SPECIFYR_DATA_DIR = path.join(os.tmpdir(), "specifyr-orgext-pathtest");
-  const { orgExtensionPath } = await import("../server/utils/org-extensions-store.ts");
+  const { orgExtensionPath } = await import("../server/shared/utils/org-extensions-store.ts");
   const a = orgExtensionPath("org-1", "my-ext");
   const b = orgExtensionPath("org-1", "my-ext");
   const c = orgExtensionPath("org-2", "my-ext");
@@ -54,7 +54,7 @@ test("orgExtensionPath: deterministic per (orgId, slug)", async () => {
 
 test("listOrgExtensions: empty by default", { skip: skipReason }, async () => {
   const { org } = await seedOrg();
-  const { listOrgExtensions } = await import("../server/utils/org-extensions-store.ts");
+  const { listOrgExtensions } = await import("../server/shared/utils/org-extensions-store.ts");
   const list = await listOrgExtensions(org.id);
   assert.deepEqual(list, []);
 });
@@ -64,7 +64,7 @@ test(
   { skip: skipReason },
   async () => {
     const { org } = await seedOrg();
-    const { removeOrgExtension } = await import("../server/utils/org-extensions-store.ts");
+    const { removeOrgExtension } = await import("../server/shared/utils/org-extensions-store.ts");
     assert.equal(await removeOrgExtension(org.id, "nope"), false);
   },
 );
@@ -74,10 +74,10 @@ test(
   { skip: skipReason },
   async () => {
     const { db, user, org } = await seedOrg();
-    const { orgExtensions } = await import("../server/db/schema.ts");
-    const { encryptString } = await import("../server/utils/secrets-store.ts");
+    const { orgExtensions } = await import("../server/shared/database/schema.ts");
+    const { encryptString } = await import("../server/shared/utils/secrets-store.ts");
     const { getOrgExtensionCredentials } = await import(
-      "../server/utils/org-extensions-store.ts"
+      "../server/shared/utils/org-extensions-store.ts"
     );
 
     const enc = await encryptString("ghp_secret_token_123");
@@ -105,9 +105,9 @@ test(
   { skip: skipReason },
   async () => {
     const { db, user, org } = await seedOrg();
-    const { orgExtensions } = await import("../server/db/schema.ts");
+    const { orgExtensions } = await import("../server/shared/database/schema.ts");
     const { getOrgExtensionCredentials } = await import(
-      "../server/utils/org-extensions-store.ts"
+      "../server/shared/utils/org-extensions-store.ts"
     );
     await db.insert(orgExtensions).values({
       orgId: org.id,

@@ -13,7 +13,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createOrgWithAdmin, getMembership, listMembers } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme Co", u.id);
@@ -35,7 +35,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       await assert.rejects(createOrgWithAdmin("!!!", u.id), /slug/i);
@@ -49,7 +49,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createOrgWithAdmin, listOrgsForUser } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const a = await seedUser("a");
       const b = await seedUser("b");
@@ -75,7 +75,7 @@ test(
         createInvite,
         acceptInvite,
         getMembership,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const admin = await seedUser("admin");
       const recipient = await seedUser("recipient");
       const org = await createOrgWithAdmin("Acme", admin.id);
@@ -104,7 +104,7 @@ test(
   async () => {
     await withDb(async () => {
       const { createOrgWithAdmin, createInvite, acceptInvite } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const admin = await seedUser("admin");
       const recipient = await seedUser("recipient");
@@ -129,7 +129,7 @@ test(
   { skip: skipIfNoDb },
   async () => {
     await withDb(async () => {
-      const { acceptInvite } = await import("../../server/utils/org-store.ts");
+      const { acceptInvite } = await import("../../server/shared/utils/org-store.ts");
       const u = await seedUser();
       const result = await acceptInvite("never-existed", u.id);
       assert.equal(result.ok, false);
@@ -148,7 +148,7 @@ test(
         createInvite,
         acceptInvite,
         revokeInvite,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const admin = await seedUser("admin");
       const recipient = await seedUser("recipient");
       const org = await createOrgWithAdmin("Acme", admin.id);
@@ -172,9 +172,9 @@ test(
   async () => {
     await withDb(async (db) => {
       const { createOrgWithAdmin, createInvite, acceptInvite } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
-      const { orgInvites } = await import("../../server/db/schema.ts");
+      const { orgInvites } = await import("../../server/shared/database/schema.ts");
       const { eq } = await import("drizzle-orm");
       const admin = await seedUser("admin");
       const recipient = await seedUser("recipient");
@@ -209,7 +209,7 @@ test(
         acceptInvite,
         revokeInvite,
         listOpenInvites,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const admin = await seedUser("admin");
       const recipient = await seedUser("recipient");
       const org = await createOrgWithAdmin("Acme", admin.id);
@@ -252,7 +252,7 @@ test(
         createInvite,
         acceptInvite,
         getMembership,
-      } = await import("../../server/utils/org-store.ts");
+      } = await import("../../server/shared/utils/org-store.ts");
       const admin = await seedUser("admin");
       const recipient = await seedUser("recipient");
       const org = await createOrgWithAdmin("Acme", admin.id);

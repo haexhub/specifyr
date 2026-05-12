@@ -14,10 +14,10 @@ test(
   async () => {
     await withDb(async () => {
       const { recordProjectOwnership, getProjectFromDb } = await import(
-        "../../server/utils/project-store.ts"
+        "../../server/shared/utils/project-store.ts"
       );
       const { createOrgWithAdmin } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Acme", u.id);
@@ -34,10 +34,10 @@ test(
   async () => {
     await withDb(async () => {
       const { recordProjectOwnership, listProjectSlugsForUser } = await import(
-        "../../server/utils/project-store.ts"
+        "../../server/shared/utils/project-store.ts"
       );
       const { createOrgWithAdmin, createInvite, acceptInvite } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const owner = await seedUser("owner");
       const member = await seedUser("member");
@@ -73,7 +73,7 @@ test(
   async () => {
     await withDb(async () => {
       const { listProjectSlugsForUser } = await import(
-        "../../server/utils/project-store.ts"
+        "../../server/shared/utils/project-store.ts"
       );
       const u = await seedUser("orphan");
       const slugs = await listProjectSlugsForUser(u.id);
@@ -88,10 +88,10 @@ test(
   async () => {
     await withDb(async () => {
       const { recordProjectOwnership, userOwnsProject } = await import(
-        "../../server/utils/project-store.ts"
+        "../../server/shared/utils/project-store.ts"
       );
       const { createOrgWithAdmin, createInvite, acceptInvite } = await import(
-        "../../server/utils/org-store.ts"
+        "../../server/shared/utils/org-store.ts"
       );
       const admin = await seedUser("admin");
       const member = await seedUser("member");
@@ -119,7 +119,7 @@ test(
   async () => {
     await withDb(async () => {
       const { userOwnsProject } = await import(
-        "../../server/utils/project-store.ts"
+        "../../server/shared/utils/project-store.ts"
       );
       const u = await seedUser();
       assert.equal(await userOwnsProject("never-existed", u.id), false);

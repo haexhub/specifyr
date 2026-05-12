@@ -6,8 +6,8 @@ import { defineConfig } from "drizzle-kit";
 //   2. pnpm drizzle-kit generate    -> writes server/db/migrations/<n>_<name>.sql
 //   3. server/plugins/db.ts applies pending migrations on next boot
 export default defineConfig({
-  schema: "./server/db/schema.ts",
-  out: "./server/db/migrations",
+  schema: "./server/shared/database/schema.ts",
+  out: "./server/shared/database/migrations",
   dialect: "postgresql",
   dbCredentials: {
     // Only needed for `drizzle-kit push` / `drizzle-kit studio` against a

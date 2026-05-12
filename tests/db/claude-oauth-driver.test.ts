@@ -22,7 +22,7 @@ import path from "node:path";
 import {
   ClaudeOAuthDriver,
   readCredentialsExpiry,
-} from "../../server/utils/claude-oauth-driver.ts";
+} from "../../server/shared/utils/claude-oauth-driver.ts";
 
 const FAKE_URL =
   "https://claude.com/cai/oauth/authorize?code=true&client_id=abc&response_type=code&state=xyz";
@@ -271,7 +271,7 @@ test("readCredentialsExpiry: returns null for malformed JSON", async () => {
 
 test("readCredentialsState: 'missing' when file is absent", async () => {
   const { readCredentialsState } = await import(
-    "../../server/utils/claude-oauth-driver.ts"
+    "../../server/shared/utils/claude-oauth-driver.ts"
   );
   await withTmpHome(async (home) => {
     const r = await readCredentialsState(home);
@@ -281,7 +281,7 @@ test("readCredentialsState: 'missing' when file is absent", async () => {
 
 test("readCredentialsState: 'present' with expiry when file is valid", async () => {
   const { readCredentialsState } = await import(
-    "../../server/utils/claude-oauth-driver.ts"
+    "../../server/shared/utils/claude-oauth-driver.ts"
   );
   await withTmpHome(async (home) => {
     const target = path.join(home, ".claude", ".credentials.json");
@@ -302,7 +302,7 @@ test("readCredentialsState: 'present' with expiry when file is valid", async () 
 
 test("readCredentialsState: 'present' with null expiry for malformed JSON", async () => {
   const { readCredentialsState } = await import(
-    "../../server/utils/claude-oauth-driver.ts"
+    "../../server/shared/utils/claude-oauth-driver.ts"
   );
   await withTmpHome(async (home) => {
     const target = path.join(home, ".claude", ".credentials.json");

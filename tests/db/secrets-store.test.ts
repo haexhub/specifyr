@@ -39,7 +39,7 @@ after(async () => {
 
 test("encryptString/decryptString roundtrip preserves plaintext", async () => {
   const { encryptString, decryptString } = await import(
-    "../../server/utils/secrets-store.ts"
+    "../../server/shared/utils/secrets-store.ts"
   );
   const plaintext = "sk-ant-very-secret-key-1234567890";
   const enc = await encryptString(plaintext);
@@ -51,7 +51,7 @@ test("encryptString/decryptString roundtrip preserves plaintext", async () => {
 
 test("encryptString produces a fresh IV each call", async () => {
   const { encryptString } = await import(
-    "../../server/utils/secrets-store.ts"
+    "../../server/shared/utils/secrets-store.ts"
   );
   const a = await encryptString("same input");
   const b = await encryptString("same input");
@@ -61,7 +61,7 @@ test("encryptString produces a fresh IV each call", async () => {
 
 test("decryptString rejects a tampered ciphertext", async () => {
   const { encryptString, decryptString } = await import(
-    "../../server/utils/secrets-store.ts"
+    "../../server/shared/utils/secrets-store.ts"
   );
   const enc = await encryptString("plaintext");
   // Flip a byte in the data — auth tag check must fail.
@@ -79,7 +79,7 @@ test("masterKey rejects a malformed SPECIFYR_SECRET_KEY", async () => {
     // Re-import to re-read the env (the module reads on each call so
     // this works without esm cache busting, but be explicit).
     const { encryptString } = await import(
-      "../../server/utils/secrets-store.ts"
+      "../../server/shared/utils/secrets-store.ts"
     );
     await assert.rejects(encryptString("x"), /64 hex chars/);
   } finally {
@@ -89,7 +89,7 @@ test("masterKey rejects a malformed SPECIFYR_SECRET_KEY", async () => {
 
 test("setSecret / getProjectSecrets / deleteSecret roundtrip", async () => {
   const { setSecret, getProjectSecrets, deleteSecret, listSecretKeys } =
-    await import("../../server/utils/secrets-store.ts");
+    await import("../../server/shared/utils/secrets-store.ts");
   const slug = "test-project-roundtrip";
   await setSecret(slug, "FOO", "bar");
   await setSecret(slug, "BAZ", "qux");
@@ -106,7 +106,7 @@ test("setSecret / getProjectSecrets / deleteSecret roundtrip", async () => {
 
 test("getProjectSecrets returns {} for an unknown slug", async () => {
   const { getProjectSecrets } = await import(
-    "../../server/utils/secrets-store.ts"
+    "../../server/shared/utils/secrets-store.ts"
   );
   assert.deepEqual(await getProjectSecrets("never-seen-before"), {});
 });
