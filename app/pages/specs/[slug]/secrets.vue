@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "~/com
 import { Button } from "~/components/shadcn/button";
 import { Input } from "~/components/shadcn/input";
 import { Badge } from "~/components/shadcn/badge";
-import ProjectShell from "~/components/ProjectShell.vue";
+import ProjectShell from "~/components/projects/ProjectShell.vue";
 
 const route = useRoute();
 const slug = computed(() => route.params.slug as string);
@@ -71,7 +71,7 @@ async function addSecret() {
 </script>
 
 <template>
-  <ProjectShell :slug="slug">
+  <ProjectsProjectShell :slug="slug">
     <div class="p-6 max-w-2xl space-y-6">
       <div>
         <h2 class="text-lg font-semibold flex items-center gap-2">
@@ -151,5 +151,5 @@ async function addSecret() {
         </CardContent>
       </Card>
     </div>
-  </ProjectShell>
+  </ProjectsProjectShell>
 </template>

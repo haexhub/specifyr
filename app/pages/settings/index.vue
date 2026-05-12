@@ -60,7 +60,7 @@ const { me, isDevAuth, logout, devLogin } = useMe();
             <div class="font-medium">LLM credentials</div>
             <div class="mt-0.5 text-sm text-muted-foreground">
               Manage API keys for Anthropic / OpenAI / Google. Stored
-              AES-256-GCM encrypted. (Claude OAuth coming in phase 8.)
+              AES-256-GCM encrypted.
             </div>
           </div>
         </NuxtLink>

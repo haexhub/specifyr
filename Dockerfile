@@ -18,8 +18,8 @@ RUN corepack enable
 # image looks healthy without Hermes actually installed.
 ARG HERMES_INSTALL_URL=https://hermes-agent.nousresearch.com/install.sh
 RUN curl -fsSL "${HERMES_INSTALL_URL}" -o /tmp/hermes-install.sh \
- && bash /tmp/hermes-install.sh \
- && rm -f /tmp/hermes-install.sh
+    && bash /tmp/hermes-install.sh \
+    && rm -f /tmp/hermes-install.sh
 # Install the Claude Code CLI. The OAuth start endpoint
 # (server/utils/claude-oauth-driver.ts) spawns `claude auth login --claudeai`
 # as a subprocess to drive the per-owner Anthropic OAuth flow, so the binary
@@ -36,9 +36,9 @@ ARG CLAUDE_AGENT_ACP_VERSION=0.33.1
 ARG CODEX_ACP_VERSION=0.0.43
 ARG GEMINI_CLI_VERSION=0.41.2
 RUN npm install -g \
-        @agentclientprotocol/claude-agent-acp@${CLAUDE_AGENT_ACP_VERSION} \
-        @agentclientprotocol/codex-acp@${CODEX_ACP_VERSION} \
-        @google/gemini-cli@${GEMINI_CLI_VERSION}
+    @agentclientprotocol/claude-agent-acp@${CLAUDE_AGENT_ACP_VERSION} \
+    @agentclientprotocol/codex-acp@${CODEX_ACP_VERSION} \
+    @google/gemini-cli@${GEMINI_CLI_VERSION}
 WORKDIR /app
 
 # ------------------------------------------------------------------------------
@@ -47,7 +47,9 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile
+    pnpm install --frozen-lockfile --ignore-scripts && \
+    pnpm approve-builds && \
+    pnpm rebuild
 
 # ------------------------------------------------------------------------------
 # dev: Nuxt dev server with HMR. Source is expected as a bind mount at /app.
@@ -64,9 +66,9 @@ RUN mkdir -p /app/.nuxt /app/.output && chown node:node /app/.nuxt /app/.output
 # Container nur das (leere) Host-Verzeichnis statt des Clones.
 ARG SPECKIT_COMPANY_REF=main
 RUN git clone --depth 1 --branch ${SPECKIT_COMPANY_REF} \
-        https://github.com/haexhub/speckit-company.git /app/extensions/speckit-company \
- && rm -rf /app/extensions/speckit-company/.git \
- && chown -R node:node /app/extensions
+    https://github.com/haexhub/speckit-company.git /app/extensions/speckit-company \
+    && rm -rf /app/extensions/speckit-company/.git \
+    && chown -R node:node /app/extensions
 ENV HOST=0.0.0.0 \
     PORT=3000 \
     NODE_ENV=development
@@ -103,9 +105,9 @@ COPY --chown=node:node --from=builder /app/server/db/migrations ./server/db/migr
 # e.g. `--build-arg SPECKIT_COMPANY_REF=v0.1.0` to pin a release tag.
 ARG SPECKIT_COMPANY_REF=main
 RUN git clone --depth 1 --branch ${SPECKIT_COMPANY_REF} \
-        https://github.com/haexhub/speckit-company.git /app/extensions/speckit-company \
- && rm -rf /app/extensions/speckit-company/.git \
- && chown -R node:node /app/extensions
+    https://github.com/haexhub/speckit-company.git /app/extensions/speckit-company \
+    && rm -rf /app/extensions/speckit-company/.git \
+    && chown -R node:node /app/extensions
 # Mountpoints für Bind-Volumes vorab als node anlegen, falls der Host-Pfad noch leer ist.
 RUN mkdir -p /app/projects /app/.specifyr && chown -R node:node /app/projects /app/.specifyr
 ENV HOST=0.0.0.0 \

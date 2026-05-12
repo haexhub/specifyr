@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import ProjectListSidebar from "~/components/ProjectListSidebar.vue";
-import type { ProjectListItem } from "~/lib/types";
+import ProjectListSidebar from "~/components/layout/ProjectListSidebar.vue";
+import type { ProjectListItem } from "~/types/types";
 
 const route = useRoute();
 const { data: projects, refresh } = await useFetch<ProjectListItem[]>("/api/projects", {
@@ -16,7 +16,7 @@ const compactGlobalSidebar = computed(() => route.path.startsWith("/specs/"));
 <template>
   <div class="h-dvh bg-background text-foreground">
     <div class="flex h-full">
-      <ProjectListSidebar :projects="projects ?? []" :compact="compactGlobalSidebar" />
+      <LayoutProjectListSidebar :projects="projects ?? []" :compact="compactGlobalSidebar" />
       <main class="min-w-0 flex-1 overflow-y-auto overflow-x-hidden">
         <slot />
       </main>

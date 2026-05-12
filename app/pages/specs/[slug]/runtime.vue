@@ -2,11 +2,11 @@
 import { Activity, Network, History, Circle, LayoutList, Send, Square, Cpu } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
 import { Badge } from "~/components/shadcn/badge";
-import ProjectShell from "~/components/ProjectShell.vue";
-import AgentDetailDrawer from "~/components/AgentDetailDrawer.vue";
-import AgentTaskBoard from "~/components/AgentTaskBoard.vue";
-import CompanyAgentLlmGrid from "~/components/CompanyAgentLlmGrid.vue";
-import { resolveWorkflow, type Workflow } from "~/lib/workflows";
+import ProjectShell from "~/components/projects/ProjectShell.vue";
+import AgentDetailDrawer from "~/components/agents/AgentDetailDrawer.vue";
+import AgentTaskBoard from "~/components/agents/AgentTaskBoard.vue";
+import CompanyAgentLlmGrid from "~/components/agents/CompanyAgentLlmGrid.vue";
+import { resolveWorkflow, type Workflow } from "~/utils/workflows";
 
 const route = useRoute();
 const router = useRouter();
@@ -243,7 +243,7 @@ function closeDispatch() {
 </script>
 
 <template>
-  <ProjectShell
+  <ProjectsProjectShell
     :slug="slug"
     :project-title="project?.title"
     :workflow="workflow"
@@ -380,7 +380,7 @@ function closeDispatch() {
             </p>
           </CardHeader>
           <CardContent>
-            <CompanyAgentLlmGrid :slug="slug" />
+            <AgentsCompanyAgentLlmGrid :slug="slug" />
           </CardContent>
         </Card>
 
@@ -501,7 +501,7 @@ function closeDispatch() {
               <p class="text-xs text-muted-foreground">{{ $t("taskBoard.desc") }}</p>
             </CardHeader>
             <CardContent>
-              <AgentTaskBoard
+              <AgentsAgentTaskBoard
                 :agents="companyStatus?.agents ?? []"
                 :events="events"
               />
@@ -540,11 +540,11 @@ function closeDispatch() {
           </Card>
         </template>
 
-    <AgentDetailDrawer
+    <AgentsAgentDetailDrawer
       :agent="selectedAgent"
       :events="events"
       :pending-dispatches="pendingDispatches"
       @close="closeDetail"
     />
-  </ProjectShell>
+  </ProjectsProjectShell>
 </template>

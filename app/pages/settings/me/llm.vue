@@ -4,8 +4,8 @@ import type {
   CredentialRow,
   LlmProvider as Provider,
   ProviderMeta,
-} from "~/components/LlmCredentialCard.vue";
-import type { SpeckitAgentProfile } from "~/components/SpeckitAgentProfileCard.vue";
+} from "~/components/settings/LlmCredentialCard.vue";
+import type { SpeckitAgentProfile } from "~/components/agents/SpeckitAgentProfileCard.vue";
 
 const providerMeta: Record<Provider, ProviderMeta> = {
   anthropic: {
@@ -84,7 +84,7 @@ const anthropicOauth = computed(
       Org-shared credentials are managed under each org's settings.
     </p>
 
-    <AnthropicOAuthCard
+    <AuthAnthropicOAuthCard
       :existing="
         anthropicOauth
           ? { id: anthropicOauth.id, oauthStatus: anthropicOauth.oauthStatus }
@@ -95,7 +95,7 @@ const anthropicOauth = computed(
       @changed="refreshAll()"
     />
 
-    <SpeckitAgentProfileCard
+    <AgentsSpeckitAgentProfileCard
       :profile="speckitProfile"
       :credentials="credentials ?? []"
       endpoint="/api/me/agent-profiles/speckit"
@@ -103,7 +103,7 @@ const anthropicOauth = computed(
       @changed="refreshSpeckitProfile()"
     />
 
-    <LlmCredentialCard
+    <SettingsLlmCredentialCard
       v-for="provider in providers"
       :key="provider"
       :provider="provider"

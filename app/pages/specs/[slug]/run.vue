@@ -1,17 +1,15 @@
 <script setup lang="ts">
-definePageMeta({ layout: "workspace" });
-
 import { Rocket, AlertTriangle, Play, Square, Loader2, RefreshCw, CheckCircle2, Circle } from "lucide-vue-next";
 import { Button } from "~/components/shadcn/button";
 import { Badge } from "~/components/shadcn/badge";
-import ProjectStepSidebar from "~/components/ProjectStepSidebar.vue";
-import RunTaskList, { type RunTaskRow } from "~/components/RunTaskList.vue";
-import RunTaskDetail, { type TaskLogEntry } from "~/components/RunTaskDetail.vue";
+import ProjectStepSidebar from "~/components/projects/ProjectStepSidebar.vue";
+import RunTaskList, { type RunTaskRow } from "~/components/ui/RunTaskList.vue";
+import RunTaskDetail, { type TaskLogEntry } from "~/components/ui/RunTaskDetail.vue";
 import { nextTick } from "vue";
-import { openSse, type SseEvent } from "~/lib/sse-client";
-import { isStepUnlocked, type StepId, type StepStatus } from "~/lib/steps";
-import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/lib/workflows";
-import type { StepState } from "~/lib/types";
+import { openSse, type SseEvent } from "~/utils/sse-client";
+import { isStepUnlocked, type StepId, type StepStatus } from "~/utils/steps";
+import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/utils/workflows";
+import type { StepState } from "~/types/types";
 
 const { t } = useI18n();
 const route = useRoute();
@@ -410,7 +408,7 @@ onUnmounted(() => {
 
 <template>
   <div class="flex h-screen">
-    <ProjectStepSidebar
+    <ProjectsProjectStepSidebar
       :slug="slug"
       :project-title="project?.title"
       :active-step-id="runStep.id"
@@ -425,7 +423,7 @@ onUnmounted(() => {
         </p>
         <p v-else class="mt-1 italic opacity-70">{{ $t("run.notStarted") }}</p>
       </div>
-    </ProjectStepSidebar>
+    </ProjectsProjectStepSidebar>
 
     <div class="flex h-screen flex-1 flex-col">
       <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-3">
@@ -546,7 +544,7 @@ onUnmounted(() => {
             <span v-if="rows.length" class="normal-case"> · {{ rows.length }} {{ $t("common.total") }}</span>
           </div>
           <div class="flex-1 overflow-y-auto">
-            <RunTaskList
+            <UiRunTaskList
               v-if="rows.length"
               :tasks="rows"
               :active-task-id="activeTaskId"
@@ -559,7 +557,7 @@ onUnmounted(() => {
         </aside>
 
         <div class="flex-1 overflow-hidden">
-          <RunTaskDetail
+          <UiRunTaskDetail
             :task="activeTask"
             :log="activeTaskId ? taskLogs[activeTaskId] ?? [] : []"
             :live-text="liveText"

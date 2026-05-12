@@ -3,34 +3,63 @@ import { fileURLToPath } from "node:url";
 
 export default defineNuxtConfig({
   nitro: {
-    alias: { "@su": fileURLToPath(new URL("./server/utils", import.meta.url)) },
+    scanDirs: [
+      fileURLToPath(new URL("./server/auth", import.meta.url)),
+      fileURLToPath(new URL("./server/admin", import.meta.url)),
+      fileURLToPath(new URL("./server/settings", import.meta.url)),
+      fileURLToPath(new URL("./server/projects", import.meta.url)),
+      fileURLToPath(new URL("./server/agents", import.meta.url)),
+      fileURLToPath(new URL("./server/shared", import.meta.url)),
+    ],
+    alias: {
+      "@su": fileURLToPath(new URL("./server/shared/utils", import.meta.url)),
+      "@db": fileURLToPath(new URL("./server/shared/database", import.meta.url)),
+    },
     typescript: {
-      tsConfig: { compilerOptions: { paths: { "@su/*": ["../server/utils/*"] } } }
-    }
+      tsConfig: {
+        compilerOptions: {
+          paths: {
+            "@su/*": ["../server/shared/utils/*"],
+            "@db/*": ["../server/shared/database/*"],
+          },
+        },
+      },
+    },
   },
   typescript: {
-    tsConfig: { compilerOptions: { paths: { "@su/*": ["../server/utils/*"] } } }
+    tsConfig: {
+      compilerOptions: {
+        paths: {
+          "@su/*": ["../server/shared/utils/*"],
+          "@db/*": ["../server/shared/database/*"],
+        },
+      },
+    },
   },
   compatibilityDate: "2025-01-01",
   devtools: { enabled: true },
+  imports: {
+    dirs: ["composables/**"],
+  },
   css: ["~/assets/css/tailwind.css"],
   components: [
     {
       path: "~/components",
-      extensions: [".vue"]
-    }
+      extensions: [".vue"],
+    },
   ],
   modules: ["shadcn-nuxt", "@nuxtjs/i18n"],
   vite: {
-    plugins: [tailwindcss()]
+    plugins: [tailwindcss()],
   },
   shadcn: {
     prefix: "",
-    componentDir: "./app/components/generated"
+    componentDir: "./app/components/shadcn",
   },
   runtimeConfig: {
     companyClaudeProxyUrl: process.env.COMPANY_CLAUDE_PROXY_URL ?? "",
-    companyOpsUrlBase: process.env.COMPANY_OPS_URL_BASE ?? "http://specifyr:3000/mcp",
+    companyOpsUrlBase:
+      process.env.COMPANY_OPS_URL_BASE ?? "http://specifyr:3000/mcp",
     anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
     anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL ?? "",
     public: {
@@ -43,11 +72,11 @@ export default defineNuxtConfig({
       // value itself stays server-side (display-only); we just need a
       // boolean so the UI can render the Sign-in (dev) button only when
       // it would actually do something.
-      devAuthAvailable: !!process.env.SPECIFYR_DEV_USER_EMAIL
-    }
+      devAuthAvailable: !!process.env.SPECIFYR_DEV_USER_EMAIL,
+    },
   },
   i18n: {
     locales: [{ code: "de", language: "de-DE", file: "de.json" }],
-    defaultLocale: "de"
-  }
+    defaultLocale: "de",
+  },
 });

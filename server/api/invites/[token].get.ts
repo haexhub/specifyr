@@ -1,13 +1,14 @@
 import { eq } from "drizzle-orm";
-import { getDb } from "../../db/client";
-import { orgInvites, orgs } from "../../db/schema";
+import { getDb } from "@db/client";
+import { orgInvites, orgs } from "@db/schema";
 import { parseParams, tokenParam } from "@su/validation";
 
 export default defineEventHandler(async (event) => {
   const { token } = parseParams(event, tokenParam);
 
   const db = getDb();
-  if (!db) throw createError({ statusCode: 503, statusMessage: "DB not configured" });
+  if (!db)
+    throw createError({ statusCode: 503, statusMessage: "DB not configured" });
 
   const [row] = await db
     .select({
@@ -24,7 +25,8 @@ export default defineEventHandler(async (event) => {
     .where(eq(orgInvites.token, token))
     .limit(1);
 
-  if (!row) throw createError({ statusCode: 404, statusMessage: "invite not found" });
+  if (!row)
+    throw createError({ statusCode: 404, statusMessage: "invite not found" });
 
   return {
     orgName: row.orgName,
