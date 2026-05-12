@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.10.1](https://github.com/haexhub/specifyr/compare/v0.10.0...v0.10.1) (2026-05-12)
+
+
+### Bug Fixes
+
+* **ci:** pin qemu-v9.2.2 binfmt to unblock arm64 builds ([#39](https://github.com/haexhub/specifyr/issues/39)) ([a4b0821](https://github.com/haexhub/specifyr/commit/a4b0821f44ab1bfeae42a791b7e033d68632cb89))
+* **docker:** update migrations path after server refactor ([#37](https://github.com/haexhub/specifyr/issues/37)) ([f4e67a7](https://github.com/haexhub/specifyr/commit/f4e67a7fd6370b64e93e9a8972cae314b0f17332))
+
 ## [0.10.0](https://github.com/haexhub/specifyr/compare/v0.9.0...v0.10.0) (2026-05-12)
 
 
