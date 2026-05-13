@@ -237,11 +237,11 @@ Keep this updated as PRs land.
 
 | § | Item | Status | Tracking |
 |---|---|---|---|
-| 1 | Proxy-for-all credential modes | not started | — |
-| 2 | Per-company network + quotas + egress allowlist | not started | — |
+| 1 | Proxy-for-all credential modes | partial — `oauth_claude` mode is now fully proxy-mediated with DB-backed credentials + ephemeral tmpfs (no plaintext on disk past spawn). `api_key` mode still injects raw keys; that's the remaining work. | haexhub/haex-claude-proxy#3, specifyr#49 |
+| 2 | Per-company network + quotas + egress allowlist | partial — default `--cpus/--memory/--pids-limit/--ulimit nofile` quotas live, per-company `co-<slug>` bridge replaces the shared `companies` network. Egress allowlist (Squid/Nginx sidecar per company) still open. | specifyr#48 |
 | 3 | Drop docker.sock RW (rootless or sidecar) | not started | — |
 | 4 | Per-org KEK via KMS | blocked on KMS decision | — |
-| 5 | Audit log + Postgres RLS | not started | — |
+| 5 | Audit log + Postgres RLS | partial — RLS policies on `llm_credentials` are defined in `schema.ts` and now actually enforced at runtime: the proxy authenticates as the dedicated `haex_claude_proxy` role and the `SET LOCAL app.current_owner_*` mechanic gates SELECT/UPDATE. Remaining: extend RLS to `projects`, `companies`, `runner_sessions`, `secrets`; add `auditLog` table + write hooks. | haexhub/haex-claude-proxy#3, specifyr#49 |
 | 6 | Build-time image isolation | not started | — |
 | 7 | Signup / billing / quotas / suspension | not started | — |
-| 8 | Compliance & operator readiness | not started | — |
+| 8 | Compliance & operator readiness | not started — written threat model exists ([THREAT_MODEL.md](./THREAT_MODEL.md)) | specifyr#47 |
