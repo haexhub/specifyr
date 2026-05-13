@@ -48,6 +48,8 @@ const stepIndex = computed(() =>
 const sessions = ref<SessionMetadata[]>([]);
 const sessionsLoading = ref(false);
 const creatingSession = ref(false);
+const deleteSessionTarget = ref<SessionMetadata | null>(null);
+const deletingSession = ref(false);
 const artifactReloadToken = ref(0);
 const artifactOpen = ref(true);
 const chatStreamRef = ref<{ insertIntoDraft: (text: string) => void } | null>(null);
@@ -209,6 +211,38 @@ async function selectSession(sessionId: string) {
   });
 }
 
+function requestDeleteSession(session: SessionMetadata, event: MouseEvent) {
+  event.preventDefault();
+  event.stopPropagation();
+  deleteSessionTarget.value = session;
+}
+
+async function confirmDeleteSession() {
+  const target = deleteSessionTarget.value;
+  if (!target || deletingSession.value) return;
+  deletingSession.value = true;
+  try {
+    await $fetch(
+      `/api/projects/${slug.value}/steps/${stepIdParam.value}/sessions/${target.id}`,
+      { method: "DELETE" }
+    );
+    sessions.value = sessions.value.filter((s) => s.id !== target.id);
+    deleteSessionTarget.value = null;
+    // If the deleted session was the active one, drop the ?session= param so
+    // ensureActiveSession() falls back to the first remaining session (or
+    // creates a fresh one).
+    if (activeSessionId.value === target.id) {
+      const { session: _drop, ...rest } = route.query;
+      await router.replace({ path: route.path, query: rest });
+      await ensureActiveSession();
+    }
+  } catch (err) {
+    alert(err instanceof Error ? err.message : t("sessions.sessionDeleteError"));
+  } finally {
+    deletingSession.value = false;
+  }
+}
+
 async function onTurnCompleted() {
   artifactReloadToken.value += 1;
   await Promise.all([loadSessions(), loadStepStates()]);
@@ -273,6 +307,7 @@ const nextStep = computed(() => {
           :creating="creatingSession"
           @create="createSession"
           @select="selectSession"
+          @delete="requestDeleteSession"
         />
       </ClientOnly>
     </ProjectsProjectStepSidebar>
@@ -378,5 +413,16 @@ const nextStep = computed(() => {
       />
     </aside>
     </ClientOnly>
+
+    <UiConfirmDialog
+      :open="deleteSessionTarget !== null"
+      :title="deleteSessionTarget ? $t('sessions.deleteTitle', { title: deleteSessionTarget.title }) : ''"
+      :message="$t('sessions.deleteMessage')"
+      :confirm-label="$t('specIndex.deleteConfirm')"
+      destructive
+      :busy="deletingSession"
+      @confirm="confirmDeleteSession"
+      @cancel="deleteSessionTarget = null"
+    />
   </div>
 </template>

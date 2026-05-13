@@ -102,6 +102,21 @@ export class SessionStore {
       .map((line) => JSON.parse(line));
   }
 
+  // Removes meta + messages + events for a session. Returns true if the meta
+  // existed, false if it was already gone. The caller is responsible for
+  // cancelling any running turn first — we don't reach into the broker here
+  // because the store is also used outside Nitro (CLI, tests).
+  async deleteSession(slug, stepId, sessionId) {
+    const metaFile = this.metaPath(slug, stepId, sessionId);
+    const existed = await exists(metaFile);
+    await Promise.all([
+      fs.rm(metaFile, { force: true }),
+      fs.rm(this.messagesPath(slug, stepId, sessionId), { force: true }),
+      fs.rm(this.eventsPath(slug, stepId, sessionId), { force: true }),
+    ]);
+    return existed;
+  }
+
   async appendMessage(slug, stepId, sessionId, message) {
     const withId = { id: message.id ?? randomUUID(), createdAt: new Date().toISOString(), ...message };
     const line = `${JSON.stringify(withId)}\n`;

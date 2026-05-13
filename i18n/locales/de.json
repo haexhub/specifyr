@@ -227,7 +227,11 @@
     "newTitle": "Neue Session",
     "noSessions": "Noch keine Session.",
     "sessionLoadError": "Session konnte nicht geladen werden.",
-    "sessionCreateError": "Session konnte nicht angelegt werden."
+    "sessionCreateError": "Session konnte nicht angelegt werden.",
+    "sessionDeleteError": "Session konnte nicht gelöscht werden.",
+    "delete": "Session löschen",
+    "deleteTitle": "Session \"{title}\" löschen?",
+    "deleteMessage": "Nachrichten, Events und Metadaten dieser Session werden unwiderruflich entfernt. Ein laufender Turn wird vorher abgebrochen."
   },
 
   "stepSidebar": {
