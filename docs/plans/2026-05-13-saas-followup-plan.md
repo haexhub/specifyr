@@ -30,10 +30,10 @@ Open vectors (from threat model):
 ## Priority order for upcoming sessions
 
 The order maximises threat-vector closure per session and respects
-external dependencies. KMS (§4 in the main roadmap) is *deprioritised*:
-host-compromise is the dominant threat, and §3 addresses it more
-fundamentally than KMS does. Revisit §4 the day before the first SOC 2
-audit or first enterprise vendor questionnaire.
+external dependencies. KMS (Session D) requires a provider decision
+before work starts — pick Vault Transit for self-hosted, AWS/GCP KMS
+for cloud-native deployments. Sessions A–C can proceed in parallel with
+that decision.
 
 ### Session A — `api_key` over the proxy (closes V2 half)
 **Effort:** 1 session.
@@ -146,7 +146,89 @@ Larger up-front cost, biggest attack-surface reduction.
 
 ---
 
-### Session D — Extend RLS + add audit log (closes V9, advances §5)
+### Session D — Per-org KEK via KMS (closes V5, reduces §4 blast radius)
+**Effort:** 2–3 sessions (provider decision is the long pole).
+**Repos touched:** `specifyr`.
+
+Today one master AES key (`SPECIFYR_SECRET_KEY`) unwraps every tenant's
+credentials. A single DB+env dump exposes every org's secrets. KMS
+addresses this by giving each org its own Key-Encryption Key (KEK),
+stored and audited outside the host.
+
+**Provider decision (pick one — gates everything else):**
+- **HashiCorp Vault Transit** — self-hosted, free, no external SLA dependency.
+  Best for privacy-first / air-gapped operators.
+- **AWS KMS** — managed, per-key audit log, IAM integration. Best if
+  the prod host is already in AWS.
+- **GCP Cloud KMS** — same value prop as AWS KMS for GCP hosts.
+
+Recommendation: Vault Transit for the first deployment (avoids cloud
+vendor lock-in, runs as a sidecar alongside the existing compose stack).
+Re-evaluate when the first enterprise prospect demands a hosted-cloud KMS.
+
+**Schema changes:**
+- `orgs` table: add `kek_handle TEXT` column (Vault key path / AWS key ARN).
+- New Drizzle migration: add column, backfill existing org(s) with a
+  generated handle, provision their KEK in Vault / KMS.
+
+**Crypto changes — envelope encryption:**
+- `server/shared/crypto/llm-credentials-store.ts`: replace direct
+  `encrypt(plaintext, masterKey)` with two-layer scheme:
+  1. Generate a random 32-byte DEK per credential row.
+  2. Encrypt plaintext with DEK (AES-256-GCM, same as today).
+  3. Wrap DEK via KMS using the org's KEK handle.
+  4. Store `{wrappedDek, iv, tag, data}` in `llm_credentials.oauth_credentials_data`.
+- `server/shared/crypto/secrets-store.ts`: same treatment for
+  `project_secrets.value_encrypted`.
+- `server/shared/crypto/kms-client.ts` (new): thin adapter over
+  `@hashicorp/vault-client` (or `@aws-sdk/client-kms`). Expose:
+  - `wrap(orgId, dek: Buffer): Promise<string>` — returns base64 wrapped DEK.
+  - `unwrap(orgId, wrappedDek: string): Promise<Buffer>`.
+- `server/plugins/kms.ts` (new): initialise KMS client on Nitro startup,
+  expose as `event.context.kms` (same pattern as the DB plugin).
+
+**Migration strategy (zero-downtime):**
+- Deploy behind a feature flag `KMS_ENABLED=false`. Old code path reads
+  `SPECIFYR_SECRET_KEY` as before.
+- When `KMS_ENABLED=true`: on each credential read, detect legacy format
+  (no `wrappedDek` field), re-encrypt in-place under the org's KEK, write
+  back. After all rows are migrated, remove the master-key fallback.
+- One-time admin script: `pnpm run migrate:kms` — iterates all rows,
+  re-encrypts under org KEK, logs progress.
+- Drop `SPECIFYR_SECRET_KEY` from compose and `.env.example` only after
+  migration is confirmed complete in prod.
+
+**DoD:**
+- [ ] `SPECIFYR_SECRET_KEY` is no longer present in the Specifyr container
+      env after migration is complete.
+- [ ] A leaked DB dump cannot be decrypted without also compromising the
+      KMS service (verified by test: decrypt with wrong/absent KMS returns
+      error, not plaintext).
+- [ ] Each org's credentials are wrapped under a distinct KEK handle —
+      org A's KMS key cannot unwrap org B's DEK.
+- [ ] KMS audit log (Vault audit device / CloudTrail) shows one entry per
+      credential read.
+- [ ] Migration script re-encrypts all legacy rows and idempotently skips
+      already-migrated rows.
+- [ ] `docker inspect <specifyr>` shows no `SPECIFYR_SECRET_KEY` in env
+      post-migration.
+
+**Notes / gotchas:**
+- The `haex-claude-proxy` also holds `SPECIFYR_SECRET_KEY` for decrypting
+  OAuth blobs. After migration, the proxy must call the KMS client too —
+  extend `haex-claude-proxy/src/crypto.js` or expose a
+  `/internal/decrypt` endpoint from Specifyr that the proxy calls (simpler
+  but creates coupling).
+- Vault Transit in dev: add a `vault` service to `docker-compose.yml` in
+  dev mode; prod runs a separate Vault cluster. Use Vault's `transit/`
+  backend with one key per org, path `specifyr/orgs/<orgId>`.
+- Key rotation: Vault Transit supports `rewrap` — existing ciphertexts can
+  be re-wrapped under a new key version without decrypting. Schedule
+  rotation policy (90 days) as part of SOC 2 controls.
+
+---
+
+### Session E — Extend RLS + add audit log (closes V9, advances §5)
 **Effort:** 1 session.
 **Repo touched:** `specifyr`.
 
@@ -176,7 +258,7 @@ append-only `audit_log` table.
 
 ---
 
-### Sessions E+ — Product & compliance (gates SaaS launch, not security)
+### Sessions F+ — Product & compliance (gates SaaS launch, not security)
 
 Tracked in `SAAS_ROADMAP.md` §7 and §8. Not engineering-only — needs
 business decisions on:
@@ -190,27 +272,6 @@ business decisions on:
 Defer until the engineering items above are done.
 
 ---
-
-## When to revisit KMS (§4)
-
-Triggers, any of:
-- First enterprise prospect sends a vendor security questionnaire
-  asking about key custody.
-- SOC 2 audit scheduled.
-- Compliance contract (HIPAA / PCI / GDPR DPIA) demands HSM-backed
-  key storage.
-
-When that day comes, the work is:
-1. Pick a KMS (Vault Transit / AWS KMS / GCP KMS) — biggest decision,
-   ties to hosting choice.
-2. Add `orgs.kek_handle` column.
-3. Refactor `llm-credentials-store.ts` + `secrets-store.ts` to
-   envelope-encryption: per-row DEK locally generated, wrapped via
-   KMS with the org's KEK.
-4. Migration: re-encrypt existing rows under the new scheme behind
-   a flag. Old rows stay decryptable via legacy master key until
-   migration completes.
-5. Drop the master-key env var.
 
 ## How to use this plan in the next session
 
