@@ -43,6 +43,7 @@ import {
   type ResolvedAgentProfile,
 } from "@su/llm-agent-profiles-store";
 import { getProjectFromDb } from "@su/project-store";
+import { getOrgInitStatusForProjectSlug } from "@su/org-store";
 import { mintRunnerSession } from "@su/runner-sessions-store";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -106,6 +107,21 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 409,
       statusMessage: `Company runtime already running for project '${slug}'`,
+    });
+  }
+
+  // Agent-vault Phase 1 guard: refuse to spawn agents for an org whose
+  // vault provisioning hasn't completed. Phase 1 only writes the org
+  // row in 'pending_vault_init'; Phase 3 (vault daemon) will flip it
+  // to 'ready' once the per-org DEK exists. Returning null here means
+  // "no DB / no project row" — let downstream code surface that
+  // failure with its own 404. We only block on a known-pending status.
+  const initStatus = await getOrgInitStatusForProjectSlug(slug);
+  if (initStatus === "pending_vault_init") {
+    throw createError({
+      statusCode: 503,
+      statusMessage:
+        "Org vault not yet initialised — agent runtime unavailable",
     });
   }
 

@@ -87,6 +87,27 @@ export async function cleanDb(): Promise<void> {
   const db = getDb();
   if (!db) throw new Error("DB not configured");
   await ensureMigrations();
+  // Drop any per-org schemas + roles created by previous tests
+  // (per-org-schema.ts builds `org_<uuid>` schemas dynamically). They
+  // accumulate across test runs because TRUNCATE on `orgs` doesn't drop
+  // dependent dynamic schemas. Identifiers are escaped via format('%I')
+  // so a rogue nspname/rolname can't break out of the DROP statement.
+  const schemaDrops = await db.execute(sql`
+    SELECT format('DROP SCHEMA %I CASCADE', nspname) AS stmt
+    FROM pg_namespace
+    WHERE nspname LIKE 'org\\_%' ESCAPE '\\'
+  `);
+  for (const row of (schemaDrops as unknown as { rows: Array<{ stmt: string }> }).rows) {
+    await db.execute(sql.raw(row.stmt));
+  }
+  const roleDrops = await db.execute(sql`
+    SELECT format('DROP ROLE %I', rolname) AS stmt
+    FROM pg_roles
+    WHERE rolname LIKE 'org\\_%\\_app' ESCAPE '\\'
+  `);
+  for (const row of (roleDrops as unknown as { rows: Array<{ stmt: string }> }).rows) {
+    await db.execute(sql.raw(row.stmt));
+  }
   // RESTART IDENTITY isn't needed (we use uuid defaults), CASCADE keeps
   // FKs from blocking truncate even if the explicit order missed one.
   await db.execute(sql.raw(`TRUNCATE ${TABLES.join(", ")} CASCADE`));

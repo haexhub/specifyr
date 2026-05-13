@@ -2,16 +2,19 @@ import { sql } from "drizzle-orm";
 import {
   boolean,
   check,
+  cidr,
   foreignKey,
   index,
   jsonb,
   pgPolicy,
   pgRole,
+  pgSchema,
   pgTable,
   primaryKey,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -53,16 +56,48 @@ export type NewUser = typeof users.$inferInsert;
 // transfer-ownership endpoint, which atomically swaps it and ensures
 // both old and new owners hold an admin membership row. Membership
 // guards key off this column: the owner cannot be removed or demoted.
-export const orgs = pgTable("orgs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  ownerUserId: uuid("owner_user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "restrict" }),
-  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+export const orgs = pgTable(
+  "orgs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // /24 from SPECIFYR_BRIDGE_POOL, allocated at org-create, fixed for
+    // the lifetime of the org. Used later by `docker network create
+    // --subnet=...` and Specifyr's IPAM when picking container_ip for
+    // agent runs. Nullable because pre-existing rows get backfilled by
+    // migration 0006; new rows are always populated by the allocator.
+    bridgeSubnet: cidr("bridge_subnet"),
+    // Org-create is a saga (DDL commit, then later vault HTTP call). Only
+    // 'ready' orgs may spawn agents; 'pending_vault_init' means the per-
+    // org schema exists but DEKs/keys haven't been provisioned by vault
+    // yet. The vault HTTP call is Phase 3 — Phase 1 leaves new orgs in
+    // 'pending_vault_init' indefinitely and the agent-start guard returns
+    // 503.
+    initStatus: text("init_status", {
+      enum: ["pending_vault_init", "ready"],
+    }).notNull().default("pending_vault_init"),
+  },
+  (t) => ({
+    // Partial unique: NULLs allowed during the 0006 backfill window and
+    // for any row that pre-dates the allocator, but two orgs may never
+    // share a populated subnet (network-isolation invariant).
+    bridgeSubnetUq: uniqueIndex("orgs_bridge_subnet_uq")
+      .on(t.bridgeSubnet)
+      .where(sql`${t.bridgeSubnet} IS NOT NULL`),
+    // Allocator only ever produces /24s; reject anything else at the DB
+    // boundary so a buggy hand-insert can't break the IPAM assumption.
+    bridgeSubnetIs24: check(
+      "orgs_bridge_subnet_is_24_chk",
+      sql`${t.bridgeSubnet} IS NULL OR masklen(${t.bridgeSubnet}) = 24`,
+    ),
+  }),
+);
 
 export type Org = typeof orgs.$inferSelect;
 export type NewOrg = typeof orgs.$inferInsert;
@@ -445,3 +480,45 @@ export const orgMemberPermissions = pgTable(
 
 export type OrgMemberPermission = typeof orgMemberPermissions.$inferSelect;
 export type NewOrgMemberPermission = typeof orgMemberPermissions.$inferInsert;
+
+// Vault-wide schema for crypto material that is NOT org-scoped. Per-org
+// tables (service_credentials, agent_sessions, master_keys, ...) live in
+// dynamic `org_<id>` schemas created by createOrgSchema() at org-create
+// time — they're intentionally NOT declared here because their schema
+// name is parameterised. See server/shared/utils/per-org-schema.ts for
+// the DDL.
+export const specifyrVaultSchema = pgSchema("specifyr_vault");
+
+// Single JWT signing key for the entire vault. The org boundary is
+// enforced by Postgres schema + role + RLS, NOT by per-org JWT crypto —
+// see docs/plans/2026-05-13-agent-vault-and-egress.md "Layer 2". Vault
+// daemon (Phase 3) wraps the private key with the active KEK and stores
+// it here on first boot.
+//
+// The `oneActive` partial unique index enforces "at most one active row"
+// at the DB level so concurrent inserts can't produce two active keys
+// (which would break JWT verification semantics — the kid in the JWT
+// header is the consumer's discriminator).
+export const jwtSigningKey = specifyrVaultSchema.table(
+  "jwt_signing_key",
+  {
+    kid: text("kid").primaryKey(),
+    publicKey: text("public_key").notNull(),
+    wrappedPrivateKey: text("wrapped_private_key").notNull(),
+    iv: text("iv").notNull(),
+    tag: text("tag").notNull(),
+    kekKid: text("kek_kid").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    active: boolean("active").notNull().default(true),
+  },
+  (t) => ({
+    oneActive: uniqueIndex("jwt_signing_key_one_active_uq")
+      .on(t.active)
+      .where(sql`${t.active} = true`),
+  }),
+);
+
+export type JwtSigningKey = typeof jwtSigningKey.$inferSelect;
+export type NewJwtSigningKey = typeof jwtSigningKey.$inferInsert;
