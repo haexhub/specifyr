@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.0](https://github.com/haexhub/specifyr/compare/v0.12.0...v0.13.0) (2026-05-13)
+
+
+### Features
+
+* **security:** route Anthropic api_key through proxy (V2 partial) ([#56](https://github.com/haexhub/specifyr/issues/56)) ([29b1fac](https://github.com/haexhub/specifyr/commit/29b1fac89f78523edf71cb068694b53bf271dafa))
+
 ## [0.12.0](https://github.com/haexhub/specifyr/compare/v0.11.1...v0.12.0) (2026-05-13)
 
 
