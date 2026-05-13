@@ -22,6 +22,20 @@
       "when": 1778628612253,
       "tag": "0002_pale_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1778671755877,
+      "tag": "0003_clever_namorita",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778673564592,
+      "tag": "0004_bumpy_penance",
+      "breakpoints": true
     }
   ]
 }

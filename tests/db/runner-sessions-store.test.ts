@@ -71,6 +71,127 @@ test(
       assert.equal(resolved.userId, u.id);
       assert.equal(resolved.owner.kind, "org");
       assert.equal(resolved.owner.id, org.id);
+      assert.equal(resolved.credentialId, null);
+    });
+  },
+);
+
+test(
+  "mintRunnerSession persists credentialId; lookup returns it",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async () => {
+      const { mintRunnerSession, lookupRunnerSession } = await import(
+        "../../server/shared/utils/runner-sessions-store.ts"
+      );
+      const { createApiKeyCredential } = await import(
+        "../../server/shared/utils/llm-credentials-store.ts"
+      );
+      const u = await seedUser();
+      const cred = await createApiKeyCredential({
+        ownerKind: "user",
+        ownerId: u.id,
+        provider: "anthropic",
+        displayName: "test",
+        apiKey: "sk-ant-test",
+      });
+      const minted = await mintRunnerSession({
+        userId: u.id,
+        owner: { kind: "user", id: u.id },
+        credentialId: cred.id,
+      });
+      const resolved = await lookupRunnerSession(minted.token);
+      assert.ok(resolved);
+      assert.equal(resolved.credentialId, cred.id);
+    });
+  },
+);
+
+test(
+  "mintRunnerSession rejects credentialId belonging to a different owner",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async () => {
+      const { mintRunnerSession } = await import(
+        "../../server/shared/utils/runner-sessions-store.ts"
+      );
+      const { createApiKeyCredential } = await import(
+        "../../server/shared/utils/llm-credentials-store.ts"
+      );
+      const owner = await seedUser("owner");
+      const stranger = await seedUser("stranger");
+      const cred = await createApiKeyCredential({
+        ownerKind: "user",
+        ownerId: owner.id,
+        provider: "anthropic",
+        displayName: "owner-key",
+        apiKey: "sk-ant-test",
+      });
+      // Attempt to bind owner's credential to stranger's session.
+      await assert.rejects(
+        () =>
+          mintRunnerSession({
+            userId: stranger.id,
+            owner: { kind: "user", id: stranger.id },
+            credentialId: cred.id,
+          }),
+        /does not belong to the requested owner/,
+      );
+    });
+  },
+);
+
+test(
+  "mintRunnerSession rejects an unknown credentialId",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async () => {
+      const { mintRunnerSession } = await import(
+        "../../server/shared/utils/runner-sessions-store.ts"
+      );
+      const u = await seedUser();
+      await assert.rejects(
+        () =>
+          mintRunnerSession({
+            userId: u.id,
+            owner: { kind: "user", id: u.id },
+            credentialId: "00000000-0000-0000-0000-000000000000",
+          }),
+        /credential .* not found/,
+      );
+    });
+  },
+);
+
+test(
+  "deleting a credential nulls out credentialId on bound sessions (ON DELETE SET NULL)",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async () => {
+      const { mintRunnerSession, lookupRunnerSession } = await import(
+        "../../server/shared/utils/runner-sessions-store.ts"
+      );
+      const { createApiKeyCredential, deleteCredential } = await import(
+        "../../server/shared/utils/llm-credentials-store.ts"
+      );
+      const u = await seedUser();
+      const cred = await createApiKeyCredential({
+        ownerKind: "user",
+        ownerId: u.id,
+        provider: "anthropic",
+        displayName: "test",
+        apiKey: "sk-ant-test",
+      });
+      const minted = await mintRunnerSession({
+        userId: u.id,
+        owner: { kind: "user", id: u.id },
+        credentialId: cred.id,
+      });
+      await deleteCredential(cred.id);
+      // Session row survives — token still resolves, but credentialId is null.
+      const resolved = await lookupRunnerSession(minted.token);
+      assert.ok(resolved);
+      assert.equal(resolved.credentialId, null);
     });
   },
 );

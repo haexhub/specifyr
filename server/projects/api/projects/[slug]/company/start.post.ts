@@ -176,13 +176,22 @@ export default defineEventHandler(async (event) => {
           continue;
         }
         profilesByRole.set(role, profile);
-        if (profile.credential.mode === "oauth_claude") {
+        // Mint a credential-bound runner session for every credential the
+        // proxy can route. Anthropic is the only api_key provider proxied
+        // today; the others still inject their raw key into the agent env
+        // until the proxy grows endpoints for them.
+        const proxied =
+          profile.credential.mode === "oauth_claude" ||
+          (profile.credential.mode === "api_key" &&
+            profile.provider === "anthropic");
+        if (proxied) {
           const minted = await mintRunnerSession({
             userId,
             owner: {
               kind: profile.credential.ownerKind,
               id: profile.credential.ownerId,
             },
+            credentialId: profile.credential.id,
           });
           agentSessionTokens.set(role, minted.token);
         }
@@ -290,8 +299,24 @@ export default defineEventHandler(async (event) => {
         const cred = profile.credential;
         if (cred.mode === "api_key") {
           if (profile.provider === "anthropic") {
-            env.ANTHROPIC_API_KEY = cred.apiKey;
-            if (cred.baseUrl) env.ANTHROPIC_BASE_URL = cred.baseUrl;
+            // Route Anthropic api_key through the proxy too — the agent
+            // container never sees the real key. Always pin to proxyUrl
+            // (COMPANY_CLAUDE_PROXY_URL): cred.baseUrl is the *upstream*
+            // URL the proxy hits with the decrypted key, NOT a per-agent
+            // override; letting it win here would send the session token
+            // straight to api.anthropic.com and 401.
+            if (!proxyUrl) {
+              throw new Error(
+                `Agent profile for role '${profile.agentRole}' uses Anthropic api_key but COMPANY_CLAUDE_PROXY_URL is not configured.`,
+              );
+            }
+            if (!sessionToken) {
+              throw new Error(
+                `Agent profile for role '${profile.agentRole}' uses Anthropic api_key but no runner session was minted.`,
+              );
+            }
+            env.ANTHROPIC_BASE_URL = proxyUrl;
+            env.ANTHROPIC_API_KEY = sessionToken;
           } else if (profile.provider === "openai") {
             env.OPENAI_API_KEY = cred.apiKey;
             if (cred.baseUrl) env.OPENAI_BASE_URL = cred.baseUrl;
@@ -305,8 +330,11 @@ export default defineEventHandler(async (event) => {
           }
         } else {
           // oauth_claude — Anthropic only, routed through the proxy.
-          const target = cred.baseUrl || proxyUrl;
-          if (!target) {
+          // Same pin-to-proxyUrl rule as the api_key branch above:
+          // cred.baseUrl is unused here (the claude CLI inside the proxy
+          // ignores it anyway), and letting it override the proxy would
+          // bypass the only path that can decrypt the OAuth blob.
+          if (!proxyUrl) {
             throw new Error(
               `Agent profile for role '${profile.agentRole}' uses Claude OAuth but COMPANY_CLAUDE_PROXY_URL is not configured.`,
             );
@@ -316,7 +344,7 @@ export default defineEventHandler(async (event) => {
               `Agent profile for role '${profile.agentRole}' uses Claude OAuth but no runner session was minted.`,
             );
           }
-          env.ANTHROPIC_BASE_URL = target;
+          env.ANTHROPIC_BASE_URL = proxyUrl;
           env.ANTHROPIC_API_KEY = sessionToken;
         }
         return env;

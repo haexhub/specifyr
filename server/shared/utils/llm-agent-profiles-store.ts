@@ -42,12 +42,19 @@ export type RuntimeCredential =
   | {
       mode: "api_key";
       provider: AgentProfileProvider;
+      // Carried so the runner can mint a credential-bound runner_session
+      // and route the agent through the proxy instead of injecting
+      // `apiKey` directly into the container env (closes V2).
+      id: string;
+      ownerKind: AgentProfileOwnerKind;
+      ownerId: string;
       apiKey: string;
       baseUrl: string | null;
     }
   | {
       mode: "oauth_claude";
       provider: "anthropic";
+      id: string;
       ownerKind: AgentProfileOwnerKind;
       ownerId: string;
       baseUrl: string | null;
@@ -346,6 +353,9 @@ async function resolveProfileCredential(
     return {
       mode: "api_key",
       provider: profile.provider,
+      id: credential.id,
+      ownerKind: credential.ownerKind,
+      ownerId: credential.ownerId,
       apiKey: await decryptString({
         iv: credential.apiKeyIv!,
         tag: credential.apiKeyTag!,
@@ -357,6 +367,7 @@ async function resolveProfileCredential(
   return {
     mode: "oauth_claude",
     provider: "anthropic",
+    id: credential.id,
     ownerKind: credential.ownerKind,
     ownerId: credential.ownerId,
     baseUrl: credential.baseUrl,

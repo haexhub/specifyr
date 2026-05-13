@@ -237,7 +237,7 @@ Keep this updated as PRs land.
 
 | § | Item | Status | Tracking |
 |---|---|---|---|
-| 1 | Proxy-for-all credential modes | partial — `oauth_claude` mode is now fully proxy-mediated with DB-backed credentials + ephemeral tmpfs (no plaintext on disk past spawn). `api_key` mode still injects raw keys; that's the remaining work. | haexhub/haex-claude-proxy#3, specifyr#49 |
+| 1 | Proxy-for-all credential modes | partial — `oauth_claude` mode and Anthropic `api_key` mode are now proxy-mediated (DB-backed credentials, ephemeral tmpfs for OAuth, direct HTTPS forward for api_key). `runner_sessions.credential_id` binds each session to a specific credential row. OpenAI / OpenRouter / Google `api_key` paths still inject raw keys; queued as follow-ups. | haexhub/haex-claude-proxy#3, specifyr#49, specifyr feat/api-key-over-proxy |
 | 2 | Per-company network + quotas + egress allowlist | partial — default `--cpus/--memory/--pids-limit/--ulimit nofile` quotas live, per-company `co-<slug>` bridge replaces the shared `companies` network. Egress allowlist (Squid/Nginx sidecar per company) still open. | specifyr#48 |
 | 3 | Drop docker.sock RW (rootless or sidecar) | not started | — |
 | 4 | Per-org KEK via KMS | planned — Session D; provider: Vault Transit (self-hosted, Compose sidecar). Scope: envelope encryption in `llm-credentials-store.ts` + `secrets-store.ts`, `kms-client.ts` adapter, feature-flag migration. | docs/plans/2026-05-13-saas-followup-plan.md |
