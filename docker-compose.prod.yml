@@ -26,6 +26,11 @@ services:
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       SPECIFYR_DATA_DIR: /data
       SPECIFYR_CREDENTIALS_DIR: /credentials
+      # AES-256-GCM master key for llm_credentials + project secrets.
+      # Mandatory in prod — no file-fallback path is acceptable for a
+      # shared deployment. The claude-proxy (when deployed separately)
+      # must read the SAME value or oauth decryption fails.
+      SPECIFYR_SECRET_KEY: ${SPECIFYR_SECRET_KEY:?SPECIFYR_SECRET_KEY required — generate with `openssl rand -hex 32`}
       # Prod-Default: pinned GHCR-Image. Vor `docker compose up` setzen, z.B.
       #   HERMES_AGENT_IMAGE=ghcr.io/haexhub/hermes-agent:sha-abc1234 docker compose -f docker-compose.prod.yml up
       # Ohne expliziten Wert nimmt die Compose-Substitution `:latest` auf der
