@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "orgs_bridge_subnet_uq" ON "orgs" USING btree ("bridge_subnet") WHERE "orgs"."bridge_subnet" IS NOT NULL;--> statement-breakpoint
+ALTER TABLE "orgs" ADD CONSTRAINT "orgs_bridge_subnet_is_24_chk" CHECK ("orgs"."bridge_subnet" IS NULL OR masklen("orgs"."bridge_subnet") = 24);

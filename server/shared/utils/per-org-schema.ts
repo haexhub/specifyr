@@ -85,7 +85,8 @@ export async function createOrgSchema(
       credential_id uuid NOT NULL REFERENCES "${schema}".service_credentials(id),
       mount_mode text NOT NULL CHECK (mount_mode IN ('vault', 'env')),
       env_var_name text,
-      PRIMARY KEY (spec_hash, credential_id)
+      PRIMARY KEY (spec_hash, credential_id),
+      CHECK (mount_mode <> 'env' OR env_var_name IS NOT NULL)
     );
 
     CREATE TABLE IF NOT EXISTS "${schema}".agent_sessions (

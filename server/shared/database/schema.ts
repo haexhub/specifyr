@@ -56,31 +56,48 @@ export type NewUser = typeof users.$inferInsert;
 // transfer-ownership endpoint, which atomically swaps it and ensures
 // both old and new owners hold an admin membership row. Membership
 // guards key off this column: the owner cannot be removed or demoted.
-export const orgs = pgTable("orgs", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  slug: text("slug").notNull().unique(),
-  name: text("name").notNull(),
-  ownerUserId: uuid("owner_user_id")
-    .notNull()
-    .references(() => users.id, { onDelete: "restrict" }),
-  createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  // /24 from SPECIFYR_BRIDGE_POOL, allocated at org-create, fixed for
-  // the lifetime of the org. Used later by `docker network create
-  // --subnet=...` and Specifyr's IPAM when picking container_ip for
-  // agent runs. Nullable because pre-existing rows get backfilled by
-  // migration 0006; new rows are always populated by the allocator.
-  bridgeSubnet: cidr("bridge_subnet"),
-  // Org-create is a saga (DDL commit, then later vault HTTP call). Only
-  // 'ready' orgs may spawn agents; 'pending_vault_init' means the per-
-  // org schema exists but DEKs/keys haven't been provisioned by vault
-  // yet. The vault HTTP call is Phase 3 — Phase 1 leaves new orgs in
-  // 'pending_vault_init' indefinitely and the agent-start guard returns
-  // 503.
-  initStatus: text("init_status", {
-    enum: ["pending_vault_init", "ready"],
-  }).notNull().default("pending_vault_init"),
-});
+export const orgs = pgTable(
+  "orgs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    name: text("name").notNull(),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "restrict" }),
+    createdBy: uuid("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // /24 from SPECIFYR_BRIDGE_POOL, allocated at org-create, fixed for
+    // the lifetime of the org. Used later by `docker network create
+    // --subnet=...` and Specifyr's IPAM when picking container_ip for
+    // agent runs. Nullable because pre-existing rows get backfilled by
+    // migration 0006; new rows are always populated by the allocator.
+    bridgeSubnet: cidr("bridge_subnet"),
+    // Org-create is a saga (DDL commit, then later vault HTTP call). Only
+    // 'ready' orgs may spawn agents; 'pending_vault_init' means the per-
+    // org schema exists but DEKs/keys haven't been provisioned by vault
+    // yet. The vault HTTP call is Phase 3 — Phase 1 leaves new orgs in
+    // 'pending_vault_init' indefinitely and the agent-start guard returns
+    // 503.
+    initStatus: text("init_status", {
+      enum: ["pending_vault_init", "ready"],
+    }).notNull().default("pending_vault_init"),
+  },
+  (t) => ({
+    // Partial unique: NULLs allowed during the 0006 backfill window and
+    // for any row that pre-dates the allocator, but two orgs may never
+    // share a populated subnet (network-isolation invariant).
+    bridgeSubnetUq: uniqueIndex("orgs_bridge_subnet_uq")
+      .on(t.bridgeSubnet)
+      .where(sql`${t.bridgeSubnet} IS NOT NULL`),
+    // Allocator only ever produces /24s; reject anything else at the DB
+    // boundary so a buggy hand-insert can't break the IPAM assumption.
+    bridgeSubnetIs24: check(
+      "orgs_bridge_subnet_is_24_chk",
+      sql`${t.bridgeSubnet} IS NULL OR masklen(${t.bridgeSubnet}) = 24`,
+    ),
+  }),
+);
 
 export type Org = typeof orgs.$inferSelect;
 export type NewOrg = typeof orgs.$inferInsert;

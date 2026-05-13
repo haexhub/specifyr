@@ -112,9 +112,10 @@ test(
         }),
       ]);
       assert.notEqual(cidrA, cidrB);
-      // Both should be inside the pool
-      assert.match(cidrA, /^10\.\d+\.\d+\.0\/24$/);
-      assert.match(cidrB, /^10\.\d+\.\d+\.0\/24$/);
+      // Pool is 10.20.0.0/14 → second octet must be 20–23, suffix .0/24.
+      const inPool = /^10\.(20|21|22|23)\.\d+\.0\/24$/;
+      assert.match(cidrA, inPool);
+      assert.match(cidrB, inPool);
     });
   },
 );

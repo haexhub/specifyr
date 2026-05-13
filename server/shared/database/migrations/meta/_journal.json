@@ -50,6 +50,13 @@
       "when": 1778700400000,
       "tag": "0006_backfill_org_vault_init",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1778708550871,
+      "tag": "0007_stale_onslaught",
+      "breakpoints": true
     }
   ]
 }
