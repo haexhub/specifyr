@@ -41,7 +41,7 @@ and the open-egress model with a single, spec-driven mechanism.
 
 ## Big picture
 
-```
+```text
 ┌─ Host ─────────────────────────────────────────────────────────────┐
 │                                                                    │
 │  ┌─ specifyr-vault ──────────────────────┐  ┌─ specifyr-dns ────┐  │
@@ -243,7 +243,7 @@ network. Specifyr-server holds it for milliseconds.
 
 ### Challenge / response
 
-```
+```text
 agent-process                            specifyr-vault
      │                                         │
      │ POST /auth/challenge                    │
@@ -487,7 +487,7 @@ container per org) is explicitly out of scope — see Non-Goals.
 
 The encryption hierarchy:
 
-```
+```text
 KEK  (Key Encryption Key)        — outside Postgres, ONE per instance
   │
   │  encrypts
@@ -551,16 +551,22 @@ KEK rotation is also out of scope for v1 — designed for it (every
 
 ## Data model (Drizzle sketch)
 
-The existing global `orgs` table gains one column:
+The existing global `orgs` table gains two columns:
 
 ```ts
-// orgs — existing table, one new column
+// orgs — existing table, two new columns
 export const orgs = pgTable('orgs', {
   // ... existing columns ...
   // /24 from SPECIFYR_BRIDGE_POOL, allocated at org-create, fixed
   // for the lifetime of the org. Used by docker network create
   // --subnet=... and by Specifyr's IPAM for picking container_ip.
   bridgeSubnet: cidr('bridge_subnet').notNull(),
+  // Org-create is a saga (DDL commit, then vault call). 'ready' is
+  // the only state in which agents may spawn; any other state means
+  // the vault init hasn't finished yet (or failed and needs retry).
+  initStatus: text('init_status', {
+    enum: ['pending_vault_init', 'ready'],
+  }).notNull().default('pending_vault_init'),
 });
 ```
 
@@ -625,7 +631,16 @@ export const agentSessions = pgTable('agent_sessions', {
   createdAt: timestamp('created_at').defaultNow(),
   expiresAt: timestamp('expires_at').notNull(),
   revokedAt: timestamp('revoked_at'),
-});
+}, t => ({
+  // Concurrent agent spawns must never reserve the same container_ip.
+  // Partial unique index: only live reservations are unique; expired
+  // and revoked rows can share an IP (the IP is then free for reuse).
+  // Implemented as `CREATE UNIQUE INDEX ... WHERE status IN
+  // ('pending','active')` in the migration.
+  oneLiveIpReservation: uniqueIndex()
+    .on(t.containerIp)
+    .where(sql`${t.status} IN ('pending', 'active')`),
+}));
 
 // master_keys — per-org DEK(s), encrypted with vault-wide KEK.
 // Lives in each org's own schema. Vault-only access.
@@ -756,15 +771,20 @@ dependency for any agent run.
 ### Org create
 
 Owned by Specifyr (the existing org-onboarding code path), with one
-synchronous call out to vault for the crypto step.
+asynchronous call out to vault for the crypto step. Cross-service
+"transactional rollback" is not real — an HTTP call to vault cannot
+be undone by a Postgres rollback, and vault can't see Specifyr's
+DDL until it commits anyway. So org-create runs as a two-step
+saga with a `pending` status on the org row.
 
 1. **Allocate a bridge subnet** for the new org from the global pool
    (`SPECIFYR_BRIDGE_POOL`, e.g. `10.20.0.0/14`). Specifyr picks the
    next free `/24` by scanning `orgs.bridge_subnet` of existing orgs.
    The pool is sized for the deployment's expected org count (a /14
    gives 1024 /24 subnets ≈ 1024 orgs).
-2. Specifyr DDL (transactional):
-   - `INSERT INTO orgs` (or `UPDATE`) with `bridge_subnet`.
+2. **DDL transaction (committed before vault is called)**:
+   - `INSERT INTO orgs` with `bridge_subnet` and `init_status =
+     'pending_vault_init'` (new status column on `orgs`).
    - `CREATE SCHEMA org_<id>`.
    - Create the per-org tables (`service_credentials`, `agent_specs`,
      `agent_spec_secrets`, `agent_sessions`, `master_keys`,
@@ -774,14 +794,37 @@ synchronous call out to vault for the crypto step.
      gets INSERT only — no UPDATE/DELETE).
    - Grant `specifyr_vault` role the access it needs across the new
      schema (read on credentials/specs/sessions, append on audit).
-3. Specifyr → vault: `POST /internal/orgs/<id>/init` (mTLS or
+   - **COMMIT.** From here on, vault can see the schema.
+3. **Specifyr → vault: `POST /internal/orgs/<id>/init`** (mTLS or
    shared-secret authenticated; this endpoint is not exposed to
-   agent bridges, only to the Specifyr-vault peer link).
-4. Vault: generates a 32-byte DEK, wraps it with the active KEK,
+   agent bridges, only to the Specifyr-vault peer link). The
+   endpoint is **idempotent on `org_id`**: if a row in
+   `org_<id>.master_keys` already exists with `active=true`, vault
+   returns 200 with the existing kid rather than generating a new
+   DEK (this is what makes retry safe).
+4. **Vault**: generates a 32-byte DEK, wraps it with the active KEK,
    `INSERT` into `org_<id>.master_keys` with `active=true` and
    `kek_kid` pointing at the KEK used. Returns 200.
-5. Specifyr commits the org-onboarding transaction. If step 3 fails,
-   the DDL is rolled back — no half-initialised orgs.
+5. **Specifyr** `UPDATE orgs SET init_status = 'ready'` on success.
+   Until that flip, the org cannot spawn agents (the agent-start
+   path refuses to run for any org whose `init_status != 'ready'`).
+
+**Failure handling.** If step 3 or 4 fails (network, vault down,
+KEK provider down), the org row stays in `pending_vault_init`
+indefinitely — no time-out, no automatic rollback. Two recovery
+paths:
+
+- **Synchronous retry from the API**: the same onboarding endpoint
+  can be re-hit; it sees `init_status='pending_vault_init'` and
+  re-attempts step 3. Idempotency makes this safe.
+- **Background reconciler**: a periodic job (every few minutes)
+  picks up orgs stuck in `pending_vault_init` for >N minutes and
+  retries the vault call. Operators can also drive it manually.
+
+We deliberately do **not** auto-roll-back the DDL on vault failure.
+Dropping a schema risks losing in-progress work if anyone has
+already raced to write into it; leaving an empty schema with
+`init_status=pending` is cheap and recoverable.
 
 The bridge subnet is set once and never changes for the lifetime of
 the org. Network creation (`docker network create co-<slug>
@@ -899,9 +942,12 @@ enforcement.
 - Vault-wide `specifyr_vault` schema with `jwt_signing_key` table
   (one active row).
 - Per-org tables under `org_<id>` schemas (Layer 1+2).
-- Drizzle migration adds `org_<id>` schema bootstrap on org create,
-  generates the org's DEK, wraps with KEK, inserts into
-  `master_keys`.
+- Schema bootstrap on org create (DDL only — `CREATE SCHEMA`,
+  tables, role grants). DEK generation is **not** part of the
+  migration; that's vault's job over `POST /internal/orgs/<id>/init`
+  (see Bootstrap sequences → Org create). The migration leaves
+  `master_keys` empty for the org to be filled by vault after
+  commit.
 - Per-org Postgres role provisioning.
 - KEK source: pluggable interface (`OpenBaoKekProvider`,
   `EnvKekProvider`); default to `EnvKekProvider` for dev.
