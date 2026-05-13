@@ -23,6 +23,19 @@ export default defineEventHandler(async (event) => {
   const broker = await loadTurnBroker();
   if (broker.isRunning(slug, stepId, sid)) {
     broker.cancel(slug, stepId, sid);
+    // cancel() only signals the runner; the broker's catch+finally still writes
+    // turn_failed / updateSessionMeta to disk before clearing `running`. Poll
+    // until that's done so we don't rm files mid-write.
+    const deadline = Date.now() + 5000;
+    while (broker.isRunning(slug, stepId, sid) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    if (broker.isRunning(slug, stepId, sid)) {
+      throw createError({
+        statusCode: 503,
+        statusMessage: "Turn cancellation timed out — please retry",
+      });
+    }
   }
 
   const store = await loadSessionStore();

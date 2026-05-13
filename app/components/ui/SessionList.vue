@@ -69,8 +69,9 @@ function relative(iso: string): string {
         </button>
         <button
           type="button"
-          class="absolute right-1 top-1/2 hidden size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition group-hover:flex group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+          class="absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-destructive/10 hover:text-destructive"
           :title="$t('sessions.delete')"
+          :aria-label="$t('sessions.delete')"
           @click.stop="emit('delete', session, $event)"
         >
           <Trash2 class="size-3" />
