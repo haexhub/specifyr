@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/haexhub/specifyr/compare/v0.13.1...v0.14.0) (2026-05-13)
+
+
+### Features
+
+* **vault:** phase 1 data layer for agent vault ([#62](https://github.com/haexhub/specifyr/issues/62)) ([4a06c30](https://github.com/haexhub/specifyr/commit/4a06c30e95a986d41f74a0cdb6fbdb0860c8905a))
+
 ## [0.13.1](https://github.com/haexhub/specifyr/compare/v0.13.0...v0.13.1) (2026-05-13)
 
 
