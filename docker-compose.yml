@@ -19,6 +19,11 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       NODE_ENV: development
+      # pnpm 11 prüft beim `pnpm dev` deps-status und will bei Drift einen
+      # interaktiven "modules purgen?"-Prompt — ohne TTY exit 1. `.npmrc`
+      # `confirm-modules-purge=false` wirkt in 11.0.9 nicht; `CI=true` ist
+      # der dokumentierte Fallback und reicht hier.
+      CI: "true"
       # Image-Tag für Agent-Container (falls verwendet). Default ist lokal gebaut.
       HERMES_AGENT_IMAGE: ${HERMES_AGENT_IMAGE:-hermes-agent:dev}
       # Pfade zum Laufzeit-Datenverzeichnis (~/.specifyr). Im Container liegt es
