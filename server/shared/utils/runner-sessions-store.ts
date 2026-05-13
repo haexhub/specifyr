@@ -22,7 +22,11 @@
 import { randomBytes } from "node:crypto";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { getDb } from "../database/client";
-import { runnerSessions, type RunnerSession } from "../database/schema";
+import {
+  llmCredentials,
+  runnerSessions,
+  type RunnerSession,
+} from "../database/schema";
 
 export type SessionOwner = { kind: "user" | "org"; id: string };
 
@@ -57,6 +61,36 @@ const DEFAULT_TTL_MS = 60 * 60 * 1000; // 1h
 export async function mintRunnerSession(input: MintInput): Promise<MintResult> {
   const db = getDb();
   if (!db) throw new Error("DB not configured");
+
+  // Defense-in-depth: refuse to bind a session to a credential the
+  // caller's owner doesn't actually own. The credential resolver
+  // (llm-agent-profiles-store.ts:usableCredentialForProfile) already
+  // enforces this when the profile is loaded, but minting is a separate
+  // entry point — keeping the invariant local to the store means a
+  // future caller can't accidentally cross owners.
+  if (input.credentialId) {
+    const [credential] = await db
+      .select({
+        ownerKind: llmCredentials.ownerKind,
+        ownerId: llmCredentials.ownerId,
+      })
+      .from(llmCredentials)
+      .where(eq(llmCredentials.id, input.credentialId))
+      .limit(1);
+    if (!credential) {
+      throw new Error(
+        `Cannot mint session: credential ${input.credentialId} not found`,
+      );
+    }
+    if (
+      credential.ownerKind !== input.owner.kind ||
+      credential.ownerId !== input.owner.id
+    ) {
+      throw new Error(
+        "Cannot mint session: credential does not belong to the requested owner",
+      );
+    }
+  }
 
   const token = randomBytes(32).toString("hex");
   const ttl = input.ttlMs ?? DEFAULT_TTL_MS;

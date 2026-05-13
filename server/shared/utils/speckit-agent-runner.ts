@@ -133,8 +133,12 @@ export async function createSpeckitRunnerFactory(input: {
       runnerKey: profile.runnerKey,
     });
   } else {
-    const proxyUrl =
-      cred.baseUrl || input.runtimeConfig?.companyClaudeProxyUrl || "";
+    // Pin to the configured proxy URL: cred.baseUrl is the *upstream*
+    // URL the proxy uses with the decrypted key, not a per-credential
+    // proxy override. Letting it win would send a session token straight
+    // to api.anthropic.com (401) and, for OAuth, bypass the only path
+    // that can decrypt the blob.
+    const proxyUrl = input.runtimeConfig?.companyClaudeProxyUrl || "";
     if (!proxyUrl) {
       throw createError({
         statusCode: 400,

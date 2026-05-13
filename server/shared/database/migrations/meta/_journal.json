@@ -29,6 +29,13 @@
       "when": 1778671755877,
       "tag": "0003_clever_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1778673564592,
+      "tag": "0004_bumpy_penance",
+      "breakpoints": true
     }
   ]
 }

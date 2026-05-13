@@ -322,6 +322,10 @@ export const runnerSessions = pgTable(
   },
   (t) => ({
     userIdx: index("runner_sessions_user_idx").on(t.userId, t.expiresAt),
+    // Without an index here, `ON DELETE SET NULL` would do a sequential
+    // scan of `runner_sessions` for every credential delete — fine in
+    // dev, painful once the table grows.
+    credentialIdx: index("runner_sessions_credential_idx").on(t.credentialId),
   }),
 );
 
