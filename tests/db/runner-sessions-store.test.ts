@@ -71,6 +71,71 @@ test(
       assert.equal(resolved.userId, u.id);
       assert.equal(resolved.owner.kind, "org");
       assert.equal(resolved.owner.id, org.id);
+      assert.equal(resolved.credentialId, null);
+    });
+  },
+);
+
+test(
+  "mintRunnerSession persists credentialId; lookup returns it",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async () => {
+      const { mintRunnerSession, lookupRunnerSession } = await import(
+        "../../server/shared/utils/runner-sessions-store.ts"
+      );
+      const { createApiKeyCredential } = await import(
+        "../../server/shared/utils/llm-credentials-store.ts"
+      );
+      const u = await seedUser();
+      const cred = await createApiKeyCredential({
+        ownerKind: "user",
+        ownerId: u.id,
+        provider: "anthropic",
+        displayName: "test",
+        apiKey: "sk-ant-test",
+      });
+      const minted = await mintRunnerSession({
+        userId: u.id,
+        owner: { kind: "user", id: u.id },
+        credentialId: cred.id,
+      });
+      const resolved = await lookupRunnerSession(minted.token);
+      assert.ok(resolved);
+      assert.equal(resolved.credentialId, cred.id);
+    });
+  },
+);
+
+test(
+  "deleting a credential nulls out credentialId on bound sessions (ON DELETE SET NULL)",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async () => {
+      const { mintRunnerSession, lookupRunnerSession } = await import(
+        "../../server/shared/utils/runner-sessions-store.ts"
+      );
+      const { createApiKeyCredential, deleteCredential } = await import(
+        "../../server/shared/utils/llm-credentials-store.ts"
+      );
+      const u = await seedUser();
+      const cred = await createApiKeyCredential({
+        ownerKind: "user",
+        ownerId: u.id,
+        provider: "anthropic",
+        displayName: "test",
+        apiKey: "sk-ant-test",
+      });
+      const minted = await mintRunnerSession({
+        userId: u.id,
+        owner: { kind: "user", id: u.id },
+        credentialId: cred.id,
+      });
+      await deleteCredential(cred.id);
+      // Session row survives — token still resolves, but credentialId is null.
+      const resolved = await lookupRunnerSession(minted.token);
+      assert.ok(resolved);
+      assert.equal(resolved.credentialId, null);
     });
   },
 );

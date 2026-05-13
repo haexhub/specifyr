@@ -1,0 +1,2 @@
+ALTER TABLE "runner_sessions" ADD COLUMN "credential_id" uuid;--> statement-breakpoint
+ALTER TABLE "runner_sessions" ADD CONSTRAINT "runner_sessions_credential_id_llm_credentials_id_fk" FOREIGN KEY ("credential_id") REFERENCES "public"."llm_credentials"("id") ON DELETE set null ON UPDATE no action;

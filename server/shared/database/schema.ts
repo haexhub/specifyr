@@ -305,6 +305,15 @@ export const runnerSessions = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     ownerKind: text("owner_kind", { enum: ["user", "org"] }).notNull(),
     ownerId: uuid("owner_id").notNull(),
+    // Bound credential. When set, the proxy uses this row as the source
+    // of truth for upstream routing (api_key or oauth_claude mode); when
+    // null (legacy rows minted before Session A), the proxy falls back
+    // to "the owner's first enabled oauth_claude anthropic credential".
+    // ON DELETE SET NULL so revoking a credential invalidates its bound
+    // sessions without losing audit history.
+    credentialId: uuid("credential_id").references(() => llmCredentials.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

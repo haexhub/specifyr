@@ -29,6 +29,13 @@ export type SessionOwner = { kind: "user" | "org"; id: string };
 export type MintInput = {
   userId: string;
   owner: SessionOwner;
+  /**
+   * Credential the proxy should use when this token is presented. Bound
+   * sessions let the proxy route api_key mode to the right upstream
+   * without guessing from URL/path. Optional for backward-compat with
+   * pre-Session-A code paths that minted oauth_claude-only tokens.
+   */
+  credentialId?: string;
   /** Defaults to 1 hour. */
   ttlMs?: number;
 };
@@ -60,6 +67,7 @@ export async function mintRunnerSession(input: MintInput): Promise<MintResult> {
     userId: input.userId,
     ownerKind: input.owner.kind,
     ownerId: input.owner.id,
+    credentialId: input.credentialId ?? null,
     expiresAt,
   });
   return { token, expiresAt };
@@ -68,6 +76,7 @@ export async function mintRunnerSession(input: MintInput): Promise<MintResult> {
 export type ResolvedSession = {
   userId: string;
   owner: SessionOwner;
+  credentialId: string | null;
   expiresAt: Date;
 };
 
@@ -97,6 +106,7 @@ export async function lookupRunnerSession(
   return {
     userId: row.userId,
     owner: { kind: row.ownerKind, id: row.ownerId },
+    credentialId: row.credentialId,
     expiresAt: row.expiresAt,
   };
 }

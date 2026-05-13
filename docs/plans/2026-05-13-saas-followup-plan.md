@@ -305,3 +305,39 @@ Defer until the engineering items above are done.
 - Session C: drop docker.sock RW (rootless docker Option A)
 - Session D: per-org KEK via KMS (provider decision: Vault Transit)
 - Session E: extend RLS to remaining tables + audit log
+
+### 2026-05-13 — Session A: Anthropic api_key over proxy
+
+**Landed (specifyr feat/api-key-over-proxy + haex-claude-proxy feat/api-key-forwarding):**
+- Schema bump: `runner_sessions.credential_id` (`ON DELETE SET NULL`, migration `0003_clever_namorita.sql`)
+- `mintRunnerSession({ credentialId })` + `lookupRunnerSession` returns it; legacy rows
+  surface `credentialId: null` and the proxy falls back to the old "latest enabled
+  oauth_claude/anthropic for this owner" lookup
+- `RuntimeCredential` carries `id` + `ownerKind/Id` on both variants so the runner can
+  bind the session to the exact credential row
+- `start.post.ts` (company) + `speckit-agent-runner.ts`: Anthropic api_key joins
+  oauth_claude on the proxy path — agent env only ever sees a session token and the
+  proxy URL, never the raw `sk-ant-...` key
+- Proxy `createCredentialsStore.load(ownerKind, ownerId, credentialId?)` returns a
+  discriminated union (`mode: 'oauth_claude' | 'api_key'`); RLS still gates the SELECT
+- New `forwardAnthropicMessages(req, res, body, ctx)` in `server.js`: when the resolved
+  credential is api_key, the request is HTTPS-forwarded to `api.anthropic.com` (or the
+  per-credential `baseUrl` override) with `x-api-key: <decrypted>` instead of spawning
+  the `claude` CLI. Streaming and non-streaming paths both pipe upstream → client
+  verbatim
+- Tests: 4 new in `test/auth.test.js` (api_key load path, credentialId branch, disabled
+  guard, UUID validation), 2 new in `tests/db/runner-sessions-store.test.ts` (credentialId
+  round-trip + ON DELETE SET NULL behavior)
+
+**Scope decision — Anthropic only this round:**
+- OpenAI / OpenRouter / Google api_key still inject raw keys. The proxy doesn't yet
+  forward `/v1/chat/completions` (today's handler spawns claude for OAuth) or any
+  Google endpoint shape. Queued for a follow-up; tracker row §1 in
+  [SAAS_ROADMAP.md](../SAAS_ROADMAP.md) reflects the partial close.
+
+**Still open (pick next):**
+- Session A follow-up: OpenAI/OpenRouter/Google `api_key` over proxy
+- Session B: egress allowlist per company (Squid sidecar, `internal: true` bridge)
+- Session C: drop docker.sock RW (rootless docker Option A)
+- Session D: per-org KEK via KMS (provider decision: Vault Transit)
+- Session E: extend RLS to remaining tables + audit log

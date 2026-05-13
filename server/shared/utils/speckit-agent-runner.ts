@@ -118,30 +118,34 @@ export async function createSpeckitRunnerFactory(input: {
     });
   }
 
+  // Route through the proxy for both oauth_claude AND Anthropic api_key —
+  // the ACP runner is local (not a container) so this isn't strictly
+  // about env-leak, but keeping the path consistent with company agents
+  // means a single proxy + audit path for every Anthropic request.
   let env: Record<string, string>;
-  if (profile.credential.mode === "api_key") {
+  const cred = profile.credential;
+  if (cred.mode === "api_key" && profile.provider !== "anthropic") {
     env = envForApiKey({
       provider: profile.provider,
-      apiKey: profile.credential.apiKey,
-      baseUrl: profile.credential.baseUrl,
+      apiKey: cred.apiKey,
+      baseUrl: cred.baseUrl,
       model: profile.model,
       runnerKey: profile.runnerKey,
     });
   } else {
     const proxyUrl =
-      profile.credential.baseUrl || input.runtimeConfig?.companyClaudeProxyUrl || "";
+      cred.baseUrl || input.runtimeConfig?.companyClaudeProxyUrl || "";
     if (!proxyUrl) {
       throw createError({
         statusCode: 400,
-        statusMessage: "Claude OAuth credentials require COMPANY_CLAUDE_PROXY_URL.",
+        statusMessage:
+          "Anthropic credentials require COMPANY_CLAUDE_PROXY_URL.",
       });
     }
     const session = await mintRunnerSession({
       userId: input.userId,
-      owner: {
-        kind: profile.credential.ownerKind,
-        id: profile.credential.ownerId,
-      },
+      owner: { kind: cred.ownerKind, id: cred.ownerId },
+      credentialId: cred.id,
     });
     env = {
       SPECIFYR_LLM_PROVIDER: profile.provider,

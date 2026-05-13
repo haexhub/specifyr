@@ -176,13 +176,22 @@ export default defineEventHandler(async (event) => {
           continue;
         }
         profilesByRole.set(role, profile);
-        if (profile.credential.mode === "oauth_claude") {
+        // Mint a credential-bound runner session for every credential the
+        // proxy can route. Anthropic is the only api_key provider proxied
+        // today; the others still inject their raw key into the agent env
+        // until the proxy grows endpoints for them.
+        const proxied =
+          profile.credential.mode === "oauth_claude" ||
+          (profile.credential.mode === "api_key" &&
+            profile.provider === "anthropic");
+        if (proxied) {
           const minted = await mintRunnerSession({
             userId,
             owner: {
               kind: profile.credential.ownerKind,
               id: profile.credential.ownerId,
             },
+            credentialId: profile.credential.id,
           });
           agentSessionTokens.set(role, minted.token);
         }
@@ -290,8 +299,23 @@ export default defineEventHandler(async (event) => {
         const cred = profile.credential;
         if (cred.mode === "api_key") {
           if (profile.provider === "anthropic") {
-            env.ANTHROPIC_API_KEY = cred.apiKey;
-            if (cred.baseUrl) env.ANTHROPIC_BASE_URL = cred.baseUrl;
+            // Route Anthropic api_key through the proxy too — the agent
+            // container never sees the real key. baseUrl on the credential
+            // overrides the default proxy URL (useful when tenants pin a
+            // dedicated proxy).
+            const target = cred.baseUrl || proxyUrl;
+            if (!target) {
+              throw new Error(
+                `Agent profile for role '${profile.agentRole}' uses Anthropic api_key but COMPANY_CLAUDE_PROXY_URL is not configured.`,
+              );
+            }
+            if (!sessionToken) {
+              throw new Error(
+                `Agent profile for role '${profile.agentRole}' uses Anthropic api_key but no runner session was minted.`,
+              );
+            }
+            env.ANTHROPIC_BASE_URL = target;
+            env.ANTHROPIC_API_KEY = sessionToken;
           } else if (profile.provider === "openai") {
             env.OPENAI_API_KEY = cred.apiKey;
             if (cred.baseUrl) env.OPENAI_BASE_URL = cred.baseUrl;
