@@ -60,8 +60,6 @@ export default defineNuxtConfig({
     companyClaudeProxyUrl: process.env.COMPANY_CLAUDE_PROXY_URL ?? "",
     companyOpsUrlBase:
       process.env.COMPANY_OPS_URL_BASE ?? "http://specifyr:3000/mcp",
-    anthropicApiKey: process.env.ANTHROPIC_API_KEY ?? "",
-    anthropicBaseUrl: process.env.ANTHROPIC_BASE_URL ?? "",
     public: {
       appName: "specifyr",
       // Public so the Logout link can point at it. Set per-deployment
