@@ -50,12 +50,19 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Prepend the step command context on the very first turn so the selected ACP
-  // agent receives the workflow instructions. The persisted user message stays
-  // exactly as typed; only the runtime prompt carries the extra context.
-  const isFirstUserTurn = (session.messageCount ?? 0) === 0;
+  // Prepend the step command context until the agent has produced a successful
+  // assistant reply. Using messageCount would lock out the inject after failed
+  // turns: appendMessage runs before kickoff "so it survives any failure mode",
+  // so failed user turns still bump the counter — but the agent never saw the
+  // workflow instructions, and on the next attempt it would answer the bare
+  // prompt with no idea which step it's in.
+  const priorMessages = await sessionStore.listMessages(slug, stepId, sid);
+  const hasSuccessfulAssistantReply = priorMessages.some(
+    (m: { role: string; metadata?: { failed?: boolean } }) =>
+      m.role === "assistant" && !m.metadata?.failed,
+  );
   let promptForAgent = content;
-  if (isFirstUserTurn) {
+  if (!hasSuccessfulAssistantReply) {
     const workflowId = await getProjectWorkflowId(slug);
     const workflow =
       workflowId === "spec-kit"
