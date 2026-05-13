@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.0](https://github.com/haexhub/specifyr/compare/v0.11.1...v0.12.0) (2026-05-13)
+
+
+### Features
+
+* **deploy:** wire claude-proxy to DB-backed credentials + RLS role ([#49](https://github.com/haexhub/specifyr/issues/49)) ([2cfbf43](https://github.com/haexhub/specifyr/commit/2cfbf4338cb3dce86a1fafffb68e8fd2b1c981d3))
+* **runner:** default resource quotas + per-company docker network ([#48](https://github.com/haexhub/specifyr/issues/48)) ([0920e4f](https://github.com/haexhub/specifyr/commit/0920e4f5172f3c3893fe189c2b0b1ccc72d8bd50))
+
 ## [0.11.1](https://github.com/haexhub/specifyr/compare/v0.11.0...v0.11.1) (2026-05-13)
 
 
