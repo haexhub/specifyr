@@ -23,6 +23,17 @@ test("baseline hardening flags are emitted for every agent", () => {
   assert.match(s, /--tmpfs \/tmp:rw,size=512m,mode=1777/);
 });
 
+test("default resource limits are emitted when agent.resources is missing", () => {
+  // SaaS floor: every container gets caps even if the agent spec omits them.
+  const args = capabilityFlags(baseInput());
+  assert.ok(args.includes("--cpus=1.5"));
+  assert.ok(args.includes("--memory=2g"));
+  assert.ok(args.includes("--pids-limit=512"));
+  const ulimitIdx = args.indexOf("--ulimit");
+  assert.ok(ulimitIdx >= 0);
+  assert.equal(args[ulimitIdx + 1], "nofile=1024:2048");
+});
+
 test("HERMES_HOME profile volume is always mounted rw + env set", () => {
   const args = capabilityFlags(baseInput());
   const i = args.indexOf("-v");
@@ -261,12 +272,48 @@ test("invalid memory format throws", () => {
   assert.throws(() => capabilityFlags(input), /resources\.memory must be Docker format/);
 });
 
-test("missing resources block emits no resource flags (default)", () => {
+test("agent.resources.pidsLimit overrides the default", () => {
   const input = baseInput();
-  // no input.agent.resources
+  input.agent.resources = { pidsLimit: 2048 };
   const args = capabilityFlags(input);
-  assert.ok(!args.some((a) => typeof a === "string" && a.startsWith("--cpus=")));
-  assert.ok(!args.some((a) => typeof a === "string" && a.startsWith("--memory=")));
+  assert.ok(args.includes("--pids-limit=2048"));
+  assert.ok(!args.includes("--pids-limit=512"));
+});
+
+test("agent.resources.ulimitNofile accepts 'soft:hard' and single-int forms", () => {
+  const a = baseInput();
+  a.agent.resources = { ulimitNofile: "4096:8192" };
+  const args1 = capabilityFlags(a);
+  const idx1 = args1.indexOf("--ulimit");
+  assert.equal(args1[idx1 + 1], "nofile=4096:8192");
+
+  const b = baseInput();
+  b.agent.resources = { ulimitNofile: "8192" };
+  const args2 = capabilityFlags(b);
+  const idx2 = args2.indexOf("--ulimit");
+  assert.equal(args2[idx2 + 1], "nofile=8192");
+});
+
+test("invalid pidsLimit throws (catches typos, non-integer)", () => {
+  const input = baseInput();
+  input.agent.resources = { pidsLimit: "many" };
+  assert.throws(() => capabilityFlags(input), /pidsLimit must be a positive integer/);
+});
+
+test("invalid ulimitNofile throws", () => {
+  const input = baseInput();
+  input.agent.resources = { ulimitNofile: "lots" };
+  assert.throws(() => capabilityFlags(input), /ulimitNofile must be/);
+});
+
+test("setting a resource field to null opts out of that single flag", () => {
+  const input = baseInput();
+  input.agent.resources = { pidsLimit: null };
+  const args = capabilityFlags(input);
+  assert.ok(!args.some((a) => typeof a === "string" && a.startsWith("--pids-limit")));
+  // Other defaults still apply.
+  assert.ok(args.includes("--cpus=1.5"));
+  assert.ok(args.includes("--memory=2g"));
 });
 
 test("flag order: baseline → name → profile mount → workspace → network → whitelist → image", () => {

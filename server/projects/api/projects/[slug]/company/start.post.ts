@@ -29,6 +29,8 @@ import {
   getCompanyRuntimeModule,
   getDockerRunnerFactoryModule,
   getAgentImageBuilderModule,
+  getCompanyNetworkModule,
+  defaultCompanyNetworkPeers,
   getActiveCompany,
   registerCompany,
   isCompanyStarting,
@@ -113,6 +115,8 @@ export default defineEventHandler(async (event) => {
   };
 
   markCompanyStarting(slug);
+  let networkOwnedButUnregistered = false;
+  let networkPeersForCleanup: string[] = [];
   (async () => {
     try {
       const pCwd = projectCwd(slug);
@@ -238,6 +242,36 @@ export default defineEventHandler(async (event) => {
 
       await push("status", { message: "Starting company runtime…" });
 
+      // Per-company docker network. Each company gets its own bridge so
+      // agents from different companies cannot reach each other on IP
+      // (THREAT_MODEL V6, SAAS_ROADMAP §2). The orchestrator container
+      // and the claude-proxy are attached so agents can reach MCP and
+      // the proxy at their usual hostnames. If specifyr is running on
+      // the host (`pnpm dev`, no container), HOSTNAME won't resolve to a
+      // container and the attach is a no-op warning — agents on the
+      // bridge still get isolation, just no MCP reachability via that
+      // bridge (matching the existing host-dev limitation).
+      const { ensureCompanyNetwork } = await getCompanyNetworkModule();
+      const networkPeers = defaultCompanyNetworkPeers();
+      networkPeersForCleanup = networkPeers;
+      let companyNetworkName: string;
+      try {
+        const net = await ensureCompanyNetwork({
+          companyId: slug,
+          peers: networkPeers,
+          onLog: (msg) => push("status", { message: msg }),
+        });
+        companyNetworkName = net.name;
+        networkOwnedButUnregistered = true;
+      } catch (err) {
+        await push("error", {
+          message: err instanceof Error
+            ? `Failed to set up per-company docker network: ${err.message}`
+            : "Failed to set up per-company docker network",
+        });
+        return;
+      }
+
       const opsToken = randomBytes(32).toString("hex");
       const opsUrl = config.companyOpsUrlBase;
       const projectSecrets = await getProjectSecrets(slug);
@@ -295,7 +329,7 @@ export default defineEventHandler(async (event) => {
           if (!img) throw new Error(`No image built for agent role '${role}'`);
           return img;
         },
-        network: "companies",
+        network: companyNetworkName,
         agentLlmResolver: (agent: any) => {
           const profile = profilesByRole.get(agent?.role);
           if (!profile) return null;
@@ -355,6 +389,7 @@ export default defineEventHandler(async (event) => {
       }
 
       registerCompany(slug, runtime);
+      networkOwnedButUnregistered = false;
       const agents = runtime.listAgents();
 
       const sentinelPath = path.join(pCwd, ".specify", "org", "company-started.md");
@@ -377,6 +412,18 @@ export default defineEventHandler(async (event) => {
       await push("error", { message: err instanceof Error ? err.message : "Unexpected error" });
     } finally {
       clearCompanyStarting(slug);
+      // If we created the per-company network but never reached
+      // registerCompany, stop.post.ts will never clean it up. Tear it
+      // down here so we don't leak docker networks on failed starts.
+      if (networkOwnedButUnregistered) {
+        try {
+          const { removeCompanyNetwork } = await getCompanyNetworkModule();
+          await removeCompanyNetwork({
+            companyId: slug,
+            peers: networkPeersForCleanup,
+          });
+        } catch { /* best-effort */ }
+      }
       await push("done", {});
       try { await stream.close(); } catch { /* already closed */ }
     }

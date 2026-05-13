@@ -25,8 +25,12 @@
  *   tools.binaries: [...]   →  -e BINARY_WHITELIST=<csv> (consumed by the
  *                              hermes-agent entrypoint; the image holds
  *                              every catalog binary in quarantine)
- *   agent.resources.cpus    →  --cpus=<value>  (e.g. "1.5" or 2)
- *   agent.resources.memory  →  --memory=<value> (Docker format: 100m, 1g, …)
+ *   agent.resources.cpus    →  --cpus=<value>           override default 1.5
+ *   agent.resources.memory  →  --memory=<value>         override default 2g
+ *   agent.resources.pidsLimit →  --pids-limit=<int>     override default 512
+ *   agent.resources.ulimitNofile →  --ulimit nofile=…   override default 1024:2048
+ *   (any of the above set to `null` opts out of the flag entirely; useful
+ *    only for tightly trusted local-dev scenarios — DO NOT do this in SaaS)
  *
  * Baseline hardening applied to every container regardless of capabilities:
  *   --rm                    remove container on exit
@@ -35,8 +39,10 @@
  *   --cap-drop=ALL          drop every Linux capability (the kernel kind,
  *                           unrelated to our agent capabilities)
  *   --security-opt=no-new-privileges
- *   --tmpfs /tmp:rw,size=64m,mode=1777
+ *   --tmpfs /tmp:rw,size=512m,mode=1777
  *                           agents need writable scratch but we cap it
+ *   resource defaults       see DEFAULT_RESOURCE_LIMITS below — prevents
+ *                           a runaway agent from starving the host
  *
  * Refusals: this function THROWS on inputs it considers unsafe rather than
  * silently emitting weaker flags. Callers must catch and surface to the
@@ -62,6 +68,29 @@ const BASELINE_FLAGS = Object.freeze([
 const BASELINE_FLAGS_PERSISTENT = Object.freeze(
   BASELINE_FLAGS.filter((f) => f !== "--rm")
 );
+
+/**
+ * Default resource limits applied to every agent container. SaaS-ready
+ * floor: prevents a single runaway agent from starving the host. Each
+ * field is independently overridable via `agent.resources` in the agent
+ * spec. Set conservatively — most code agents finish well under these
+ * caps. Bump per-agent if a legitimate workload (large model context,
+ * massive repos) needs more.
+ *
+ * Why default + overridable rather than admin-set-cap-only:
+ *   - operators can tune the host-wide floor via env if needed,
+ *   - agent authors can declare elevated needs explicitly in the spec,
+ *   - a tenant cannot raise their own cap above what the operator
+ *     configures (see SAAS_ROADMAP §2 → admin-cap follow-up).
+ */
+const DEFAULT_RESOURCE_LIMITS = Object.freeze({
+  cpus: "1.5",
+  memory: "2g",
+  pidsLimit: 512,
+  // ulimit nofile=soft:hard. 1024 matches typical Linux user defaults;
+  // hard-capped to prevent fd-exhaustion DoS against the host.
+  ulimitNofile: "1024:2048",
+});
 
 /**
  * @param {object} input
@@ -157,29 +186,50 @@ export function capabilityFlags({
     flags.push("--label", "com.docker.compose.oneoff=False");
   }
 
-  // Resource limits from agent.resources. Both fields are optional and
-  // independently emitted. Format-validated here so config drift surfaces
-  // at start-time, not when docker fails the run.
-  const resources = agent.resources;
-  if (resources && typeof resources === "object") {
-    if (resources.cpus !== undefined && resources.cpus !== null) {
-      const cpus = String(resources.cpus);
-      if (!/^\d+(\.\d+)?$/.test(cpus)) {
-        throw new Error(
-          `capabilityFlags: agent '${agent.role}' resources.cpus must be a positive number, got '${cpus}'`
-        );
-      }
-      flags.push(`--cpus=${cpus}`);
+  // Resource limits. DEFAULT_RESOURCE_LIMITS provides a SaaS-safe floor;
+  // agent.resources overrides per-field. Format-validated here so config
+  // drift surfaces at start-time, not when docker fails the run.
+  const userResources = (agent.resources && typeof agent.resources === "object")
+    ? agent.resources
+    : {};
+  const resources = { ...DEFAULT_RESOURCE_LIMITS, ...userResources };
+
+  const cpus = String(resources.cpus);
+  if (!/^\d+(\.\d+)?$/.test(cpus)) {
+    throw new Error(
+      `capabilityFlags: agent '${agent.role}' resources.cpus must be a positive number, got '${cpus}'`
+    );
+  }
+  flags.push(`--cpus=${cpus}`);
+
+  const memory = String(resources.memory);
+  if (!/^\d+[bkmgBKMG]?$/.test(memory)) {
+    throw new Error(
+      `capabilityFlags: agent '${agent.role}' resources.memory must be Docker format (e.g. '512m', '2g'), got '${memory}'`
+    );
+  }
+  flags.push(`--memory=${memory}`);
+
+  const pidsLimit = resources.pidsLimit;
+  if (pidsLimit !== null) {
+    if (!Number.isInteger(pidsLimit) || pidsLimit <= 0) {
+      throw new Error(
+        `capabilityFlags: agent '${agent.role}' resources.pidsLimit must be a positive integer, got '${pidsLimit}'`
+      );
     }
-    if (resources.memory !== undefined && resources.memory !== null) {
-      const memory = String(resources.memory);
-      if (!/^\d+[bkmgBKMG]?$/.test(memory)) {
-        throw new Error(
-          `capabilityFlags: agent '${agent.role}' resources.memory must be Docker format (e.g. '512m', '2g'), got '${memory}'`
-        );
-      }
-      flags.push(`--memory=${memory}`);
+    flags.push(`--pids-limit=${pidsLimit}`);
+  }
+
+  const ulimitNofile = resources.ulimitNofile;
+  if (ulimitNofile !== null) {
+    const nofile = String(ulimitNofile);
+    // Accept either "soft:hard" or a single int (docker accepts both).
+    if (!/^\d+(:\d+)?$/.test(nofile)) {
+      throw new Error(
+        `capabilityFlags: agent '${agent.role}' resources.ulimitNofile must be 'N' or 'soft:hard', got '${nofile}'`
+      );
     }
+    flags.push("--ulimit", `nofile=${nofile}`);
   }
 
   // Profile volume (HERMES_HOME) is ALWAYS mounted rw — Hermes needs to
