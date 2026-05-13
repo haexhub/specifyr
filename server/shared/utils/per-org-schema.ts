@@ -86,7 +86,9 @@ export async function createOrgSchema(
       mount_mode text NOT NULL CHECK (mount_mode IN ('vault', 'env')),
       env_var_name text,
       PRIMARY KEY (spec_hash, credential_id),
-      CHECK (mount_mode <> 'env' OR env_var_name IS NOT NULL)
+      -- length check: '' would pass IS NOT NULL but produces an unusable
+      -- env var (POSIX env vars must be non-empty identifiers).
+      CHECK (mount_mode <> 'env' OR (env_var_name IS NOT NULL AND length(env_var_name) > 0))
     );
 
     CREATE TABLE IF NOT EXISTS "${schema}".agent_sessions (

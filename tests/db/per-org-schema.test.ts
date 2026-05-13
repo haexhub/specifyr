@@ -26,10 +26,15 @@ const EXPECTED_TABLES = [
 ];
 
 // Drizzle wraps pg errors in a "Failed query: ..." envelope; the
-// original SQLSTATE lives on err.cause. 23505 = unique_violation.
+// original SQLSTATE lives on err.cause. 23505 = unique_violation, 23514
+// = check_violation.
 function isUniqueViolation(err: unknown): boolean {
   const cause = (err as { cause?: { code?: string } }).cause;
   return cause?.code === "23505";
+}
+function isCheckViolation(err: unknown): boolean {
+  const cause = (err as { cause?: { code?: string } }).cause;
+  return cause?.code === "23514";
 }
 
 test("orgSchemaName rejects non-UUID input", () => {
@@ -154,6 +159,66 @@ test(
       await db.execute(sql.raw(`
         INSERT INTO "${schema}".agent_sessions (spec_hash, container_ip, public_key, status, expires_at)
         VALUES ('${specHash}', '10.20.0.5', 'pubkey3', 'pending', now() + interval '1 hour')
+      `));
+    });
+  },
+);
+
+test(
+  "agent_spec_secrets CHECK: env mount_mode requires non-empty env_var_name",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      const orgId = crypto.randomUUID();
+      await db.transaction((tx) => createOrgSchema(tx, orgId));
+      const schema = orgSchemaName(orgId);
+      const specHash = "sha256:check";
+      // Seed FK targets
+      await db.execute(sql.raw(`
+        INSERT INTO "${schema}".agent_specs (hash, owner_id, name, version, body)
+        VALUES ('${specHash}', '00000000-0000-0000-0000-000000000000', 'check', 1, '{}'::jsonb)
+      `));
+      await db.execute(sql.raw(`
+        INSERT INTO "${schema}".master_keys (kek_kid, wrapped_dek, iv, tag)
+        VALUES ('kek-check', 'w', 'i', 't')
+      `));
+      const credId = (
+        (await db.execute(sql.raw(`
+          INSERT INTO "${schema}".service_credentials (name, owner_id, dek_id, encrypted_value, iv, tag)
+          SELECT 'cred-1', '00000000-0000-0000-0000-000000000000', id, 'e', 'i', 't'
+            FROM "${schema}".master_keys LIMIT 1
+          RETURNING id::text
+        `)) as unknown as { rows: Array<{ id: string }> }).rows[0]!.id
+      );
+
+      // env mode + NULL env_var_name → rejected
+      await assert.rejects(
+        db.execute(sql.raw(`
+          INSERT INTO "${schema}".agent_spec_secrets (spec_hash, credential_id, mount_mode, env_var_name)
+          VALUES ('${specHash}', '${credId}'::uuid, 'env', NULL)
+        `)),
+        isCheckViolation,
+      );
+      // env mode + empty env_var_name → rejected
+      await assert.rejects(
+        db.execute(sql.raw(`
+          INSERT INTO "${schema}".agent_spec_secrets (spec_hash, credential_id, mount_mode, env_var_name)
+          VALUES ('${specHash}', '${credId}'::uuid, 'env', '')
+        `)),
+        isCheckViolation,
+      );
+      // env mode + valid name → accepted
+      await db.execute(sql.raw(`
+        INSERT INTO "${schema}".agent_spec_secrets (spec_hash, credential_id, mount_mode, env_var_name)
+        VALUES ('${specHash}', '${credId}'::uuid, 'env', 'GITHUB_TOKEN')
+      `));
+      // vault mode with NULL env_var_name → accepted (replaces the env row)
+      await db.execute(sql.raw(`
+        DELETE FROM "${schema}".agent_spec_secrets WHERE spec_hash = '${specHash}'
+      `));
+      await db.execute(sql.raw(`
+        INSERT INTO "${schema}".agent_spec_secrets (spec_hash, credential_id, mount_mode, env_var_name)
+        VALUES ('${specHash}', '${credId}'::uuid, 'vault', NULL)
       `));
     });
   },
