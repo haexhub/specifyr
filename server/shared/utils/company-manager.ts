@@ -131,6 +131,22 @@ interface AgentImageBuilderModule {
   }) => Promise<string>;
 }
 
+interface CompanyNetworkModule {
+  companyNetworkName: (companyId: string) => string;
+  ensureCompanyNetwork: (input: {
+    companyId: string;
+    peers?: (string | undefined | null)[];
+    onLog?: (message: string) => void;
+    dockerCommand?: string;
+  }) => Promise<{ name: string; created: boolean; attached: string[] }>;
+  removeCompanyNetwork: (input: {
+    companyId: string;
+    peers?: (string | undefined | null)[];
+    onLog?: (message: string) => void;
+    dockerCommand?: string;
+  }) => Promise<{ name: string; removed: boolean }>;
+}
+
 async function loadEsm<T>(rel: string): Promise<T> {
   const url = pathToFileURL(path.join(process.cwd(), rel)).href;
   return import(url) as Promise<T>;
@@ -146,6 +162,28 @@ export async function getDockerRunnerFactoryModule() {
 
 export async function getAgentImageBuilderModule() {
   return loadEsm<AgentImageBuilderModule>("src/runners/agent-image-builder.js");
+}
+
+export async function getCompanyNetworkModule() {
+  return loadEsm<CompanyNetworkModule>("src/runners/company-network.js");
+}
+
+/**
+ * Names of containers that need to be reachable from inside a company's
+ * agent containers (orchestrator MCP, claude proxy). When specifyr runs in
+ * docker compose these resolve via the per-company bridge attached at
+ * start. Override via env (comma-separated) for non-default setups; empty
+ * peers are tolerated by ensureCompanyNetwork.
+ */
+export function defaultCompanyNetworkPeers(): string[] {
+  const fromEnv = process.env.SPECIFYR_COMPANY_NETWORK_PEERS;
+  if (fromEnv) {
+    return fromEnv.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  const peers: string[] = [];
+  if (process.env.HOSTNAME) peers.push(process.env.HOSTNAME);
+  peers.push(process.env.COMPANY_CLAUDE_PROXY_CONTAINER ?? "claude-proxy");
+  return peers;
 }
 
 // globalThis persists across Nitro HMR reloads. A module-scoped Map would be

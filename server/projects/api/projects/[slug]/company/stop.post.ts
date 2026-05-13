@@ -14,6 +14,8 @@
 import {
   getActiveCompany,
   deregisterCompany,
+  getCompanyNetworkModule,
+  defaultCompanyNetworkPeers,
 } from "@su/company-manager";
 
 export default defineEventHandler(async (event) => {
@@ -32,6 +34,17 @@ export default defineEventHandler(async (event) => {
 
   await runtime.stop();
   deregisterCompany(slug);
+
+  // Tear down the per-company docker network created at start. Best-effort:
+  // if cleanup fails (network already gone, peer not connected) the helper
+  // swallows the error, leaving at worst a stale entry in `docker network ls`.
+  try {
+    const { removeCompanyNetwork } = await getCompanyNetworkModule();
+    await removeCompanyNetwork({
+      companyId: slug,
+      peers: defaultCompanyNetworkPeers(),
+    });
+  } catch { /* best-effort */ }
 
   return { status: "stopped", slug };
 });
