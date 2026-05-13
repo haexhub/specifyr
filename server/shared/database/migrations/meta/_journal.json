@@ -36,6 +36,20 @@
       "when": 1778673564592,
       "tag": "0004_bumpy_penance",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1778700360841,
+      "tag": "0005_wandering_bucky",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1778700400000,
+      "tag": "0006_backfill_org_vault_init",
+      "breakpoints": true
     }
   ]
 }

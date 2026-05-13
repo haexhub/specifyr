@@ -5,11 +5,14 @@ import {
   orgInvites,
   orgMemberships,
   orgs,
+  projects,
   users,
   type Org,
   type OrgInvite,
   type OrgMembership,
 } from "../database/schema";
+import { allocateBridgeSubnet } from "./bridge-subnet-allocator";
+import { createOrgSchema } from "./per-org-schema";
 
 export type OrgWithRole = Org & { role: OrgMembership["role"] };
 
@@ -39,6 +42,10 @@ export async function createOrgWithAdmin(
   if (!slug) throw new Error("name does not produce a valid slug");
 
   return db.transaction(async (tx) => {
+    // Allocate the bridge subnet first — advisory lock inside the
+    // allocator serialises concurrent org-creates so two parallel
+    // requests can't reserve the same /24.
+    const bridgeSubnet = await allocateBridgeSubnet(tx);
     const [org] = await tx
       .insert(orgs)
       .values({
@@ -46,6 +53,10 @@ export async function createOrgWithAdmin(
         name: name.trim(),
         ownerUserId: creatorUserId,
         createdBy: creatorUserId,
+        bridgeSubnet,
+        // initStatus defaults to 'pending_vault_init'. Phase 3 (vault
+        // daemon) will flip it to 'ready' after generating the DEK;
+        // until then, agent-start refuses to spawn for this org.
       })
       .returning();
     if (!org) throw new Error("org insert returned nothing");
@@ -54,6 +65,9 @@ export async function createOrgWithAdmin(
       userId: creatorUserId,
       role: "admin",
     });
+    // Provision the per-org Postgres schema + role. Same transaction
+    // as the org row so a DDL failure rolls the whole org-create back.
+    await createOrgSchema(tx, org.id);
     return org;
   });
 }
@@ -70,6 +84,8 @@ export async function listOrgsForUser(userId: string): Promise<OrgWithRole[]> {
       ownerUserId: orgs.ownerUserId,
       createdBy: orgs.createdBy,
       createdAt: orgs.createdAt,
+      bridgeSubnet: orgs.bridgeSubnet,
+      initStatus: orgs.initStatus,
       role: orgMemberships.role,
     })
     .from(orgs)
@@ -77,6 +93,26 @@ export async function listOrgsForUser(userId: string): Promise<OrgWithRole[]> {
     .where(eq(orgMemberships.userId, userId))
     .orderBy(desc(orgs.createdAt));
   return rows;
+}
+
+/**
+ * Looks up the vault `init_status` of the org that owns the given
+ * project slug. Used by the agent-start guard to refuse spawning while
+ * the org's vault provisioning is still pending. Returns null when no
+ * project / org row exists for the slug (caller decides how to handle).
+ */
+export async function getOrgInitStatusForProjectSlug(
+  slug: string,
+): Promise<"pending_vault_init" | "ready" | null> {
+  const db = getDb();
+  if (!db) return null;
+  const [row] = await db
+    .select({ initStatus: orgs.initStatus })
+    .from(orgs)
+    .innerJoin(projects, eq(projects.ownerOrgId, orgs.id))
+    .where(eq(projects.slug, slug))
+    .limit(1);
+  return row?.initStatus ?? null;
 }
 
 export async function getOrgBySlug(slug: string): Promise<Org | null> {
