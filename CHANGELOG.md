@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.1](https://github.com/haexhub/specifyr/compare/v0.11.0...v0.11.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **ui:** use Input/Button instead of ShadcnInput/ShadcnButton ([#44](https://github.com/haexhub/specifyr/issues/44)) ([479c0a4](https://github.com/haexhub/specifyr/commit/479c0a4434f31d9651aa7add1ab505f90df24149))
+
 ## [0.11.0](https://github.com/haexhub/specifyr/compare/v0.10.2...v0.11.0) (2026-05-12)
 
 
