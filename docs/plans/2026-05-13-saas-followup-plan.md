@@ -284,4 +284,24 @@ Defer until the engineering items above are done.
 
 ## Session log
 
-_(empty — first follow-up session will append here)_
+### 2026-05-13 — First follow-up session
+
+**Landed (specifyr #46–49, #51–53 + haex-claude-proxy #3):**
+- Threat model + SaaS roadmap committed (#47)
+- Default resource quotas (`--cpus/--memory/--pids-limit/--ulimit nofile`) + per-company
+  `co-<slug>` bridge replacing shared `companies` network (#48)
+- DB-backed OAuth credentials in proxy: encrypted blobs in `llm_credentials`, decrypted
+  in-process, staged into ephemeral tmpfs HOME, refreshed tokens written back (#49,
+  haex-claude-proxy#3)
+- Postgres RLS on `llm_credentials` actually enforced: proxy authenticates as
+  `haex_claude_proxy` role, `SET LOCAL app.current_owner_*` gates SELECT/UPDATE
+- `/v1/models` endpoint in proxy (Claude Code 2.1+ probe)
+- KMS promoted from "deferred" to full Session D (Vault Transit recommended, envelope
+  encryption, zero-downtime migration strategy) (#53)
+
+**Still open (pick next):**
+- Session A: `api_key` mode over proxy (raw keys still injected into agent containers)
+- Session B: egress allowlist per company (Squid sidecar, `internal: true` bridge)
+- Session C: drop docker.sock RW (rootless docker Option A)
+- Session D: per-org KEK via KMS (provider decision: Vault Transit)
+- Session E: extend RLS to remaining tables + audit log
