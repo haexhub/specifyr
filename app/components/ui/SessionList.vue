@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { MessageSquarePlus, Loader2, CheckCircle2, AlertCircle } from "lucide-vue-next";
+import { MessageSquarePlus, Loader2, CheckCircle2, AlertCircle, Trash2 } from "lucide-vue-next";
 import type { SessionMetadata } from "~/types/types";
 
 const props = defineProps<{
@@ -14,6 +14,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   select: [sessionId: string];
   create: [];
+  delete: [session: SessionMetadata, event: MouseEvent];
 }>();
 
 function relative(iso: string): string {
@@ -44,10 +45,10 @@ function relative(iso: string): string {
     </div>
 
     <ul class="flex flex-col gap-0.5 px-2">
-      <li v-for="session in sessions" :key="session.id">
+      <li v-for="session in sessions" :key="session.id" class="group relative">
         <button
           type="button"
-          class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs transition"
+          class="flex w-full items-start gap-2 rounded-md px-2 py-1.5 pr-8 text-left text-xs transition"
           :class="session.id === activeSessionId
             ? 'bg-accent text-accent-foreground'
             : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'"
@@ -65,6 +66,15 @@ function relative(iso: string): string {
               {{ session.messageCount }} msg · {{ relative(session.updatedAt) }}
             </span>
           </span>
+        </button>
+        <button
+          type="button"
+          class="absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring hover:bg-destructive/10 hover:text-destructive"
+          :title="$t('sessions.delete')"
+          :aria-label="$t('sessions.delete')"
+          @click.stop="emit('delete', session, $event)"
+        >
+          <Trash2 class="size-3" />
         </button>
       </li>
     </ul>
