@@ -725,7 +725,12 @@ export const jwtSigningKey = pgTable('jwt_signing_key', {
   kekKid: text('kek_kid').notNull(),
   createdAt: timestamp('created_at').defaultNow(),
   active: boolean('active').notNull().default(true),
-});
+}, t => ({
+  // Same "at most one active" invariant as masterKeys — enforced at
+  // DB level so concurrent inserts can't create two active signing
+  // keys (which would break JWT verification semantics).
+  oneActive: uniqueIndex().on(t.active).where(sql`${t.active} = true`),
+}));
 ```
 
 ## Bootstrap sequences
