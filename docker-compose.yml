@@ -45,6 +45,12 @@ services:
       # URL des lokalen claude-proxy-Containers. Wenn gesetzt, routen alle
       # Hermes-Agenten ihre Anthropic-API-Calls darüber (nutzt Claude-Abo-OAuth).
       COMPANY_CLAUDE_PROXY_URL: http://claude-proxy:8080
+      # AES-256-GCM master key. Required for the claude-proxy to decrypt
+      # oauth_credentials_data rows; specifyr itself also uses it for
+      # llm_credentials + project secrets. Set to identical value in both
+      # services. Without it, specifyr falls back to /data/master.key
+      # which the proxy can't read — and the OAuth flow breaks.
+      SPECIFYR_SECRET_KEY: ${SPECIFYR_SECRET_KEY:?SPECIFYR_SECRET_KEY required — generate with `openssl rand -hex 32` and add to .env}
     depends_on:
       postgres:
         condition: service_healthy
@@ -102,12 +108,27 @@ services:
     environment:
       # Multi-tenant session-token resolver. Without this the proxy
       # returns 503 on every /v1/messages because it can't map the
-      # incoming runner-session token to an OAuth credentials dir.
-      # Reuses specifyr's Postgres on the shared `companies` network.
-      DATABASE_URL: ${DATABASE_URL:-postgres://postgres:devpw@postgres:5432/specifyr}
-    volumes:
-      # Must be RW so spawned `claude` can refresh OAuth tokens in-place.
-      - ${HOME}/.specifyr/credentials:/credentials
+      # incoming runner-session token to a row in llm_credentials.
+      # The proxy authenticates as the dedicated `haex_claude_proxy`
+      # role so Postgres RLS policies (defined in schema.ts) limit
+      # SELECT/UPDATE to rows matching `app.current_owner_*` settings.
+      # Dev password lives in docker/postgres-init/03-create-haex-claude-
+      # proxy-role.sql; prod is provisioned by Ansible.
+      DATABASE_URL: ${PROXY_DATABASE_URL:-postgres://haex_claude_proxy:devpw@postgres:5432/specifyr}
+      # AES-256-GCM master key shared with specifyr — the proxy uses it
+      # to decrypt oauth_credentials_data fetched from llm_credentials
+      # at request time. Wrong / missing → every request 503.
+      SPECIFYR_SECRET_KEY: ${SPECIFYR_SECRET_KEY:?SPECIFYR_SECRET_KEY required — generate with `openssl rand -hex 32` and add to .env}
+    # No bind-mount for credentials any more — the proxy now pulls
+    # encrypted blobs from the DB and stages plaintext into the per-
+    # request tmpfs below for the spawned `claude` subprocess. Nothing
+    # persists past the spawn lifetime.
+    tmpfs:
+      # uid=1000 matches the `node` user inside haex-claude-proxy:dev
+      # (Debian image, USER node, default uid 1000). size kept small —
+      # each staged HOME is ~1 KB; we just need headroom for concurrent
+      # requests.
+      - /run/credentials:uid=1000,gid=1000,mode=0700,size=8m
     networks:
       - companies
     depends_on:
