@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/haexhub/specifyr/compare/v0.13.0...v0.13.1) (2026-05-13)
+
+
+### Bug Fixes
+
+* **dev+speckit:** unblock dev stack, restore workflow context, delete sessions ([#59](https://github.com/haexhub/specifyr/issues/59)) ([adfd965](https://github.com/haexhub/specifyr/commit/adfd96582393135f6dca8d6db6f427f79fe47ed2))
+
 ## [0.13.0](https://github.com/haexhub/specifyr/compare/v0.12.0...v0.13.0) (2026-05-13)
 
 
