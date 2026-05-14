@@ -14,6 +14,7 @@ import {
 } from "@su/run-manager";
 import { getProjectFromDb } from "@su/project-store";
 import { createSpeckitRunnerFactory } from "@su/speckit-agent-runner";
+import { triggerAutoPush } from "@su/repository-autosync";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -142,6 +143,7 @@ export default defineEventHandler(async (event) => {
       await pushSafe("error", { message: err instanceof Error ? err.message : String(err) });
     } finally {
       deregisterScheduler(slug);
+      triggerAutoPush(slug);
       await pushSafe("done", {});
       try {
         await stream.close();
