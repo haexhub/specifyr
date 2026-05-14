@@ -29,7 +29,16 @@ export interface RunGitResult {
 
 function redact(text: string, token: string | undefined): string {
   if (!token) return text;
-  return text.split(token).join("***");
+  // Strip both the raw token and the base64-encoded Authorization
+  // payload (the form git actually carries on the wire), plus any
+  // residual "Authorization: Basic …" header git may echo in traces.
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return text
+    .split(token)
+    .join("***")
+    .split(basic)
+    .join("***")
+    .replace(/Authorization:\s*Basic\s+[A-Za-z0-9+/=]+/gi, "Authorization: Basic ***");
 }
 
 export async function runGitInProject(
@@ -175,6 +184,7 @@ export async function pullFromRemote(
     cwd: opts.projectRoot,
     args: ["rev-parse", "HEAD"],
   });
+  if (!before.ok) return { ok: false, updated: false, stderr: before.stderr };
   const pull = await runGitInProject({
     cwd: opts.projectRoot,
     args: ["pull", "--ff-only", "origin", opts.branch],
@@ -186,6 +196,7 @@ export async function pullFromRemote(
     cwd: opts.projectRoot,
     args: ["rev-parse", "HEAD"],
   });
+  if (!after.ok) return { ok: false, updated: false, stderr: after.stderr };
   return {
     ok: true,
     updated: before.stdout.trim() !== after.stdout.trim(),

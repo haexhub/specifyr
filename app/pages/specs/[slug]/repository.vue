@@ -60,7 +60,11 @@ watchEffect(() => {
 async function save() {
   error.value = null;
   notice.value = null;
-  if (!url.value.trim() || !username.value.trim() || !token.value) {
+  if (
+    !url.value.trim() ||
+    !username.value.trim() ||
+    (!token.value && !data.value?.hasToken)
+  ) {
     error.value = "URL, username, and token are required.";
     return;
   }
@@ -72,7 +76,7 @@ async function save() {
         url: url.value.trim(),
         branch: branch.value.trim() || "main",
         username: username.value.trim(),
-        token: token.value,
+        ...(token.value ? { token: token.value } : {}),
       },
     });
     token.value = "";

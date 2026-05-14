@@ -17,6 +17,27 @@ export interface RepositoryConfig {
   lastPushedAt?: string;
 }
 
+// Per-slug serialization for meta.json mutations. Concurrent
+// read-modify-write callers (e.g. setLastPushedAt racing with
+// setProjectRepository) would otherwise clobber each other's fields.
+// Mirrors the queue pattern used in secrets-store.ts.
+const writeQueues = new Map<string, Promise<void>>();
+
+function enqueueMetaWrite(
+  slug: string,
+  op: () => Promise<void>,
+): Promise<void> {
+  const prev = writeQueues.get(slug) ?? Promise.resolve();
+  const next = prev.then(op, op);
+  writeQueues.set(
+    slug,
+    next.finally(() => {
+      if (writeQueues.get(slug) === next) writeQueues.delete(slug);
+    }),
+  );
+  return next;
+}
+
 function metaPath(slug: string): string {
   return path.join(dataDir(), ".specifyr", slug, "meta.json");
 }
@@ -70,23 +91,22 @@ export async function getProjectRepository(
  * Record the timestamp of a successful push. No-op when no
  * repository is configured (e.g. user disconnected mid-push).
  */
-export async function setLastPushedAt(
-  slug: string,
-  iso: string,
-): Promise<void> {
-  try {
-    const meta = await readMeta(slug);
-    const repo = (meta as { repository?: unknown }).repository;
-    if (!isRepoConfig(repo)) return;
-    (meta as Record<string, unknown>).repository = {
-      ...repo,
-      lastPushedAt: iso,
-    };
-    await writeMeta(slug, meta);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw err;
-  }
+export function setLastPushedAt(slug: string, iso: string): Promise<void> {
+  return enqueueMetaWrite(slug, async () => {
+    try {
+      const meta = await readMeta(slug);
+      const repo = (meta as { repository?: unknown }).repository;
+      if (!isRepoConfig(repo)) return;
+      (meta as Record<string, unknown>).repository = {
+        ...repo,
+        lastPushedAt: iso,
+      };
+      await writeMeta(slug, meta);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
+  });
 }
 
 export async function setProjectRepository(
@@ -105,23 +125,27 @@ export async function setProjectRepository(
   if (parsed.username || parsed.password) {
     throw new Error("remote URL must not contain inline credentials");
   }
-  const meta = await readMeta(slug);
-  meta.repository = {
-    url: cfg.url,
-    branch: cfg.branch,
-    username: cfg.username,
-  };
-  await writeMeta(slug, meta);
+  await enqueueMetaWrite(slug, async () => {
+    const meta = await readMeta(slug);
+    meta.repository = {
+      url: cfg.url,
+      branch: cfg.branch,
+      username: cfg.username,
+    };
+    await writeMeta(slug, meta);
+  });
 }
 
-export async function clearProjectRepository(slug: string): Promise<void> {
-  try {
-    const meta = await readMeta(slug);
-    if (!("repository" in meta)) return;
-    delete (meta as Record<string, unknown>).repository;
-    await writeMeta(slug, meta);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
-    throw err;
-  }
+export function clearProjectRepository(slug: string): Promise<void> {
+  return enqueueMetaWrite(slug, async () => {
+    try {
+      const meta = await readMeta(slug);
+      if (!("repository" in meta)) return;
+      delete (meta as Record<string, unknown>).repository;
+      await writeMeta(slug, meta);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
+      throw err;
+    }
+  });
 }

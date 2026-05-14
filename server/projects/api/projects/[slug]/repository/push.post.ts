@@ -59,7 +59,10 @@ export default defineEventHandler(async (event) => {
     });
   }
   if (result.pushed) {
-    await setLastPushedAt(slug, new Date().toISOString());
+    // Metadata update must not fail the push: a successful push that
+    // can't record its timestamp is still a successful push. Mirrors
+    // the behaviour of repository-autosync.ts.
+    await setLastPushedAt(slug, new Date().toISOString()).catch(() => {});
   }
   return { ok: true, pushed: result.pushed };
 });
