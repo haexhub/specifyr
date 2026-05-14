@@ -1,5 +1,5 @@
 import { createOrchestrator } from "@su/orchestrator";
-import { listProjectSlugsForUser } from "@su/project-store";
+import { listProjectKeysForUser } from "@su/project-store";
 
 export default defineEventHandler(async (event) => {
   const orchestrator = await createOrchestrator();
@@ -17,7 +17,9 @@ export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
   if (!userId) return all;
 
-  const ownedSlugs = await listProjectSlugsForUser(userId);
-  const ownedSet = new Set(ownedSlugs);
-  return all.filter((p: { slug: string }) => ownedSet.has(p.slug));
+  const ownedKeys = await listProjectKeysForUser(userId);
+  const ownedSet = new Set(ownedKeys.map((k) => `${k.orgId}/${k.slug}`));
+  return all.filter((p: { orgId: string; slug: string }) =>
+    ownedSet.has(`${p.orgId}/${p.slug}`),
+  );
 });

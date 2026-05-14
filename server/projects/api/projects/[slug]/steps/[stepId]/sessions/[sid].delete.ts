@@ -24,16 +24,16 @@ export default defineEventHandler(async (event) => {
   await assertProjectExists(orgId, slug);
 
   const broker = await loadTurnBroker();
-  if (broker.isRunning(slug, stepId, sid)) {
-    broker.cancel(slug, stepId, sid);
+  if (broker.isRunning(orgId, slug, stepId, sid)) {
+    broker.cancel(orgId, slug, stepId, sid);
     // cancel() only signals the runner; the broker's catch+finally still writes
     // turn_failed / updateSessionMeta to disk before clearing `running`. Poll
     // until that's done so we don't rm files mid-write.
     const deadline = Date.now() + 5000;
-    while (broker.isRunning(slug, stepId, sid) && Date.now() < deadline) {
+    while (broker.isRunning(orgId, slug, stepId, sid) && Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
-    if (broker.isRunning(slug, stepId, sid)) {
+    if (broker.isRunning(orgId, slug, stepId, sid)) {
       throw createError({
         statusCode: 503,
         statusMessage: "Turn cancellation timed out — please retry",
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const store = await loadSessionStore();
-  const existed = await store.deleteSession(slug, stepId, sid);
+  const existed = await store.deleteSession(orgId, slug, stepId, sid);
   if (!existed) {
     throw createError({ statusCode: 404, statusMessage: "Session not found" });
   }

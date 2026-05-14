@@ -17,8 +17,8 @@ const CONTEXT_MESSAGES_ON_RESET = 10;
  *     turn runs to completion regardless of whether anyone is watching.
  */
 
-function keyFor(slug, stepId, sid) {
-  return `${slug}|${stepId}|${sid}`;
+function keyFor(orgId, slug, stepId, sid) {
+  return `${orgId}|${slug}|${stepId}|${sid}`;
 }
 
 export class TurnBroker {
@@ -30,8 +30,8 @@ export class TurnBroker {
   }
 
   /** Get-or-create the EventEmitter for a session. Cheap (just listener list). */
-  emitterFor(slug, stepId, sid) {
-    const key = keyFor(slug, stepId, sid);
+  emitterFor(orgId, slug, stepId, sid) {
+    const key = keyFor(orgId, slug, stepId, sid);
     let e = this.emitters.get(key);
     if (!e) {
       e = new EventEmitter();
@@ -43,8 +43,8 @@ export class TurnBroker {
     return e;
   }
 
-  isRunning(slug, stepId, sid) {
-    return this.running.has(keyFor(slug, stepId, sid));
+  isRunning(orgId, slug, stepId, sid) {
+    return this.running.has(keyFor(orgId, slug, stepId, sid));
   }
 
   /**
@@ -56,20 +56,20 @@ export class TurnBroker {
    *          Clients pass this as `since` to the stream endpoint to receive every
    *          event from this turn (and nothing earlier).
    */
-  async startTurn({ slug, stepId, sid, prompt, cwd, claudeSessionId, runnerFactory }) {
-    const key = keyFor(slug, stepId, sid);
+  async startTurn({ orgId, slug, stepId, sid, prompt, cwd, claudeSessionId, runnerFactory }) {
+    const key = keyFor(orgId, slug, stepId, sid);
     if (this.running.has(key)) {
       throw new Error("Turn already running for this session");
     }
 
-    let seq = await this.sessionStore.getLastEventSeq(slug, stepId, sid);
+    let seq = await this.sessionStore.getLastEventSeq(orgId, slug, stepId, sid);
     const startSeq = seq;
-    const emitter = this.emitterFor(slug, stepId, sid);
+    const emitter = this.emitterFor(orgId, slug, stepId, sid);
 
     const append = async (eventName, data) => {
       seq += 1;
       const entry = { seq, event: eventName, data, ts: new Date().toISOString() };
-      await this.sessionStore.appendEvent(slug, stepId, sid, entry);
+      await this.sessionStore.appendEvent(orgId, slug, stepId, sid, entry);
       emitter.emit("event", entry);
       return entry;
     };
@@ -107,7 +107,7 @@ export class TurnBroker {
     // Mark the boundary between "before this turn" and "this turn's events". Clients
     // reconnecting to a running session use this as the `since` cursor so they replay
     // exactly the in-flight turn's events (and nothing earlier).
-    await this.sessionStore.updateSessionMeta(slug, stepId, sid, {
+    await this.sessionStore.updateSessionMeta(orgId, slug, stepId, sid, {
       status: "running",
       runningSinceSeq: startSeq
     });
@@ -129,9 +129,9 @@ export class TurnBroker {
           // a short TTL). Auto-retry once without --resume so the turn succeeds. The user
           // sees a notice; Claude loses previous context but the turn completes normally.
           if (claudeSessionId && errors.some((e) => /no conversation found/i.test(String(e)))) {
-            await this.sessionStore.setClaudeSessionId(slug, stepId, sid, null);
+            await this.sessionStore.setClaudeSessionId(orgId, slug, stepId, sid, null);
 
-            const recentMessages = await this.sessionStore.listMessages(slug, stepId, sid);
+            const recentMessages = await this.sessionStore.listMessages(orgId, slug, stepId, sid);
             const contextMessages = recentMessages.slice(-CONTEXT_MESSAGES_ON_RESET);
             let retryPrompt = prompt;
             if (contextMessages.length > 0) {
@@ -164,7 +164,7 @@ export class TurnBroker {
         }
 
         if (result.claudeSessionId) {
-          await this.sessionStore.setClaudeSessionId(slug, stepId, sid, result.claudeSessionId);
+          await this.sessionStore.setClaudeSessionId(orgId, slug, stepId, sid, result.claudeSessionId);
         }
 
         const finalText =
@@ -172,7 +172,7 @@ export class TurnBroker {
           (typeof result.result?.result === "string" ? result.result.result : "") ||
           "(keine Antwort)";
 
-        const persistedMsg = await this.sessionStore.appendMessage(slug, stepId, sid, {
+        const persistedMsg = await this.sessionStore.appendMessage(orgId, slug, stepId, sid, {
           role: "assistant",
           content: finalText,
           metadata: {
@@ -188,7 +188,7 @@ export class TurnBroker {
           cost: result.result?.total_cost_usd,
           exitCode: result.exitCode
         });
-        await this.sessionStore.updateSessionMeta(slug, stepId, sid, {
+        await this.sessionStore.updateSessionMeta(orgId, slug, stepId, sid, {
           status: "completed",
           runningSinceSeq: null
         });
@@ -196,7 +196,7 @@ export class TurnBroker {
         const message = err instanceof Error ? err.message : String(err);
         // Persist any partial text the user already saw so they don't lose context.
         if (assistantText.trim()) {
-          await this.sessionStore.appendMessage(slug, stepId, sid, {
+          await this.sessionStore.appendMessage(orgId, slug, stepId, sid, {
             role: "assistant",
             content: assistantText.trim(),
             metadata: { failed: true, error: message, partial: true }
@@ -206,7 +206,7 @@ export class TurnBroker {
         // event ambiguously (also used for connection drops). Clients listen for
         // "turn_failed" specifically.
         await append("turn_failed", { message });
-        await this.sessionStore.updateSessionMeta(slug, stepId, sid, {
+        await this.sessionStore.updateSessionMeta(orgId, slug, stepId, sid, {
           status: "failed",
           runningSinceSeq: null
         });
@@ -225,8 +225,8 @@ export class TurnBroker {
   }
 
   /** Manually cancel a running turn (e.g. user pressed "stop"). */
-  cancel(slug, stepId, sid) {
-    const state = this.running.get(keyFor(slug, stepId, sid));
+  cancel(orgId, slug, stepId, sid) {
+    const state = this.running.get(keyFor(orgId, slug, stepId, sid));
     if (state) state.runner.cancel();
   }
 }

@@ -17,8 +17,9 @@ export default defineEventHandler(async (event) => {
   const { store } = await loadStepStateStore();
   const events = await loadEventStore(orgId, slug);
 
-  const current = await store.getStep(slug, stepId);
+  const current = await store.getStep(orgId, slug, stepId);
   const updated = await store.setStatus(
+    orgId,
     slug,
     stepId,
     current.lastSessionId ? "in_progress" : "untouched"

@@ -39,13 +39,13 @@ export default defineEventHandler(async (event) => {
   await assertProjectExists(orgId, slug);
 
   const sessionStore = await loadSessionStore();
-  const session = await sessionStore.getSessionMeta(slug, stepId, sid);
+  const session = await sessionStore.getSessionMeta(orgId, slug, stepId, sid);
   if (!session) {
     throw createError({ statusCode: 404, statusMessage: "Session not found" });
   }
 
   const broker = await loadTurnBroker();
-  if (broker.isRunning(slug, stepId, sid)) {
+  if (broker.isRunning(orgId, slug, stepId, sid)) {
     throw createError({
       statusCode: 409,
       statusMessage: "A turn is already running for this session."
@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
   // so failed user turns still bump the counter — but the agent never saw the
   // workflow instructions, and on the next attempt it would answer the bare
   // prompt with no idea which step it's in.
-  const priorMessages = await sessionStore.listMessages(slug, stepId, sid);
+  const priorMessages = await sessionStore.listMessages(orgId, slug, stepId, sid);
   const hasSuccessfulAssistantReply = priorMessages.some(
     (m: { role: string; metadata?: { failed?: boolean } }) =>
       m.role === "assistant" && !m.metadata?.failed,
@@ -108,13 +108,13 @@ export default defineEventHandler(async (event) => {
   });
 
   // Persist the user message before kickoff so it survives any failure mode.
-  const userMessage = await sessionStore.appendMessage(slug, stepId, sid, {
+  const userMessage = await sessionStore.appendMessage(orgId, slug, stepId, sid, {
     role: "user",
     content
   });
 
   const { store: stepStore } = await loadStepStateStore();
-  await stepStore.markInProgress(slug, stepId, sid);
+  await stepStore.markInProgress(orgId, slug, stepId, sid);
 
   const eventStore = await loadEventStore(orgId, slug);
   await eventStore.append({
@@ -131,6 +131,7 @@ export default defineEventHandler(async (event) => {
   // continues in the background. `startSeq` is the seq value BEFORE this turn began,
   // so the client can stream every event from this turn (and only this turn).
   const { startSeq } = await broker.startTurn({
+    orgId,
     slug,
     stepId,
     sid,

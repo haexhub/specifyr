@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const { store } = await loadStepStateStore();
   const events = await loadEventStore(orgId, slug);
 
-  const updated = await store.markComplete(slug, stepId, body.sessionId ?? null);
+  const updated = await store.markComplete(orgId, slug, stepId, body.sessionId ?? null);
 
   await events.append({
     type: "step_marked_complete",

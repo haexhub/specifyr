@@ -11,5 +11,5 @@ export default defineEventHandler(async (event) => {
   const orgId = await resolveProjectOrgId(slug);
   const { store } = await loadStepStateStore();
   const stepIds = await getProjectStepIds(orgId, slug);
-  return store.listSteps(slug, stepIds);
+  return store.listSteps(orgId, slug, stepIds);
 });

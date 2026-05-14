@@ -93,8 +93,8 @@ async function extractGraphFromMarkdown(tasksMdPath) {
   return tasks;
 }
 
-function graphFilePath(cwd, slug) {
-  return path.join(cwd, SPECIFYR_DIR, slug, "tasks.graph.json");
+function graphFilePath(cwd, orgId, slug) {
+  return path.join(cwd, SPECIFYR_DIR, orgId, slug, "tasks.graph.json");
 }
 
 /**
@@ -102,13 +102,13 @@ function graphFilePath(cwd, slug) {
  * (or the cache doesn't exist), re-extracts via Claude.
  * Throws if no tasks.md exists yet.
  */
-export async function getOrBuildTaskGraph({ cwd = process.cwd(), slug, projectCwd }) {
+export async function getOrBuildTaskGraph({ cwd = process.cwd(), orgId, slug, projectCwd }) {
   const tasksMd = await findTasksMd(projectCwd);
   if (!tasksMd) {
     throw new Error("tasks.md nicht gefunden — erzeuge zuerst Tasks im Step 4.");
   }
 
-  const graphPath = graphFilePath(cwd, slug);
+  const graphPath = graphFilePath(cwd, orgId, slug);
   const [tasksStat, graphExists] = await Promise.all([fs.stat(tasksMd), exists(graphPath)]);
 
   if (graphExists) {
@@ -135,7 +135,7 @@ export async function getOrBuildTaskGraph({ cwd = process.cwd(), slug, projectCw
   return graph;
 }
 
-export async function loadTaskGraph({ cwd = process.cwd(), slug }) {
-  const graphPath = graphFilePath(cwd, slug);
+export async function loadTaskGraph({ cwd = process.cwd(), orgId, slug }) {
+  const graphPath = graphFilePath(cwd, orgId, slug);
   return readJson(graphPath, null);
 }

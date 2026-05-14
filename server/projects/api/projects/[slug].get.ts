@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const orgId = await resolveProjectOrgId(slug);
 
   try {
-    const snapshot = await orchestrator.projectSnapshot(slug);
+    const snapshot = await orchestrator.projectSnapshot(orgId, slug);
     // Enrich with workflow: id (from meta) + full definition (steps etc.). The client uses
     // this directly instead of fetching a separate workflow endpoint.
     const workflowId = await getProjectWorkflowId(orgId, slug);

@@ -9,6 +9,7 @@ import { pathToFileURL } from "node:url";
 interface SchedulerModule {
   RunScheduler: new (opts: {
     cwd: string;
+    orgId: string;
     slug: string;
     projectCwd: string;
     graph: unknown;
@@ -25,17 +26,17 @@ interface SchedulerInstance {
 }
 
 interface TaskGraphModule {
-  getOrBuildTaskGraph(opts: { cwd?: string; slug: string; projectCwd: string }): Promise<unknown>;
-  loadTaskGraph(opts: { cwd?: string; slug: string }): Promise<unknown>;
+  getOrBuildTaskGraph(opts: { cwd?: string; orgId: string; slug: string; projectCwd: string }): Promise<unknown>;
+  loadTaskGraph(opts: { cwd?: string; orgId: string; slug: string }): Promise<unknown>;
 }
 
 interface RunStoreModule {
   RunStore: new (cwd?: string) => {
-    getCurrent(slug: string): Promise<any>;
-    saveCurrent(slug: string, state: any): Promise<any>;
-    initFromGraph(slug: string, graph: any): Promise<any>;
-    readTaskLog(slug: string, taskId: string): Promise<any[]>;
-    setRunStatus(slug: string, patch: any): Promise<any>;
+    getCurrent(orgId: string, slug: string): Promise<any>;
+    saveCurrent(orgId: string, slug: string, state: any): Promise<any>;
+    initFromGraph(orgId: string, slug: string, graph: any): Promise<any>;
+    readTaskLog(orgId: string, slug: string, taskId: string): Promise<any[]>;
+    setRunStatus(orgId: string, slug: string, patch: any): Promise<any>;
   };
 }
 

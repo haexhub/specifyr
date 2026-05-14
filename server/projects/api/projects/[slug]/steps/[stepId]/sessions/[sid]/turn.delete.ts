@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   await assertProjectExists(orgId, slug);
 
   const broker = await loadTurnBroker();
-  broker.cancel(slug, stepId, sid);
+  broker.cancel(orgId, slug, stepId, sid);
 
   setResponseStatus(event, 204);
   return null;

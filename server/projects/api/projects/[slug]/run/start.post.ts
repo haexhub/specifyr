@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   const { getOrBuildTaskGraph } = await getTaskGraphModule();
   let graph;
   try {
-    graph = await getOrBuildTaskGraph({ cwd, slug, projectCwd: pCwd });
+    graph = await getOrBuildTaskGraph({ cwd, orgId, slug, projectCwd: pCwd });
   } catch (err) {
     throw createError({
       statusCode: 400,
@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
 
   const { RunStore } = await getRunStoreModule();
   const runStore = new RunStore(cwd);
-  await runStore.initFromGraph(slug, graph);
+  await runStore.initFromGraph(orgId, slug, graph);
 
   const events = await loadEventStore(orgId, slug);
 
@@ -58,7 +58,7 @@ export default defineEventHandler(async (event) => {
     ownerOrgId: project?.ownerOrgId ?? null,
     runtimeConfig: useRuntimeConfig(),
   });
-  const scheduler = new RunScheduler({ cwd, slug, projectCwd: pCwd, graph, runnerFactory });
+  const scheduler = new RunScheduler({ cwd, orgId, slug, projectCwd: pCwd, graph, runnerFactory });
   registerScheduler(slug, scheduler);
 
   const stream = createEventStream(event);

@@ -12,12 +12,16 @@ export class ArtifactStore {
     await ensureDir(this.rootDir);
   }
 
-  getProjectDir(slug) {
-    return path.join(this.rootDir, slug);
+  getOrgDir(orgId) {
+    return path.join(this.rootDir, orgId);
   }
 
-  getProjectPaths(slug) {
-    const baseDir = this.getProjectDir(slug);
+  getProjectDir(orgId, slug) {
+    return path.join(this.getOrgDir(orgId), slug);
+  }
+
+  getProjectPaths(orgId, slug) {
+    const baseDir = this.getProjectDir(orgId, slug);
     return {
       baseDir,
       spec: path.join(baseDir, "spec.md"),
@@ -30,10 +34,10 @@ export class ArtifactStore {
     };
   }
 
-  async createProject(slug, title, specContent, metaExtras = {}) {
-    const paths = this.getProjectPaths(slug);
+  async createProject(orgId, slug, title, specContent, metaExtras = {}) {
+    const paths = this.getProjectPaths(orgId, slug);
     if (await exists(paths.baseDir)) {
-      throw new Error(`Project '${slug}' already exists.`);
+      throw new Error(`Project '${slug}' already exists in org.`);
     }
     await ensureDir(paths.baseDir);
     await writeText(paths.spec, specContent);
@@ -49,8 +53,8 @@ export class ArtifactStore {
     await writeJson(paths.approvals, []);
   }
 
-  async saveArtifact(slug, type, value) {
-    const paths = this.getProjectPaths(slug);
+  async saveArtifact(orgId, slug, type, value) {
+    const paths = this.getProjectPaths(orgId, slug);
     const targetPath = paths[type];
     if (!targetPath) {
       throw new Error(`Unknown artifact type '${type}'.`);
@@ -62,8 +66,8 @@ export class ArtifactStore {
     await writeText(targetPath, value);
   }
 
-  async loadArtifact(slug, type, fallback = null) {
-    const paths = this.getProjectPaths(slug);
+  async loadArtifact(orgId, slug, type, fallback = null) {
+    const paths = this.getProjectPaths(orgId, slug);
     const targetPath = paths[type];
     if (!targetPath) {
       throw new Error(`Unknown artifact type '${type}'.`);
@@ -74,18 +78,49 @@ export class ArtifactStore {
     return readText(targetPath, fallback ?? "");
   }
 
+  // Lists every project across every org on disk. Returns entries with both
+  // `orgId` (from the directory layout) and `slug`. Callers that only care
+  // about one org should filter the result, or use `listProjectsForOrg`.
   async listProjects() {
     await this.initRoot();
     const fs = await import("node:fs/promises");
-    const entries = await fs.readdir(this.rootDir, { withFileTypes: true });
+    const orgEntries = await fs.readdir(this.rootDir, { withFileTypes: true });
+    const projects = [];
+    for (const orgEntry of orgEntries) {
+      if (!orgEntry.isDirectory()) continue;
+      const orgId = orgEntry.name;
+      const projectEntries = await fs.readdir(this.getOrgDir(orgId), { withFileTypes: true }).catch(() => []);
+      for (const entry of projectEntries) {
+        if (!entry.isDirectory()) continue;
+        const meta = await this.loadArtifact(orgId, entry.name, "meta", null);
+        const run = await this.loadArtifact(orgId, entry.name, "run", null);
+        projects.push({
+          orgId,
+          slug: entry.name,
+          title: meta?.title ?? entry.name,
+          description: meta?.description ?? "",
+          projectRoot: meta?.projectRoot ?? null,
+          specifyInit: meta?.specifyInit ?? null,
+          run
+        });
+      }
+    }
+    return projects.sort((left, right) =>
+      left.orgId === right.orgId ? left.slug.localeCompare(right.slug) : left.orgId.localeCompare(right.orgId)
+    );
+  }
+
+  async listProjectsForOrg(orgId) {
+    const fs = await import("node:fs/promises");
+    const orgDir = this.getOrgDir(orgId);
+    const entries = await fs.readdir(orgDir, { withFileTypes: true }).catch(() => []);
     const projects = [];
     for (const entry of entries) {
-      if (!entry.isDirectory()) {
-        continue;
-      }
-      const meta = await this.loadArtifact(entry.name, "meta", null);
-      const run = await this.loadArtifact(entry.name, "run", null);
+      if (!entry.isDirectory()) continue;
+      const meta = await this.loadArtifact(orgId, entry.name, "meta", null);
+      const run = await this.loadArtifact(orgId, entry.name, "run", null);
       projects.push({
+        orgId,
         slug: entry.name,
         title: meta?.title ?? entry.name,
         description: meta?.description ?? "",

@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
   const requireArtifact = body.requireArtifact === true;
 
   const { store } = await loadStepStateStore();
-  const current = await store.getStep(slug, stepId);
+  const current = await store.getStep(orgId, slug, stepId);
 
   // Already complete — nothing to do.
   if (current.status === "complete") {
@@ -62,7 +62,7 @@ export default defineEventHandler(async (event) => {
     return { completed: false, status: current.status };
   }
 
-  const updated = await store.markComplete(slug, stepId, body.sessionId ?? null);
+  const updated = await store.markComplete(orgId, slug, stepId, body.sessionId ?? null);
   const events = await loadEventStore(orgId, slug);
   await events.append({
     type: "step_auto_completed",

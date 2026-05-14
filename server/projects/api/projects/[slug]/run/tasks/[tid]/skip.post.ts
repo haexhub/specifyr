@@ -22,9 +22,11 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
   const { RunStore } = await getRunStoreModule();
   const store = new RunStore(dataDir());
-  const state = await store.getCurrent(slug);
+  const state = await store.getCurrent(orgId, slug);
   if (!state) throw createError({ statusCode: 404, statusMessage: "Kein Run-State" });
 
   const task = state.tasks[tid];
@@ -37,10 +39,8 @@ export default defineEventHandler(async (event) => {
     lastError: null
   };
 
-  await store.saveCurrent(slug, state);
+  await store.saveCurrent(orgId, slug, state);
 
-  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
-  const orgId = await resolveProjectOrgId(slug);
   const events = await loadEventStore(orgId, slug);
   await events.append({
     type: "task_skipped",

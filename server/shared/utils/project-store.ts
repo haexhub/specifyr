@@ -64,10 +64,24 @@ export async function resolveProjectOrgId(slug: string): Promise<string> {
 /**
  * Slugs of projects the user can access — every project owned by an org
  * the user is a member of.
+ *
+ * @deprecated Use listProjectKeysForUser — slugs are no longer globally unique.
  */
 export async function listProjectSlugsForUser(
   userId: string,
 ): Promise<string[]> {
+  const keys = await listProjectKeysForUser(userId);
+  return keys.map((k) => k.slug);
+}
+
+/**
+ * (orgId, slug) pairs the user can access — every project owned by an org
+ * the user is a member of. Composite key is required because slugs are
+ * unique only per-org.
+ */
+export async function listProjectKeysForUser(
+  userId: string,
+): Promise<{ orgId: string; slug: string }[]> {
   const db = getDb();
   if (!db) return [];
 
@@ -79,10 +93,10 @@ export async function listProjectSlugsForUser(
   if (orgIds.length === 0) return [];
 
   const rows = await db
-    .select({ slug: projects.slug })
+    .select({ orgId: projects.ownerOrgId, slug: projects.slug })
     .from(projects)
     .where(inArray(projects.ownerOrgId, orgIds));
-  return rows.map((r) => r.slug);
+  return rows;
 }
 
 /**

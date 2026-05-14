@@ -148,8 +148,8 @@ export async function createProjectRecord(options: {
     );
   }
 
-  await store.createProject(slug, title, "", meta);
-  await store.saveArtifact(slug, "run", {
+  await store.createProject(options.ownerOrgId, slug, title, "", meta);
+  await store.saveArtifact(options.ownerOrgId, slug, "run", {
     slug,
     currentStage: "draft",
     status: "draft",

@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
   await assertProjectExists(orgId, slug);
 
   const sessionStore = await loadSessionStore();
-  const session = await sessionStore.getSessionMeta(slug, stepId, sid);
+  const session = await sessionStore.getSessionMeta(orgId, slug, stepId, sid);
   if (!session) {
     throw createError({ statusCode: 404, statusMessage: "Session not found" });
   }
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
   const since = Number.parseInt(headerSince ?? querySince, 10) || 0;
 
   const broker = await loadTurnBroker();
-  const emitter = broker.emitterFor(slug, stepId, sid);
+  const emitter = broker.emitterFor(orgId, slug, stepId, sid);
 
   const stream = createEventStream(event);
 
@@ -111,7 +111,7 @@ export default defineEventHandler(async (event) => {
   });
 
   // (2) Disk replay.
-  const diskEvents = (await sessionStore.readEventsSince(slug, stepId, sid, since)) as StoredEvent[];
+  const diskEvents = (await sessionStore.readEventsSince(orgId, slug, stepId, sid, since)) as StoredEvent[];
   for (const e of diskEvents) {
     await push(e);
   }
@@ -131,7 +131,7 @@ export default defineEventHandler(async (event) => {
   // (4) If no turn is running for this session, the disk replay was the entire story.
   // Push a terminal event if the session is interrupted so the client stops its spinner,
   // then close. Without the event the client's EventSource reconnects forever.
-  if (!closed && !broker.isRunning(slug, stepId, sid)) {
+  if (!closed && !broker.isRunning(orgId, slug, stepId, sid)) {
     if (session.status === "interrupted") {
       await stream.push({
         event: "turn_failed",
