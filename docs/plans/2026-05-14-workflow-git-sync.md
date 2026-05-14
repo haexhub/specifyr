@@ -813,6 +813,18 @@ git commit -m "feat(repo): test-connection endpoint with ls-remote"
 
 **Kein Code-Change in diesem Task** — nur Recherche → Plan-Dokument-Update.
 
+**Ergebnis der Recherche (2026-05-14):**
+
+Die User-Aktion „Workflow-Fortschritt" hat drei Trigger-Punkte:
+
+1. **Manuelle Step-Completion** — `server/projects/api/projects/[slug]/steps/[stepId]/complete.post.ts:16` nach `store.markComplete(...)`. Fire-and-forget `triggerAutoPush(slug)`.
+2. **Automatische Step-Completion (nach Agent-Turn)** — `server/projects/api/projects/[slug]/steps/[stepId]/auto-complete.post.ts:62` nach `store.markComplete(...)` (nur im completed-Pfad).
+3. **Run-Ende** — `server/projects/api/projects/[slug]/run/start.post.ts:144` im `finally`-Block nach `scheduler.execute()`. Bedingung: nur pushen, wenn vorher kein Fehler aus dem Run kam (Repo könnte teilweise modifiziert sein, aber das ist OK — die Debounce-Logik dedupliziert ohnehin).
+
+`run-manager.ts` selbst hat keine Hook-API; der einzig sinnvolle Aufrufpunkt ist `start.post.ts` direkt nach `scheduler.execute()`.
+
+Es gibt zusätzlich `reopen.post.ts` (Step wieder öffnen) — bewusst KEIN Auto-Push, weil der State-Wechsel allein keine Datei-Änderung ist.
+
 ---
 
 ### Task 4.2: `triggerAutoPush(slug)` mit Debounce
