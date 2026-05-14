@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.0](https://github.com/haexhub/specifyr/compare/v0.15.0...v0.16.0) (2026-05-14)
+
+
+### Features
+
+* **repo:** per-project git remote sync ([#68](https://github.com/haexhub/specifyr/issues/68)) ([8d5a15b](https://github.com/haexhub/specifyr/commit/8d5a15b9696acd6373043afff197eee0e66e1ca4))
+* **ui:** collapsible sidebars with mobile overlay drawers ([#67](https://github.com/haexhub/specifyr/issues/67)) ([c81b478](https://github.com/haexhub/specifyr/commit/c81b4784392caf9560fae5979b22e67790f74e72))
+
 ## [0.15.0](https://github.com/haexhub/specifyr/compare/v0.14.0...v0.15.0) (2026-05-14)
 
 
