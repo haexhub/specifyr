@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Rocket, AlertTriangle, Play, Square, Loader2, RefreshCw, CheckCircle2, Circle } from "lucide-vue-next";
+import { Rocket, AlertTriangle, Play, Square, Loader2, RefreshCw, CheckCircle2, Circle, Menu, PanelLeft, ListChecks, X } from "lucide-vue-next";
 import { Button } from "~/components/shadcn/button";
 import { Badge } from "~/components/shadcn/badge";
 import ProjectStepSidebar from "~/components/projects/ProjectStepSidebar.vue";
@@ -404,15 +404,27 @@ async function skipTask(taskId: string) {
 onUnmounted(() => {
   abortCtrl.value?.abort();
 });
+
+const stepSidebar = provideProjectStepSidebar();
+const projectListSidebar = useProjectListSidebar();
+// Task list opens as an overlay below lg too — there's no room for a fixed
+// 340px column next to the run detail on a phone.
+const taskListMobileOpen = ref(false);
+watch(() => route.path, () => {
+  stepSidebar.close();
+  taskListMobileOpen.value = false;
+});
 </script>
 
 <template>
-  <div class="flex h-screen">
+  <div class="flex h-full">
     <ProjectsProjectStepSidebar
       :slug="slug"
       :project-title="project?.title"
       :active-step-id="runStep.id"
       :workflow="workflow"
+      :mobile-open="stepSidebar.open.value"
+      @close="stepSidebar.close()"
     >
       <div class="px-3 py-3 text-xs text-muted-foreground">
         <p class="font-medium text-foreground">{{ $t("run.runStatus") }}</p>
@@ -425,8 +437,27 @@ onUnmounted(() => {
       </div>
     </ProjectsProjectStepSidebar>
 
-    <div class="flex h-screen flex-1 flex-col">
-      <header class="flex h-15 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6">
+    <div class="flex h-full flex-1 flex-col">
+      <header class="flex h-15 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 lg:px-6">
+        <div class="flex items-center gap-1 lg:hidden">
+          <button
+            v-if="projectListSidebar"
+            type="button"
+            class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            :aria-label="$t('sidebar.openMenu')"
+            @click="projectListSidebar.toggle()"
+          >
+            <Menu class="size-5" />
+          </button>
+          <button
+            type="button"
+            class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            :aria-label="$t('sidebar.openStepMenu')"
+            @click="stepSidebar.toggle()"
+          >
+            <PanelLeft class="size-5" />
+          </button>
+        </div>
         <div class="flex items-center gap-3">
           <div class="inline-flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Rocket class="size-4" />
@@ -537,18 +568,61 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="flex flex-1 overflow-hidden">
-        <aside class="flex w-[340px] shrink-0 flex-col border-r border-border/60">
-          <div class="border-b border-border/60 px-3 py-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+      <div class="relative flex flex-1 overflow-hidden">
+        <!-- Mobile toggle for the task list pulled into a small toolbar so
+             it doesn't compete with the run header for vertical space. -->
+        <div class="absolute left-2 top-2 z-10 lg:hidden">
+          <button
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/90 px-2 py-1 text-xs font-medium text-muted-foreground shadow-sm transition hover:bg-accent hover:text-foreground"
+            @click="taskListMobileOpen = true"
+          >
+            <ListChecks class="size-3.5" />
             {{ $t("run.tasksHeader") }}
-            <span v-if="rows.length" class="normal-case"> · {{ rows.length }} {{ $t("common.total") }}</span>
+            <span v-if="rows.length" class="opacity-60">· {{ rows.length }}</span>
+          </button>
+        </div>
+
+        <!-- Backdrop for mobile task list overlay -->
+        <Transition
+          enter-active-class="transition-opacity duration-200"
+          enter-from-class="opacity-0"
+          enter-to-class="opacity-100"
+          leave-active-class="transition-opacity duration-150"
+          leave-from-class="opacity-100"
+          leave-to-class="opacity-0"
+        >
+          <div
+            v-if="taskListMobileOpen"
+            class="absolute inset-0 z-20 bg-foreground/30 backdrop-blur-sm lg:hidden"
+            @click="taskListMobileOpen = false"
+          />
+        </Transition>
+
+        <aside
+          class="absolute inset-y-0 left-0 z-30 flex w-[280px] shrink-0 flex-col border-r border-border/60 bg-background transition-transform duration-200 lg:relative lg:w-[340px] lg:translate-x-0 lg:bg-transparent"
+          :class="taskListMobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+        >
+          <div class="flex items-center justify-between gap-2 border-b border-border/60 px-3 py-2">
+            <span class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              {{ $t("run.tasksHeader") }}
+              <span v-if="rows.length" class="normal-case"> · {{ rows.length }} {{ $t("common.total") }}</span>
+            </span>
+            <button
+              type="button"
+              class="inline-flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground lg:hidden"
+              :aria-label="$t('sidebar.closeMenu')"
+              @click="taskListMobileOpen = false"
+            >
+              <X class="size-3.5" />
+            </button>
           </div>
           <div class="flex-1 overflow-y-auto">
             <UiRunTaskList
               v-if="rows.length"
               :tasks="rows"
               :active-task-id="activeTaskId"
-              @select="selectTask"
+              @select="(id) => { selectTask(id); taskListMobileOpen = false; }"
             />
             <p v-else class="p-4 text-xs text-muted-foreground">
               {{ $t("run.noTaskGraph") }}
@@ -556,7 +630,7 @@ onUnmounted(() => {
           </div>
         </aside>
 
-        <div class="flex-1 overflow-hidden">
+        <div class="flex-1 overflow-hidden pt-10 lg:pt-0">
           <UiRunTaskDetail
             :task="activeTask"
             :log="activeTaskId ? taskLogs[activeTaskId] ?? [] : []"

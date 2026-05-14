@@ -47,7 +47,11 @@
     "deleteProject": "Projekt löschen",
     "deleteProjectTitle": "Projekt '{title}' löschen?",
     "deleteProjectMessage": "Dies entfernt das Projekt-Verzeichnis mit allen spec-kit-Artefakten und Source-Dateien sowie alle Specifyr-Metadaten.",
-    "deleteProjectDetails": "Betroffen: projects/{slug}/ und .specifyr/{slug}/"
+    "deleteProjectDetails": "Betroffen: projects/{slug}/ und .specifyr/{slug}/",
+    "openMenu": "Menü öffnen",
+    "closeMenu": "Menü schließen",
+    "openProjectMenu": "Projekt-Menü öffnen",
+    "openStepMenu": "Schritt-Menü öffnen"
   },
 
   "extensions": {
