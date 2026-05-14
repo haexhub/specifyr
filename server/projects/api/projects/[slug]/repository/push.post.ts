@@ -1,7 +1,7 @@
 import { z } from "zod";
 import path from "node:path";
 import { assertProjectExists } from "@su/specifyr-stores";
-import { getProjectRepository } from "@su/project-repository";
+import { getProjectRepository, setLastPushedAt } from "@su/project-repository";
 import { getProjectSecrets, GIT_REMOTE_TOKEN_KEY } from "@su/secrets-store";
 import { configureRemote, commitAndPush } from "@su/git-remote";
 import { projectsDir } from "@su/data-dirs";
@@ -57,6 +57,9 @@ export default defineEventHandler(async (event) => {
       statusCode: 502,
       statusMessage: result.stderr || "push failed",
     });
+  }
+  if (result.pushed) {
+    await setLastPushedAt(slug, new Date().toISOString());
   }
   return { ok: true, pushed: result.pushed };
 });

@@ -12,7 +12,7 @@
  */
 
 import path from "node:path";
-import { getProjectRepository } from "./project-repository";
+import { getProjectRepository, setLastPushedAt } from "./project-repository";
 import { getProjectSecrets, GIT_REMOTE_TOKEN_KEY } from "./secrets-store";
 import { configureRemote, commitAndPush } from "./git-remote";
 import { projectsDir } from "./data-dirs";
@@ -68,6 +68,9 @@ export async function triggerAutoPushImmediate(
   try {
     const push = opts.push ?? (() => defaultPush(slug));
     const result = await push();
+    if (result.ok && result.pushed) {
+      await setLastPushedAt(slug, new Date().toISOString()).catch(() => {});
+    }
     return { skipped: false, ...result };
   } catch (err) {
     const stderr = (err as Error).message;

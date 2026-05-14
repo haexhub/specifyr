@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
     url: cfg.url,
     branch: cfg.branch,
     username: cfg.username,
+    lastPushedAt: cfg.lastPushedAt ?? null,
     hasToken: !!secrets[GIT_REMOTE_TOKEN_KEY],
   };
 });

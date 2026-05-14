@@ -13,6 +13,8 @@ export interface RepositoryConfig {
   url: string;
   branch: string;
   username: string;
+  /** ISO timestamp of the last successful push, written by commitAndPush. */
+  lastPushedAt?: string;
 }
 
 function metaPath(slug: string): string {
@@ -50,15 +52,39 @@ export async function getProjectRepository(
   try {
     const meta = await readMeta(slug);
     const repo = (meta as { repository?: unknown }).repository;
-    return isRepoConfig(repo)
-      ? {
-          url: repo.url,
-          branch: repo.branch,
-          username: repo.username,
-        }
-      : null;
+    if (!isRepoConfig(repo)) return null;
+    const lastPushedAt = (repo as RepositoryConfig).lastPushedAt;
+    return {
+      url: repo.url,
+      branch: repo.branch,
+      username: repo.username,
+      ...(typeof lastPushedAt === "string" ? { lastPushedAt } : {}),
+    };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+}
+
+/**
+ * Record the timestamp of a successful push. No-op when no
+ * repository is configured (e.g. user disconnected mid-push).
+ */
+export async function setLastPushedAt(
+  slug: string,
+  iso: string,
+): Promise<void> {
+  try {
+    const meta = await readMeta(slug);
+    const repo = (meta as { repository?: unknown }).repository;
+    if (!isRepoConfig(repo)) return;
+    (meta as Record<string, unknown>).repository = {
+      ...repo,
+      lastPushedAt: iso,
+    };
+    await writeMeta(slug, meta);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return;
     throw err;
   }
 }
