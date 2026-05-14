@@ -38,9 +38,9 @@ function joinUrl(base: string, path: string): string {
   // Tolerate base URLs that already include the API version segment
   // (e.g. users pasting "https://openrouter.ai/api/v1" from the docs).
   // Without this, joinUrl would produce ".../v1/v1/models" and 404.
-  const versionMatch = path.match(/^\/(v\d+[a-z]*)\//);
-  if (versionMatch && trimmed.endsWith(`/${versionMatch[1]}`)) {
-    trimmed = trimmed.slice(0, -versionMatch[1].length - 1);
+  const version = path.match(/^\/(v\d+[a-z]*)\//)?.[1];
+  if (version && trimmed.endsWith(`/${version}`)) {
+    trimmed = trimmed.slice(0, -version.length - 1);
   }
   return `${trimmed}${path.startsWith("/") ? "" : "/"}${path}`;
 }
