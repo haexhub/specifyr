@@ -48,7 +48,7 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
 
 <template>
   <aside class="flex h-screen w-[260px] shrink-0 flex-col border-r border-border bg-muted/20">
-    <div class="border-b border-border/60 px-4 py-3">
+    <div class="flex h-15 shrink-0 flex-col justify-center border-b border-border/60 px-4">
       <NuxtLink
         to="/"
         class="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
@@ -58,7 +58,7 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
       </NuxtLink>
       <NuxtLink
         :to="`/specs/${slug}`"
-        class="mt-1.5 block truncate text-sm font-semibold tracking-tight transition hover:text-primary"
+        class="mt-1 block truncate text-sm font-semibold tracking-tight transition hover:text-primary"
         :title="projectTitle ?? slug"
       >
         {{ projectTitle ?? slug }}

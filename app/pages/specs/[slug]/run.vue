@@ -426,14 +426,14 @@ onUnmounted(() => {
     </ProjectsProjectStepSidebar>
 
     <div class="flex h-screen flex-1 flex-col">
-      <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-3">
+      <header class="flex h-15 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6">
         <div class="flex items-center gap-3">
           <div class="inline-flex size-8 items-center justify-center rounded-md bg-primary/10 text-primary">
             <Rocket class="size-4" />
           </div>
           <div>
             <p class="text-[11px] uppercase tracking-wider text-muted-foreground">{{ $t("run.stepLabel", { n: workflowSteps.findIndex((s) => s.id === runStep.id) + 1, total: workflowSteps.length }) }}</p>
-            <h1 class="text-lg font-semibold">{{ runStep.label }}</h1>
+            <h1 class="text-base font-semibold leading-tight">{{ runStep.label }}</h1>
           </div>
         </div>
         <div class="flex items-center gap-2">

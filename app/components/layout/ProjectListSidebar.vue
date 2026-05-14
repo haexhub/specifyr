@@ -79,7 +79,10 @@ async function confirmDelete() {
     class="flex h-screen flex-col border-r border-border bg-muted/30 transition-all"
     :class="compact ? 'w-14' : 'w-[280px]'"
   >
-    <div class="flex items-center justify-between gap-1 px-2 pb-3 pt-5" :class="!compact && 'px-4'">
+    <div
+      class="flex h-15 shrink-0 items-center justify-between gap-1 border-b border-border/60 px-2"
+      :class="!compact && 'px-4'"
+    >
       <NuxtLink
         to="/"
         class="min-w-0"

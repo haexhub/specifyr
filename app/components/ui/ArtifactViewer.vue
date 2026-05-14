@@ -288,7 +288,7 @@ onUnmounted(() => closeWatcher());
 
 <template>
   <div class="flex h-full flex-col">
-    <div class="flex items-center justify-between gap-2 border-b border-border/60 px-4 py-3">
+    <div class="flex h-15 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4">
       <div class="min-w-0 flex-1">
         <p class="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{{ $t("artifact.title") }}</p>
         <p class="mt-0.5 truncate font-mono text-xs">

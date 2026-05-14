@@ -47,8 +47,9 @@ defineProps<{
       <!-- Tabs row: fixed position at top of content area. Never scrolls.
            No max-width — tabs sit at the same left padding as the content
            below, so content+tabs share an alignment edge regardless of
-           viewport width. -->
-      <div class="shrink-0 border-b border-border bg-background/50 px-6 py-3 lg:px-10">
+           viewport width. h-15 mirrors the sidebar header heights so the
+           border-b dividers line up horizontally across all columns. -->
+      <div class="flex h-15 shrink-0 items-center border-b border-border bg-background/50 px-6 lg:px-10">
         <ProjectsProjectViewTabs :slug="slug" />
       </div>
 
