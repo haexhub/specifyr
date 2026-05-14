@@ -118,7 +118,7 @@ export const projects = pgTable(
   "projects",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    slug: text("slug").notNull().unique(),
+    slug: text("slug").notNull(),
     ownerOrgId: uuid("owner_org_id")
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
@@ -126,6 +126,7 @@ export const projects = pgTable(
   },
   (t) => ({
     ownerOrgIdx: index("projects_owner_org_idx").on(t.ownerOrgId),
+    ownerOrgSlugUq: unique("projects_owner_org_slug_uq").on(t.ownerOrgId, t.slug),
   }),
 );
 

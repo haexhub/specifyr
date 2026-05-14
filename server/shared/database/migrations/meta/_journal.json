@@ -64,6 +64,13 @@
       "when": 1778744168771,
       "tag": "0008_add_users_blocked_at",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1778780812104,
+      "tag": "0009_loose_the_fury",
+      "breakpoints": true
     }
   ]
 }
