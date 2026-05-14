@@ -57,6 +57,13 @@
       "when": 1778708550871,
       "tag": "0007_stale_onslaught",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1778744168771,
+      "tag": "0008_add_users_blocked_at",
+      "breakpoints": true
     }
   ]
 }

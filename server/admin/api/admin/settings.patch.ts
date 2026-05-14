@@ -10,6 +10,11 @@ const settingsPatchSchema = z.object({
       allowedDomains: z.array(z.string().trim()).optional(),
     })
     .optional(),
+  platformAdmins: z
+    .object({
+      emails: z.array(z.string().trim()).optional(),
+    })
+    .optional(),
 });
 
 /**
@@ -36,6 +41,23 @@ export default defineEventHandler(async (event) => {
       .filter(Boolean);
     await setSetting(
       SETTING_KEYS.registrationAllowedDomains,
+      normalized,
+      userId,
+    );
+  }
+
+  if (body.platformAdmins?.emails !== undefined) {
+    // Lower-case + dedupe so the middleware's includes() check is
+    // case-insensitive without re-normalizing on every request.
+    const normalized = Array.from(
+      new Set(
+        body.platformAdmins.emails
+          .map((e) => e.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    );
+    await setSetting(
+      SETTING_KEYS.platformAdminEmails,
       normalized,
       userId,
     );

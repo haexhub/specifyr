@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
       email: users.email,
       displayName: users.displayName,
       isPlatformAdmin: users.isPlatformAdmin,
+      blockedAt: users.blockedAt,
       createdAt: users.createdAt,
       orgCount: sql<number>`count(${orgMemberships.orgId})`.as("org_count"),
     })

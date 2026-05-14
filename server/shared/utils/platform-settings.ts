@@ -23,6 +23,11 @@ export type RegistrationPolicy = "open" | "domain" | "closed";
 export const SETTING_KEYS = {
   registrationPolicy: "registration.policy",
   registrationAllowedDomains: "registration.allowed_domains",
+  // Extra platform-admin emails maintained via /admin/settings. Merged
+  // with SPECIFYR_PLATFORM_ADMIN_EMAILS in auth middleware so the env
+  // var stays the bootstrap mechanism while the UI can grant the flag
+  // to additional users without a redeploy.
+  platformAdminEmails: "platform.admin_emails",
 } as const;
 
 export type SettingKey = (typeof SETTING_KEYS)[keyof typeof SETTING_KEYS];
