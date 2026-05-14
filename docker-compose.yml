@@ -56,6 +56,11 @@ services:
       # services. Without it, specifyr falls back to /data/master.key
       # which the proxy can't read — and the OAuth flow breaks.
       SPECIFYR_SECRET_KEY: ${SPECIFYR_SECRET_KEY:?SPECIFYR_SECRET_KEY required — generate with `openssl rand -hex 32` and add to .env}
+      # Liste an Emails, die beim user-upsert `is_platform_admin=true` bekommen
+      # (server/shared/middleware/auth.ts). Default deckt den Authentik-Bootstrap
+      # ab, sodass `pnpm dev:docker` out-of-the-box mit einem Platform-Admin
+      # startet. Override via `.env`.
+      SPECIFYR_PLATFORM_ADMIN_EMAILS: ${SPECIFYR_PLATFORM_ADMIN_EMAILS:-akadmin@localhost}
     depends_on:
       postgres:
         condition: service_healthy
