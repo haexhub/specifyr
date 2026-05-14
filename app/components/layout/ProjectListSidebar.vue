@@ -231,10 +231,10 @@ async function confirmDelete() {
           route.path.startsWith('/settings') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
           compact ? 'lg:size-10 lg:justify-center lg:p-0' : ''
         ]"
-        :title="compact ? 'Settings' : undefined"
+        :title="compact ? $t('sidebar.settings') : undefined"
       >
         <Settings class="size-4 opacity-70" />
-        <span :class="compact ? 'lg:sr-only' : ''">Settings</span>
+        <span :class="compact ? 'lg:sr-only' : ''">{{ $t("sidebar.settings") }}</span>
       </NuxtLink>
 
       <!-- User identity + logout (when authenticated). -->
@@ -243,7 +243,7 @@ async function confirmDelete() {
         type="button"
         class="flex w-full items-center gap-2 rounded-md text-sm transition text-muted-foreground hover:bg-accent/60 hover:text-foreground px-2 py-2"
         :class="compact ? 'lg:size-10 lg:justify-center lg:p-0' : ''"
-        :title="compact ? `Logout (${me.email})` : 'Logout'"
+        :title="compact ? $t('sidebar.logoutWithEmail', { email: me.email }) : $t('sidebar.logout')"
         @click="logout()"
       >
         <LogOut class="size-4 opacity-70" />
@@ -251,7 +251,7 @@ async function confirmDelete() {
           class="flex min-w-0 flex-col items-start leading-tight"
           :class="compact ? 'lg:sr-only' : ''"
         >
-          <span class="truncate text-xs">Logout</span>
+          <span class="truncate text-xs">{{ $t("sidebar.logout") }}</span>
           <span class="truncate text-[10px] opacity-60">{{ me.email }}</span>
         </span>
       </button>
@@ -263,11 +263,11 @@ async function confirmDelete() {
         type="button"
         class="flex w-full items-center gap-2 rounded-md text-sm transition text-primary hover:bg-primary/10 px-2 py-2"
         :class="compact ? 'lg:size-10 lg:justify-center lg:p-0' : ''"
-        :title="compact ? 'Sign in (dev)' : undefined"
+        :title="compact ? $t('sidebar.signInDev') : undefined"
         @click="devLogin()"
       >
         <LogIn class="size-4 opacity-70" />
-        <span class="text-xs" :class="compact ? 'lg:sr-only' : ''">Sign in (dev)</span>
+        <span class="text-xs" :class="compact ? 'lg:sr-only' : ''">{{ $t("sidebar.signInDev") }}</span>
       </button>
     </div>
 

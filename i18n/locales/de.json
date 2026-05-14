@@ -51,7 +51,11 @@
     "openMenu": "Menü öffnen",
     "closeMenu": "Menü schließen",
     "openProjectMenu": "Projekt-Menü öffnen",
-    "openStepMenu": "Schritt-Menü öffnen"
+    "openStepMenu": "Schritt-Menü öffnen",
+    "settings": "Einstellungen",
+    "logout": "Abmelden",
+    "logoutWithEmail": "Abmelden ({email})",
+    "signInDev": "Anmelden (Dev)"
   },
 
   "extensions": {
