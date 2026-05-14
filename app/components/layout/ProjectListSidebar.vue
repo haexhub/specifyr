@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LogIn, LogOut, Plus, FolderOpen, Puzzle, Settings, ShieldCheck, Trash2 } from "lucide-vue-next";
+import { LogIn, LogOut, Plus, FolderOpen, Puzzle, Settings, ShieldCheck, Trash2, X } from "lucide-vue-next";
 import ProjectCreateDialog from "~/components/projects/ProjectCreateDialog.vue";
 import ConfirmDialog from "~/components/ui/ConfirmDialog.vue";
 import type { ProjectListItem } from "~/types/types";
@@ -7,6 +7,11 @@ import type { ProjectListItem } from "~/types/types";
 const props = defineProps<{
   projects: ProjectListItem[];
   compact?: boolean;
+  mobileOpen?: boolean;
+}>();
+
+const emit = defineEmits<{
+  (e: "close"): void;
 }>();
 
 const { t } = useI18n();
@@ -75,25 +80,45 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <aside
-    class="flex h-screen flex-col border-r border-border bg-muted/30 transition-all"
-    :class="compact ? 'w-14' : 'w-[280px]'"
+  <!-- Mobile backdrop -->
+  <Transition
+    enter-active-class="transition-opacity duration-200"
+    enter-from-class="opacity-0"
+    enter-to-class="opacity-100"
+    leave-active-class="transition-opacity duration-150"
+    leave-from-class="opacity-100"
+    leave-to-class="opacity-0"
   >
     <div
-      class="flex h-15 shrink-0 items-center justify-between gap-1 border-b border-border/60 px-2"
-      :class="!compact && 'px-4'"
+      v-if="mobileOpen"
+      class="fixed inset-0 z-30 bg-foreground/30 backdrop-blur-sm lg:hidden"
+      @click="emit('close')"
+    />
+  </Transition>
+
+  <aside
+    class="flex h-dvh flex-col border-r border-border bg-background transition-transform duration-200 lg:h-screen lg:bg-muted/30 lg:transition-[width]"
+    :class="[
+      compact ? 'w-[280px] lg:w-14' : 'w-[280px]',
+      'fixed inset-y-0 left-0 z-40 lg:relative lg:translate-x-0',
+      mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+    ]"
+  >
+    <div
+      class="flex h-15 shrink-0 items-center justify-between gap-1 border-b border-border/60 px-4 lg:px-2"
+      :class="!compact && 'lg:px-4'"
     >
       <NuxtLink
         to="/"
         class="min-w-0"
-        :class="compact ? 'sr-only' : ''"
+        :class="compact ? 'lg:sr-only' : ''"
       >
         <CommonSpecifyrLogo />
       </NuxtLink>
       <NuxtLink
         v-if="compact"
         to="/"
-        class="mx-auto inline-flex size-8 items-center justify-center rounded-md text-primary"
+        class="mx-auto hidden size-8 items-center justify-center rounded-md text-primary lg:inline-flex"
         :class="route.path === '/' ? 'bg-primary/15' : 'hover:bg-accent'"
         :title="$t('sidebar.homepage')"
       >
@@ -108,10 +133,19 @@ async function confirmDelete() {
       >
         <Plus class="size-4" />
       </button>
+      <!-- Mobile close button: always visible below lg -->
+      <button
+        type="button"
+        class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground lg:hidden"
+        :aria-label="$t('sidebar.closeMenu')"
+        @click="emit('close')"
+      >
+        <X class="size-4" />
+      </button>
     </div>
 
-    <!-- Compact: icon rail with small +/button -->
-    <nav v-if="compact" class="flex-1 space-y-1 overflow-y-auto px-2">
+    <!-- Compact icon rail (desktop only) -->
+    <nav v-if="compact" class="hidden flex-1 space-y-1 overflow-y-auto px-2 lg:block">
       <button
         type="button"
         class="inline-flex size-10 w-full items-center justify-center rounded-md border border-dashed border-border text-muted-foreground transition hover:border-primary/50 hover:bg-accent hover:text-foreground"
@@ -140,8 +174,13 @@ async function confirmDelete() {
       </NuxtLink>
     </nav>
 
-    <!-- Expanded: full list -->
-    <nav v-else class="flex-1 overflow-y-auto px-2">
+    <!-- Expanded list. On mobile this is always used regardless of `compact`,
+         since the overlay should show full project titles. On desktop, only
+         when not compact. -->
+    <nav
+      class="flex-1 overflow-y-auto px-2"
+      :class="compact ? 'lg:hidden' : ''"
+    >
       <ul v-if="projects.length" class="flex flex-col gap-0.5">
         <li v-for="project in projects" :key="project.slug" class="group relative">
           <NuxtLink
@@ -172,30 +211,30 @@ async function confirmDelete() {
       </p>
     </nav>
 
-    <div class="space-y-1 border-t border-border py-3" :class="compact ? 'px-2' : 'px-2'">
+    <div class="space-y-1 border-t border-border px-2 py-3">
       <NuxtLink
         to="/extensions"
-        class="flex items-center gap-2 rounded-md text-sm transition"
+        class="flex items-center gap-2 rounded-md text-sm transition px-2 py-2"
         :class="[
           route.path === '/extensions' ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
-          compact ? 'size-10 justify-center p-0' : 'px-2 py-2'
+          compact ? 'lg:size-10 lg:justify-center lg:p-0' : ''
         ]"
         :title="compact ? $t('sidebar.extensions') : undefined"
       >
         <Puzzle class="size-4 opacity-70" />
-        <span v-if="!compact">{{ $t("sidebar.extensions") }}</span>
+        <span :class="compact ? 'lg:sr-only' : ''">{{ $t("sidebar.extensions") }}</span>
       </NuxtLink>
       <NuxtLink
         to="/settings"
-        class="flex items-center gap-2 rounded-md text-sm transition"
+        class="flex items-center gap-2 rounded-md text-sm transition px-2 py-2"
         :class="[
           route.path.startsWith('/settings') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
-          compact ? 'size-10 justify-center p-0' : 'px-2 py-2'
+          compact ? 'lg:size-10 lg:justify-center lg:p-0' : ''
         ]"
-        :title="compact ? 'Settings' : undefined"
+        :title="compact ? $t('sidebar.settings') : undefined"
       >
         <Settings class="size-4 opacity-70" />
-        <span v-if="!compact">Settings</span>
+        <span :class="compact ? 'lg:sr-only' : ''">{{ $t("sidebar.settings") }}</span>
       </NuxtLink>
       <NuxtLink
         v-if="me?.isPlatformAdmin"
@@ -215,14 +254,17 @@ async function confirmDelete() {
       <button
         v-if="me"
         type="button"
-        class="flex w-full items-center gap-2 rounded-md text-sm transition text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-        :class="compact ? 'size-10 justify-center p-0' : 'px-2 py-2'"
-        :title="compact ? `Logout (${me.email})` : 'Logout'"
+        class="flex w-full items-center gap-2 rounded-md text-sm transition text-muted-foreground hover:bg-accent/60 hover:text-foreground px-2 py-2"
+        :class="compact ? 'lg:size-10 lg:justify-center lg:p-0' : ''"
+        :title="compact ? $t('sidebar.logoutWithEmail', { email: me.email }) : $t('sidebar.logout')"
         @click="logout()"
       >
         <LogOut class="size-4 opacity-70" />
-        <span v-if="!compact" class="flex min-w-0 flex-col items-start leading-tight">
-          <span class="truncate text-xs">Logout</span>
+        <span
+          class="flex min-w-0 flex-col items-start leading-tight"
+          :class="compact ? 'lg:sr-only' : ''"
+        >
+          <span class="truncate text-xs">{{ $t("sidebar.logout") }}</span>
           <span class="truncate text-[10px] opacity-60">{{ me.email }}</span>
         </span>
       </button>
@@ -232,13 +274,13 @@ async function confirmDelete() {
       <button
         v-else-if="isDevAuth"
         type="button"
-        class="flex w-full items-center gap-2 rounded-md text-sm transition text-primary hover:bg-primary/10"
-        :class="compact ? 'size-10 justify-center p-0' : 'px-2 py-2'"
-        :title="compact ? 'Sign in (dev)' : undefined"
+        class="flex w-full items-center gap-2 rounded-md text-sm transition text-primary hover:bg-primary/10 px-2 py-2"
+        :class="compact ? 'lg:size-10 lg:justify-center lg:p-0' : ''"
+        :title="compact ? $t('sidebar.signInDev') : undefined"
         @click="devLogin()"
       >
         <LogIn class="size-4 opacity-70" />
-        <span v-if="!compact" class="text-xs">Sign in (dev)</span>
+        <span class="text-xs" :class="compact ? 'lg:sr-only' : ''">{{ $t("sidebar.signInDev") }}</span>
       </button>
     </div>
 

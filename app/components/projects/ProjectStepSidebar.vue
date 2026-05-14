@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ArrowLeft, Check, AlertTriangle } from "lucide-vue-next";
+import { ArrowLeft, Check, AlertTriangle, X } from "lucide-vue-next";
 import { type StepId, type StepStatus } from "~/utils/steps";
 import { resolveWorkflow, type Workflow } from "~/utils/workflows";
 import type { StepState } from "~/types/types";
@@ -15,9 +15,14 @@ const props = withDefaults(
     // Show the Steps list at the bottom. Speckit views want this; Runtime view
     // doesn't (the bottom section there is empty or filled via the slot).
     showSteps?: boolean;
+    mobileOpen?: boolean;
   }>(),
   { showSteps: true },
 );
+
+const emit = defineEmits<{
+  (e: "close"): void;
+}>();
 
 const workflow = computed(() => resolveWorkflow(props.workflow?.id, props.workflow ?? null));
 const steps = computed(() => workflow.value.steps);
@@ -47,22 +52,51 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
 </script>
 
 <template>
-  <aside class="flex h-screen w-[260px] shrink-0 flex-col border-r border-border bg-muted/20">
-    <div class="flex h-15 shrink-0 flex-col justify-center border-b border-border/60 px-4">
-      <NuxtLink
-        to="/"
-        class="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+  <!-- Mobile backdrop -->
+  <Transition
+    enter-active-class="transition-opacity duration-200"
+    enter-from-class="opacity-0"
+    enter-to-class="opacity-100"
+    leave-active-class="transition-opacity duration-150"
+    leave-from-class="opacity-100"
+    leave-to-class="opacity-0"
+  >
+    <div
+      v-if="mobileOpen"
+      class="fixed inset-0 z-30 bg-foreground/30 backdrop-blur-sm lg:hidden"
+      @click="emit('close')"
+    />
+  </Transition>
+
+  <aside
+    class="flex h-dvh w-[260px] shrink-0 flex-col border-r border-border bg-background transition-transform duration-200 lg:h-screen lg:bg-muted/20 lg:transition-none fixed inset-y-0 left-0 z-40 lg:relative lg:translate-x-0"
+    :class="mobileOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+  >
+    <div class="flex h-15 shrink-0 items-center justify-between gap-2 border-b border-border/60 px-4">
+      <div class="flex min-w-0 flex-col justify-center">
+        <NuxtLink
+          to="/"
+          class="inline-flex items-center gap-1 text-xs text-muted-foreground transition hover:text-foreground"
+        >
+          <ArrowLeft class="size-3" />
+          {{ $t("common.allProjects") }}
+        </NuxtLink>
+        <NuxtLink
+          :to="`/specs/${slug}`"
+          class="mt-1 block truncate text-sm font-semibold tracking-tight transition hover:text-primary"
+          :title="projectTitle ?? slug"
+        >
+          {{ projectTitle ?? slug }}
+        </NuxtLink>
+      </div>
+      <button
+        type="button"
+        class="inline-flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground lg:hidden"
+        :aria-label="$t('sidebar.closeMenu')"
+        @click="emit('close')"
       >
-        <ArrowLeft class="size-3" />
-        {{ $t("common.allProjects") }}
-      </NuxtLink>
-      <NuxtLink
-        :to="`/specs/${slug}`"
-        class="mt-1 block truncate text-sm font-semibold tracking-tight transition hover:text-primary"
-        :title="projectTitle ?? slug"
-      >
-        {{ projectTitle ?? slug }}
-      </NuxtLink>
+        <X class="size-4" />
+      </button>
     </div>
 
     <div class="flex-1 overflow-y-auto">
