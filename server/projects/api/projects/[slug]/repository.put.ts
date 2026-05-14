@@ -51,6 +51,19 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Persist the token first so we never end up with a saved repo config
+  // pointing at a project that lacks credentials. If setSecret fails the
+  // repo config is not written at all.
+  if (body.token) {
+    try {
+      await setSecret(slug, GIT_REMOTE_TOKEN_KEY, body.token);
+    } catch {
+      throw createError({
+        statusCode: 500,
+        statusMessage: "failed to store repository token",
+      });
+    }
+  }
   try {
     await setProjectRepository(slug, {
       url: body.url,
@@ -62,9 +75,6 @@ export default defineEventHandler(async (event) => {
       statusCode: 400,
       statusMessage: (err as Error).message,
     });
-  }
-  if (body.token) {
-    await setSecret(slug, GIT_REMOTE_TOKEN_KEY, body.token);
   }
   return { ok: true };
 });

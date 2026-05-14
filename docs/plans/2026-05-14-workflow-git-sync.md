@@ -861,8 +861,10 @@ git commit -m "feat(repo): debounced auto-push utility"
 ### Task 4.3: Auto-Push in Step-Completion einbauen
 
 **Files:**
-- Modify: (Ergebnis aus Task 4.1 — vermutlich `server/projects/api/projects/[slug]/steps/[id].patch.ts` oder ähnlich)
-- Modify: `server/shared/utils/run-manager.ts` — bei `runFinalized`-Event
+- Modify: `server/projects/api/projects/[slug]/steps/[stepId]/complete.post.ts` — nach `store.markComplete(...)`
+- Modify: `server/projects/api/projects/[slug]/steps/[stepId]/auto-complete.post.ts` — nach `store.markComplete(...)` im completed-Pfad
+- Modify: `server/projects/api/projects/[slug]/run/start.post.ts` — im `finally` nach `scheduler.execute()`
+  (`run-manager.ts` selbst hat keine Hook-API — siehe Task 4.1.)
 
 **Step 1: Failing test (E2E)**
 
@@ -970,4 +972,6 @@ Vor Merge in `main`:
 5. ✅ Manueller "Pull now"-Button funktioniert (ff-only, blockt bei dirty tree)
 6. ✅ Token nie in Logs / Config-Files / Stderr / Specs
 7. ✅ Private IPs / Non-HTTPS / inline-credentials URLs werden abgelehnt
-8. ✅ Beim Anlegen eines neuen Projekts kann optional eine existierende Repo-URL angegeben werden (klont statt initiiert) — Phase 6
+
+**Acceptance Criteria (Phase 6 — Optional / Deferred):**
+1. Beim Anlegen eines neuen Projekts kann optional eine existierende Repo-URL angegeben werden (klont statt initiiert)
