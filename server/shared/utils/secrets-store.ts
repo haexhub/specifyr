@@ -15,6 +15,14 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { dataDir } from "./data-dirs";
 
+/**
+ * Reserved secret keys are managed by dedicated endpoints, not by the
+ * generic `POST /api/projects/:slug/secrets` route — exposing them
+ * would let a malformed client overwrite the git PAT or other
+ * structured credentials.
+ */
+export const GIT_REMOTE_TOKEN_KEY = "__git_remote_token";
+
 const writeQueues = new Map<string, Promise<void>>();
 
 function enqueueWrite(slug: string, op: () => Promise<void>): Promise<void> {
