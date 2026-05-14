@@ -13,15 +13,20 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { dataDir } from "./data-dirs";
+import { dataDir, projectArtifactsDir } from "./data-dirs";
 
 const writeQueues = new Map<string, Promise<void>>();
 
-function enqueueWrite(slug: string, op: () => Promise<void>): Promise<void> {
-  const prev = writeQueues.get(slug) ?? Promise.resolve();
+function queueKey(orgId: string, slug: string): string {
+  return `${orgId}/${slug}`;
+}
+
+function enqueueWrite(orgId: string, slug: string, op: () => Promise<void>): Promise<void> {
+  const k = queueKey(orgId, slug);
+  const prev = writeQueues.get(k) ?? Promise.resolve();
   const next = prev.then(op, op);
-  writeQueues.set(slug, next.finally(() => {
-    if (writeQueues.get(slug) === next) writeQueues.delete(slug);
+  writeQueues.set(k, next.finally(() => {
+    if (writeQueues.get(k) === next) writeQueues.delete(k);
   }));
   return next;
 }
@@ -29,8 +34,8 @@ function enqueueWrite(slug: string, op: () => Promise<void>): Promise<void> {
 type EncryptedEntry = { iv: string; tag: string; data: string };
 type SecretsFile = Record<string, EncryptedEntry>;
 
-function secretsFilePath(slug: string): string {
-  return path.join(dataDir(), ".specifyr", slug, "secrets.json");
+function secretsFilePath(orgId: string, slug: string): string {
+  return path.join(projectArtifactsDir(orgId, slug), "secrets.json");
 }
 
 async function masterKey(): Promise<Buffer> {
@@ -56,17 +61,17 @@ async function masterKey(): Promise<Buffer> {
   }
 }
 
-async function readFile(slug: string): Promise<SecretsFile> {
+async function readFile(orgId: string, slug: string): Promise<SecretsFile> {
   try {
-    return JSON.parse(await fs.readFile(secretsFilePath(slug), "utf8"));
+    return JSON.parse(await fs.readFile(secretsFilePath(orgId, slug), "utf8"));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw err;
   }
 }
 
-async function writeFile(slug: string, data: SecretsFile): Promise<void> {
-  const p = secretsFilePath(slug);
+async function writeFile(orgId: string, slug: string, data: SecretsFile): Promise<void> {
+  const p = secretsFilePath(orgId, slug);
   await fs.mkdir(path.dirname(p), { recursive: true });
   await fs.writeFile(p, JSON.stringify(data, null, 2), { mode: 0o600 });
 }
@@ -99,31 +104,31 @@ export async function decryptString(entry: EncryptedEntry): Promise<string> {
 }
 export type { EncryptedEntry };
 
-export async function listSecretKeys(slug: string): Promise<string[]> {
-  return Object.keys(await readFile(slug));
+export async function listSecretKeys(orgId: string, slug: string): Promise<string[]> {
+  return Object.keys(await readFile(orgId, slug));
 }
 
-export function setSecret(slug: string, key: string, value: string): Promise<void> {
-  return enqueueWrite(slug, async () => {
-    const [file, mkey] = await Promise.all([readFile(slug), masterKey()]);
+export function setSecret(orgId: string, slug: string, key: string, value: string): Promise<void> {
+  return enqueueWrite(orgId, slug, async () => {
+    const [file, mkey] = await Promise.all([readFile(orgId, slug), masterKey()]);
     file[key] = encrypt(value, mkey);
-    await writeFile(slug, file);
+    await writeFile(orgId, slug, file);
   });
 }
 
-export function deleteSecret(slug: string, key: string): Promise<boolean> {
+export function deleteSecret(orgId: string, slug: string, key: string): Promise<boolean> {
   let existed = false;
-  return enqueueWrite(slug, async () => {
-    const file = await readFile(slug);
+  return enqueueWrite(orgId, slug, async () => {
+    const file = await readFile(orgId, slug);
     if (!(key in file)) return;
     existed = true;
     delete file[key];
-    await writeFile(slug, file);
+    await writeFile(orgId, slug, file);
   }).then(() => existed);
 }
 
-export async function getProjectSecrets(slug: string): Promise<Record<string, string>> {
-  const [file, mkey] = await Promise.all([readFile(slug), masterKey()]);
+export async function getProjectSecrets(orgId: string, slug: string): Promise<Record<string, string>> {
+  const [file, mkey] = await Promise.all([readFile(orgId, slug), masterKey()]);
   const result: Record<string, string> = {};
   for (const [k, entry] of Object.entries(file)) {
     result[k] = decrypt(entry, mkey);

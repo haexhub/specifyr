@@ -1,5 +1,6 @@
 import path from "node:path";
 import { projectCwd, assertProjectExists } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 
 /**
  * Server-Sent Events stream that emits whenever a file inside the project's
@@ -15,10 +16,12 @@ export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
   if (!slug) throw createError({ statusCode: 400, statusMessage: "Missing slug" });
 
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  await assertProjectExists(orgId, slug);
 
   const chokidar = await import("chokidar");
-  const projectDir = projectCwd(slug);
+  const projectDir = projectCwd(orgId, slug);
 
   // Watch the project root so the watcher is always anchored to an existing directory.
   // Filtering to .specify/ and .specifyr/ avoids noise from unrelated files (git, code, etc.).

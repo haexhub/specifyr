@@ -1,7 +1,8 @@
 import path from "node:path";
 import fs from "node:fs/promises";
-import { dataDir } from "@su/data-dirs";
+import { projectArtifactsDir } from "@su/data-dirs";
 import { projectCwd } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 
 interface ExtensionInstallRecord {
   slug: string;
@@ -27,8 +28,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+
   // Primary source: specifyr's own manifest written by installExtensionsInProject.
-  const manifestPath = path.join(dataDir(), ".specifyr", slug, "extensions.json");
+  const manifestPath = path.join(projectArtifactsDir(orgId, slug), "extensions.json");
   try {
     const content = await fs.readFile(manifestPath, "utf8");
     const manifest = JSON.parse(content) as ExtensionsManifest;
@@ -43,7 +47,7 @@ export default defineEventHandler(async (event) => {
   // Fallback: spec-kit's own .registry (authoritative source for what's physically installed).
   // This covers projects created or extensions installed directly via the specify CLI without
   // going through specifyr's installExtensionsInProject.
-  const registryPath = path.join(projectCwd(slug), ".specify", "extensions", ".registry");
+  const registryPath = path.join(projectCwd(orgId, slug), ".specify", "extensions", ".registry");
   try {
     const content = await fs.readFile(registryPath, "utf8");
     const registry = JSON.parse(content) as SpecKitRegistry;

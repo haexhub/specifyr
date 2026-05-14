@@ -35,8 +35,8 @@ interface AgentSpec {
   model?: string;
 }
 
-async function loadAgentSpecs(projectSlug: string): Promise<Map<string, AgentSpec>> {
-  const orgDir = path.join(projectCwd(projectSlug), ".specify", "org");
+async function loadAgentSpecs(orgId: string, projectSlug: string): Promise<Map<string, AgentSpec>> {
+  const orgDir = path.join(projectCwd(orgId, projectSlug), ".specify", "org");
   const url = pathToFileURL(path.join(process.cwd(), "src/agents/spec-loader.js")).href;
   const mod = (await import(url)) as {
     loadAgents: (dir: string) => Promise<Map<string, AgentSpec>>;
@@ -68,7 +68,6 @@ export default defineEventHandler(async (event) => {
   if (!slug) {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
-  await assertProjectExists(slug);
 
   const userId = event.context.userId;
   if (!userId) {
@@ -77,6 +76,10 @@ export default defineEventHandler(async (event) => {
 
   const project = await getProjectFromDb(slug);
   const ownerOrgId = project?.ownerOrgId ?? null;
+  if (!ownerOrgId) {
+    throw createError({ statusCode: 404, statusMessage: "Project not found" });
+  }
+  await assertProjectExists(ownerOrgId, slug);
 
   let ownerOrgSlug: string | null = null;
   if (ownerOrgId) {
@@ -87,7 +90,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const specs = await loadAgentSpecs(slug);
+  const specs = await loadAgentSpecs(ownerOrgId, slug);
   const roles = [...specs.keys()].sort();
 
   const perRole: PerRoleEntry[] = await Promise.all(

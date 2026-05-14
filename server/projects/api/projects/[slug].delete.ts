@@ -1,6 +1,6 @@
-import path from "node:path";
 import fs from "node:fs/promises";
-import { dataDir, projectsDir } from "@su/data-dirs";
+import { projectArtifactsDir, projectDir } from "@su/data-dirs";
+import { resolveProjectOrgId } from "@su/project-store";
 
 export default defineEventHandler(async (event) => {
   const slug = getRouterParam(event, "slug");
@@ -8,13 +8,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
-  const specifyrDir = path.join(dataDir(), ".specifyr", slug);
-  const projectDir = path.join(projectsDir(), slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+
+  const specifyrDir = projectArtifactsDir(orgId, slug);
+  const projDir = projectDir(orgId, slug);
 
   const removed: string[] = [];
   const failures: string[] = [];
 
-  for (const target of [specifyrDir, projectDir]) {
+  for (const target of [specifyrDir, projDir]) {
     try {
       await fs.rm(target, { recursive: true, force: true });
       removed.push(target);

@@ -47,6 +47,20 @@ export async function getProjectFromDb(slug: string): Promise<Project | null> {
   return row ?? null;
 }
 
+// TODO(phase-3): drop once project-access middleware populates event.context.orgId.
+// Slugs are no longer globally unique — this is a transitional helper that
+// resolves an owner orgId from a slug via DB lookup. Throws 404 if unknown.
+export async function resolveProjectOrgId(slug: string): Promise<string> {
+  const project = await getProjectFromDb(slug);
+  if (!project) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: `Project not found: ${slug}`,
+    });
+  }
+  return project.ownerOrgId;
+}
+
 /**
  * Slugs of projects the user can access — every project owned by an org
  * the user is a member of.

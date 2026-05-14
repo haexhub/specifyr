@@ -1,8 +1,9 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { z } from "zod";
-import { dataDir } from "@su/data-dirs";
+import { projectArtifactsDir } from "@su/data-dirs";
 import { assertProjectExists } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 import { listProjectWorkflows } from "@su/workflow-discovery";
 import { parseBody, parseParams, projectSlugParam } from "@su/validation";
 
@@ -12,13 +13,15 @@ const workflowBodySchema = z.object({
 
 export default defineEventHandler(async (event) => {
   const { slug } = parseParams(event, projectSlugParam);
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  await assertProjectExists(orgId, slug);
 
   const { workflow } = await parseBody(event, workflowBodySchema);
 
   // Accept only workflows actually available for this project: spec-kit (always) or an installed
   // extension that declares itself as a workflow via its extension.yml tags.
-  const available = await listProjectWorkflows(slug);
+  const available = await listProjectWorkflows(orgId, slug);
   if (!available.some((w) => w.id === workflow)) {
     throw createError({
       statusCode: 400,
@@ -26,7 +29,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const metaPath = path.join(dataDir(), ".specifyr", slug, "meta.json");
+  const metaPath = path.join(projectArtifactsDir(orgId, slug), "meta.json");
   let meta: Record<string, unknown> = {};
   try {
     meta = JSON.parse(await fs.readFile(metaPath, "utf8"));

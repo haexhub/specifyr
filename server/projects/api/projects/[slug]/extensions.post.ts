@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { installExtensionsInProject } from "@su/extension-install";
 import { assertProjectExists } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 import { parseBody, parseParams, projectSlugParam } from "@su/validation";
 
 const installSchema = z
@@ -16,10 +17,12 @@ const installSchema = z
 
 export default defineEventHandler(async (event) => {
   const { slug: projectSlug } = parseParams(event, projectSlugParam);
-  await assertProjectExists(projectSlug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(projectSlug);
+  await assertProjectExists(orgId, projectSlug);
 
   const body = await parseBody(event, installSchema);
   const slugs = body.slugs && body.slugs.length > 0 ? body.slugs : [body.slug!];
 
-  return await installExtensionsInProject(projectSlug, slugs, body.source);
+  return await installExtensionsInProject(orgId, projectSlug, slugs, body.source);
 });

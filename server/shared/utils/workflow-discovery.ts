@@ -16,8 +16,8 @@ interface ExtensionRegistry {
 // should treat every on-disk extension as installed, preserving behavior for projects
 // that predate the registry or manage extensions outside the CLI. A readable-but-broken
 // registry still returns `null` (we can't trust it, so we don't act on it).
-async function readEnabledExtensionSlugs(projectSlug: string): Promise<Set<string> | null> {
-  const registryPath = path.join(projectCwd(projectSlug), ".specify", "extensions", ".registry");
+async function readEnabledExtensionSlugs(orgId: string, projectSlug: string): Promise<Set<string> | null> {
+  const registryPath = path.join(projectCwd(orgId, projectSlug), ".specify", "extensions", ".registry");
   let content: string;
   try {
     content = await fs.readFile(registryPath, "utf8");
@@ -385,10 +385,11 @@ export function parseExtensionWorkflow(yamlContent: string): WorkflowDefinition 
 // Read an installed extension's YAML from disk and return its workflow if applicable.
 // Also loads each step's command-markdown file to populate `body` and extract `artifacts`.
 export async function loadInstalledExtensionWorkflow(
+  orgId: string,
   projectSlug: string,
   extensionSlug: string
 ): Promise<WorkflowDefinition | null> {
-  const extDir = path.join(projectCwd(projectSlug), ".specify", "extensions", extensionSlug);
+  const extDir = path.join(projectCwd(orgId, projectSlug), ".specify", "extensions", extensionSlug);
   const ymlPath = path.join(extDir, "extension.yml");
 
   let ymlContent: string;
@@ -440,20 +441,20 @@ export async function loadInstalledExtensionWorkflow(
 // Cross-checks against .specify/extensions/.registry: if present, only slugs marked `enabled: true`
 // are considered installed, so orphaned extension folders (e.g. a failed `extension remove`) stop
 // leaking into the picker. If the registry is missing, all on-disk folders are scanned as before.
-export async function listProjectWorkflowExtensions(projectSlug: string): Promise<WorkflowDefinition[]> {
-  const extRoot = path.join(projectCwd(projectSlug), ".specify", "extensions");
+export async function listProjectWorkflowExtensions(orgId: string, projectSlug: string): Promise<WorkflowDefinition[]> {
+  const extRoot = path.join(projectCwd(orgId, projectSlug), ".specify", "extensions");
   let entries: string[];
   try {
     entries = await fs.readdir(extRoot);
   } catch {
     return [];
   }
-  const enabledSlugs = await readEnabledExtensionSlugs(projectSlug);
+  const enabledSlugs = await readEnabledExtensionSlugs(orgId, projectSlug);
   const workflows: WorkflowDefinition[] = [];
   for (const name of entries) {
     if (name.startsWith(".")) continue;
     if (enabledSlugs && !enabledSlugs.has(name)) continue;
-    const wf = await loadInstalledExtensionWorkflow(projectSlug, name);
+    const wf = await loadInstalledExtensionWorkflow(orgId, projectSlug, name);
     if (wf) workflows.push(wf);
   }
   return workflows;
@@ -462,11 +463,12 @@ export async function listProjectWorkflowExtensions(projectSlug: string): Promis
 // Load the raw markdown body of a single step's command file, stripped of frontmatter.
 // Returns null if the extension, command, or file cannot be read.
 export async function loadStepCommandBody(
+  orgId: string,
   projectSlug: string,
   extensionSlug: string,
   stepId: string
 ): Promise<string | null> {
-  const extDir = path.join(projectCwd(projectSlug), ".specify", "extensions", extensionSlug);
+  const extDir = path.join(projectCwd(orgId, projectSlug), ".specify", "extensions", extensionSlug);
   let ymlContent: string;
   try {
     ymlContent = await fs.readFile(path.join(extDir, "extension.yml"), "utf8");
@@ -495,17 +497,18 @@ export async function loadStepCommandBody(
 
 // Return the full set of workflows available for a given project:
 // always spec-kit, plus any installed workflow-extension.
-export async function listProjectWorkflows(projectSlug: string): Promise<WorkflowDefinition[]> {
-  const extensionWorkflows = await listProjectWorkflowExtensions(projectSlug);
+export async function listProjectWorkflows(orgId: string, projectSlug: string): Promise<WorkflowDefinition[]> {
+  const extensionWorkflows = await listProjectWorkflowExtensions(orgId, projectSlug);
   return [SPEC_KIT_WORKFLOW, ...extensionWorkflows];
 }
 
 // Resolve a workflow id to its definition for the project. Falls back to spec-kit.
 export async function getProjectWorkflow(
+  orgId: string,
   projectSlug: string,
   workflowId: string | null | undefined
 ): Promise<WorkflowDefinition> {
   if (!workflowId || workflowId === "spec-kit") return SPEC_KIT_WORKFLOW;
-  const wf = await loadInstalledExtensionWorkflow(projectSlug, workflowId);
+  const wf = await loadInstalledExtensionWorkflow(orgId, projectSlug, workflowId);
   return wf ?? SPEC_KIT_WORKFLOW;
 }

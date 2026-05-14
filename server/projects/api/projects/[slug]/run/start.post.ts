@@ -12,7 +12,7 @@ import {
   registerScheduler,
   deregisterScheduler
 } from "@su/run-manager";
-import { getProjectFromDb } from "@su/project-store";
+import { getProjectFromDb, resolveProjectOrgId } from "@su/project-store";
 import { createSpeckitRunnerFactory } from "@su/speckit-agent-runner";
 
 export default defineEventHandler(async (event) => {
@@ -21,13 +21,15 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  await assertProjectExists(orgId, slug);
 
   if (getActiveScheduler(slug)) {
     throw createError({ statusCode: 409, statusMessage: "Run already in progress" });
   }
 
-  const pCwd = projectCwd(slug);
+  const pCwd = projectCwd(orgId, slug);
   const cwd = dataDir();
 
   // Build (or reuse) the task graph. This may call Claude once for extraction and
@@ -47,7 +49,7 @@ export default defineEventHandler(async (event) => {
   const runStore = new RunStore(cwd);
   await runStore.initFromGraph(slug, graph);
 
-  const events = await loadEventStore(slug);
+  const events = await loadEventStore(orgId, slug);
 
   const { RunScheduler } = await getSchedulerModule();
   const project = await getProjectFromDb(slug);

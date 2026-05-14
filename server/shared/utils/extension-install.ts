@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { projectCwd, loadEventStore } from "./specifyr-stores";
-import { dataDir, extensionsDir } from "./data-dirs";
+import { extensionsDir, projectArtifactsDir } from "./data-dirs";
 import { getAppConfigModule } from "./app-config";
 import { getOrgExtensionBySlug } from "./org-extensions-store";
 
@@ -31,12 +31,12 @@ async function loadRunCommand() {
   };
 }
 
-function manifestPathFor(projectSlug: string): string {
-  return path.join(dataDir(), ".specifyr", projectSlug, "extensions.json");
+function manifestPathFor(orgId: string, projectSlug: string): string {
+  return path.join(projectArtifactsDir(orgId, projectSlug), "extensions.json");
 }
 
-export async function readManifest(projectSlug: string): Promise<ExtensionsManifest> {
-  const file = manifestPathFor(projectSlug);
+export async function readManifest(orgId: string, projectSlug: string): Promise<ExtensionsManifest> {
+  const file = manifestPathFor(orgId, projectSlug);
   try {
     return JSON.parse(await fs.readFile(file, "utf8")) as ExtensionsManifest;
   } catch (err) {
@@ -47,19 +47,19 @@ export async function readManifest(projectSlug: string): Promise<ExtensionsManif
   }
 }
 
-async function writeManifest(projectSlug: string, manifest: ExtensionsManifest): Promise<void> {
-  const file = manifestPathFor(projectSlug);
+async function writeManifest(orgId: string, projectSlug: string, manifest: ExtensionsManifest): Promise<void> {
+  const file = manifestPathFor(orgId, projectSlug);
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
 }
 
 export async function installExtensionsInProject(
+  orgId: string,
   projectSlug: string,
   extensionSlugs: string[],
-  source: "auto" | "manual" = "manual",
-  ownerOrgId: string | null = null
+  source: "auto" | "manual" = "manual"
 ): Promise<{ manifest: ExtensionsManifest; installed: ExtensionInstallRecord[]; skipped: string[] }> {
-  const manifest = await readManifest(projectSlug);
+  const manifest = await readManifest(orgId, projectSlug);
   const alreadyInstalled = new Set(
     manifest.extensions.filter((e) => e.status === "installed").map((e) => e.slug)
   );
@@ -74,7 +74,7 @@ export async function installExtensionsInProject(
   }
 
   const { runCommand } = await loadRunCommand();
-  const cwd = projectCwd(projectSlug);
+  const cwd = projectCwd(orgId, projectSlug);
 
   // Ensure the community catalog is registered as install-allowed. spec-kit's built-in community
   // catalog is discovery-only, so `extension add` would refuse otherwise. Idempotent best-effort:
@@ -110,8 +110,8 @@ export async function installExtensionsInProject(
     let localPath: string | null = null;
     let resolutionFailed = false;
     let resolutionFailureMessage = "";
-    if (ownerOrgId) {
-      const orgRow = await getOrgExtensionBySlug(ownerOrgId, slug);
+    if (orgId) {
+      const orgRow = await getOrgExtensionBySlug(orgId, slug);
       if (orgRow) {
         const onDisk = await fs.access(orgRow.path).then(() => true).catch(() => false);
         if (onDisk) {
@@ -157,9 +157,9 @@ export async function installExtensionsInProject(
   }
 
   manifest.updatedAt = new Date().toISOString();
-  await writeManifest(projectSlug, manifest);
+  await writeManifest(orgId, projectSlug, manifest);
 
-  const events = await loadEventStore(projectSlug);
+  const events = await loadEventStore(orgId, projectSlug);
   for (const record of installed) {
     await events.append({
       type: "extension_installed",

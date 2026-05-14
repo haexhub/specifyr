@@ -1,8 +1,9 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
-import { dataDir } from "@su/data-dirs";
+import { projectArtifactsDir } from "@su/data-dirs";
 import { projectCwd, loadEventStore } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 
 interface ExtensionInstallRecord {
   slug: string;
@@ -34,10 +35,11 @@ async function loadRunCommand() {
 // registry is reported back so the caller can surface it in the event log — we do NOT
 // overwrite a file we failed to parse.
 async function removeFromRegistry(
+  orgId: string,
   projectSlug: string,
   extSlug: string
 ): Promise<{ ok: true; changed: boolean } | { ok: false; reason: string }> {
-  const registryPath = path.join(projectCwd(projectSlug), ".specify", "extensions", ".registry");
+  const registryPath = path.join(projectCwd(orgId, projectSlug), ".specify", "extensions", ".registry");
   let content: string;
   try {
     content = await fs.readFile(registryPath, "utf8");
@@ -65,7 +67,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug/extSlug" });
   }
 
-  const manifestPath = path.join(dataDir(), ".specifyr", slug, "extensions.json");
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+
+  const manifestPath = path.join(projectArtifactsDir(orgId, slug), "extensions.json");
   let manifest: ExtensionsManifest;
   try {
     manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as ExtensionsManifest;
@@ -80,10 +85,10 @@ export default defineEventHandler(async (event) => {
   // folder stayed on disk, which leaked ghost workflows into the picker.
   const { runCommand } = await loadRunCommand();
   const cliResult = await runCommand("specify", ["extension", "remove", extSlug], {
-    cwd: projectCwd(slug)
+    cwd: projectCwd(orgId, slug)
   });
 
-  const extDir = path.join(projectCwd(slug), ".specify", "extensions", extSlug);
+  const extDir = path.join(projectCwd(orgId, slug), ".specify", "extensions", extSlug);
   let folderError: string | null = null;
   try {
     await fs.rm(extDir, { recursive: true, force: true });
@@ -91,7 +96,7 @@ export default defineEventHandler(async (event) => {
     folderError = (err as Error).message;
   }
 
-  const registryResult = await removeFromRegistry(slug, extSlug);
+  const registryResult = await removeFromRegistry(orgId, slug, extSlug);
 
   manifest.extensions = manifest.extensions.filter((e) => e.slug !== extSlug);
   manifest.updatedAt = new Date().toISOString();
@@ -111,7 +116,7 @@ export default defineEventHandler(async (event) => {
 
   const fullyClean = cliResult.ok && !folderError && registryResult.ok;
 
-  const events = await loadEventStore(slug);
+  const events = await loadEventStore(orgId, slug);
   await events.append({
     type: "extension_uninstalled",
     level: fullyClean ? "info" : "warning",

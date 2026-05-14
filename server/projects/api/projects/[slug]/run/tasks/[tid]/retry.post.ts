@@ -1,6 +1,7 @@
 import { getRunStoreModule, getActiveScheduler } from "@su/run-manager";
 import { dataDir } from "@su/data-dirs";
 import { loadEventStore } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 
 /**
  * Resets a task's status to `pending` so the next run-start picks it up again.
@@ -58,7 +59,9 @@ export default defineEventHandler(async (event) => {
 
   await store.saveCurrent(slug, state);
 
-  const events = await loadEventStore(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  const events = await loadEventStore(orgId, slug);
   await events.append({
     type: "task_reset",
     level: "info",

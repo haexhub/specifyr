@@ -19,7 +19,7 @@
  */
 
 import fs from "node:fs/promises";
-import { dataDir } from "@su/data-dirs";
+import { projectArtifactsDir } from "@su/data-dirs";
 import {
   projectCwd,
   projectHostCwd,
@@ -101,7 +101,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug" });
   }
 
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const projectRow = await getProjectFromDb(slug);
+  if (!projectRow) {
+    throw createError({ statusCode: 404, statusMessage: "Project not found" });
+  }
+  const orgId = projectRow.ownerOrgId;
+
+  await assertProjectExists(orgId, slug);
 
   if (getActiveCompany(slug) || isCompanyStarting(slug)) {
     throw createError({
@@ -135,11 +142,11 @@ export default defineEventHandler(async (event) => {
   let networkPeersForCleanup: string[] = [];
   (async () => {
     try {
-      const pCwd = projectCwd(slug);
+      const pCwd = projectCwd(orgId, slug);
       const orgDir = path.join(pCwd, ".specify", "org");
-      const specifyrBase = path.join(dataDir(), ".specifyr", slug);
+      const specifyrBase = projectArtifactsDir(orgId, slug);
       const catalogDir = path.join(process.cwd(), "catalog");
-      const pHostCwd = projectHostCwd(slug);
+      const pHostCwd = projectHostCwd(orgId, slug);
 
       const { CompanyRuntime } = await getCompanyRuntimeModule();
       const { dockerRunnerFactory } = await getDockerRunnerFactoryModule();
@@ -174,8 +181,7 @@ export default defineEventHandler(async (event) => {
         return;
       }
 
-      const project = await getProjectFromDb(slug);
-      const ownerOrgId = project?.ownerOrgId ?? null;
+      const ownerOrgId: string | null = orgId;
 
       const profilesByRole = new Map<string, ResolvedAgentProfile>();
       const agentSessionTokens = new Map<string, string>();
@@ -299,7 +305,7 @@ export default defineEventHandler(async (event) => {
 
       const opsToken = randomBytes(32).toString("hex");
       const opsUrl = config.companyOpsUrlBase;
-      const projectSecrets = await getProjectSecrets(slug);
+      const projectSecrets = await getProjectSecrets(orgId, slug);
       const proxyUrl = config.companyClaudeProxyUrl || undefined;
 
       // Inject per-provider env for an agent that has its own profile.

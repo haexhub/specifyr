@@ -2,6 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { z } from "zod";
 import { projectCwd } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 import { parseParams, parseQuery, projectSlugParam } from "@su/validation";
 
 const fsQuerySchema = z.object({
@@ -20,7 +21,9 @@ export default defineEventHandler(async (event) => {
   const { path: relRaw } = parseQuery(event, fsQuerySchema);
   const rel = relRaw.replace(/^\/+/, ""); // drop leading slashes so path.resolve keeps it relative
 
-  const root = projectCwd(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  const root = projectCwd(orgId, slug);
   const absolute = path.resolve(root, rel);
 
   // Ensure target is strictly inside root (plus root itself when rel is empty)

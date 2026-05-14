@@ -3,6 +3,7 @@ import {
   loadTurnBroker,
   assertProjectExists,
 } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 
 /**
  * Removes the session's meta + messages + events from disk. If a turn is
@@ -18,7 +19,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug/stepId/sid" });
   }
 
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  await assertProjectExists(orgId, slug);
 
   const broker = await loadTurnBroker();
   if (broker.isRunning(slug, stepId, sid)) {

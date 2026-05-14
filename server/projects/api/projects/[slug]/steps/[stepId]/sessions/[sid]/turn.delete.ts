@@ -1,4 +1,5 @@
 import { loadTurnBroker, assertProjectExists } from "@su/specifyr-stores";
+import { resolveProjectOrgId } from "@su/project-store";
 
 /**
  * Cancels an in-flight turn for this session. Idempotent — returns 204 even if
@@ -13,7 +14,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing slug/stepId/sid" });
   }
 
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  await assertProjectExists(orgId, slug);
 
   const broker = await loadTurnBroker();
   broker.cancel(slug, stepId, sid);

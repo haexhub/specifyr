@@ -15,7 +15,7 @@ import {
   loadStepCommandBody
 } from "@su/workflow-discovery";
 import { parseBody, parseParams, sessionParams } from "@su/validation";
-import { getProjectFromDb } from "@su/project-store";
+import { getProjectFromDb, resolveProjectOrgId } from "@su/project-store";
 import { createSpeckitRunnerFactory } from "@su/speckit-agent-runner";
 
 const turnSchema = z.object({
@@ -34,7 +34,9 @@ export default defineEventHandler(async (event) => {
   const { slug, stepId, sid } = parseParams(event, sessionParams);
   const { content } = await parseBody(event, turnSchema);
 
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  await assertProjectExists(orgId, slug);
 
   const sessionStore = await loadSessionStore();
   const session = await sessionStore.getSessionMeta(slug, stepId, sid);
@@ -63,11 +65,11 @@ export default defineEventHandler(async (event) => {
   );
   let promptForAgent = content;
   if (!hasSuccessfulAssistantReply) {
-    const workflowId = await getProjectWorkflowId(slug);
+    const workflowId = await getProjectWorkflowId(orgId, slug);
     const workflow =
       workflowId === "spec-kit"
         ? SPEC_KIT_WORKFLOW
-        : (await loadInstalledExtensionWorkflow(slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
+        : (await loadInstalledExtensionWorkflow(orgId, slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
     const stepDef = workflow.steps.find((s) => s.id === stepId);
     if (stepDef?.command) {
       const stepIndex = workflow.steps.findIndex((s) => s.id === stepId);
@@ -84,7 +86,7 @@ export default defineEventHandler(async (event) => {
       const commandBody =
         workflowId === "spec-kit"
           ? loadBuiltInSpecKitStepInstructions(stepId)
-          : await loadStepCommandBody(slug, workflowId, stepId);
+          : await loadStepCommandBody(orgId, slug, workflowId, stepId);
       const commandLabel = `Workflow command: ${stepDef.command}`;
       if (commandBody) {
         promptForAgent = `${commandLabel}\n\n${commandBody}\n\n---\n\n${workflowCtx}\n\n${content}`;
@@ -114,7 +116,7 @@ export default defineEventHandler(async (event) => {
   const { store: stepStore } = await loadStepStateStore();
   await stepStore.markInProgress(slug, stepId, sid);
 
-  const eventStore = await loadEventStore(slug);
+  const eventStore = await loadEventStore(orgId, slug);
   await eventStore.append({
     type: "session_started",
     level: "info",
@@ -133,7 +135,7 @@ export default defineEventHandler(async (event) => {
     stepId,
     sid,
     prompt: promptForAgent,
-    cwd: projectCwd(slug),
+    cwd: projectCwd(orgId, slug),
     claudeSessionId: session.claudeSessionId ?? null,
     runnerFactory,
   });

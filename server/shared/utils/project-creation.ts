@@ -1,7 +1,7 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { installExtensionsInProject } from "./extension-install";
-import { dataDir, projectsDir } from "./data-dirs";
+import { dataDir, orgProjectsDir } from "./data-dirs";
 
 async function importModule<T = Record<string, unknown>>(relativePath: string): Promise<T> {
   const moduleUrl = pathToFileURL(path.join(process.cwd(), relativePath)).href;
@@ -32,18 +32,21 @@ export async function createProjectRecord(options: {
     throw new Error("Could not derive a valid project slug.");
   }
 
-  const projectsRoot = projectsDir();
-  const projectRoot = path.join(projectsRoot, slug);
+  if (!options.ownerOrgId) {
+    throw new Error("ownerOrgId is required");
+  }
+  const projectsParent = orgProjectsDir(options.ownerOrgId);
+  const projectRoot = path.join(projectsParent, slug);
   const store = new ArtifactStore(dataDir());
 
-  await ensureDir(projectsRoot);
+  await ensureDir(projectsParent);
 
   // `specify init` is interactive by default (arrow-key menu for AI selection, git-init prompt).
   // --ai generic and --no-git make it fully non-interactive so spawn() from Nuxt can succeed.
   // We run git init separately below so each project has its own repo boundary — this prevents
   // coding agents from walking up to the specifyr root and loading platform context.
   const initArgs = ["init", slug, "--ai", "generic", "--no-git"];
-  const initResult = await runCommand("specify", initArgs, { cwd: projectsRoot });
+  const initResult = await runCommand("specify", initArgs, { cwd: projectsParent });
   const workflow = options.workflow ?? "spec-kit";
   const meta = {
     description,
@@ -165,10 +168,10 @@ export async function createProjectRecord(options: {
   let extensionRecords: import("./extension-install").ExtensionInstallRecord[] = [];
   if (initResult.ok && chosenExtensions.length > 0) {
     const { manifest } = await installExtensionsInProject(
+      options.ownerOrgId,
       slug,
       chosenExtensions,
-      "auto",
-      options.ownerOrgId ?? null
+      "auto"
     );
     extensionRecords = manifest.extensions;
   }

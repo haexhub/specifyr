@@ -1,6 +1,6 @@
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { dataDir, projectsDir, hostProjectsDir } from "./data-dirs";
+import { dataDir, projectDir, hostProjectDir } from "./data-dirs";
 
 async function loadModule<T = Record<string, unknown>>(rel: string): Promise<T> {
   const url = pathToFileURL(path.join(process.cwd(), rel)).href;
@@ -22,9 +22,9 @@ export async function loadStepStateStore() {
   };
 }
 
-export async function loadEventStore(slug: string) {
+export async function loadEventStore(orgId: string, slug: string) {
   const mod = await loadModule<{ EventStore: new (baseDir: string) => any }>("src/core/event-store.js");
-  const baseDir = path.join(dataDir(), "events", slug);
+  const baseDir = path.join(dataDir(), "events", orgId, slug);
   return new mod.EventStore(baseDir);
 }
 
@@ -47,8 +47,8 @@ export async function loadTurnBroker() {
   return _turnBroker;
 }
 
-export function projectCwd(slug: string): string {
-  return path.join(projectsDir(), slug);
+export function projectCwd(orgId: string, slug: string): string {
+  return projectDir(orgId, slug);
 }
 
 /**
@@ -67,16 +67,16 @@ export function hostProjectRoot(): string {
   return process.env.SPECIFYR_HOST_PROJECT_ROOT || process.cwd();
 }
 
-export function projectHostCwd(slug: string): string {
-  return path.join(hostProjectsDir(), slug);
+export function projectHostCwd(orgId: string, slug: string): string {
+  return hostProjectDir(orgId, slug);
 }
 
-export async function assertProjectExists(slug: string) {
+export async function assertProjectExists(orgId: string, slug: string) {
   const fs = await import("node:fs/promises");
-  const cwd = projectCwd(slug);
+  const cwd = projectCwd(orgId, slug);
   try {
     await fs.access(cwd);
   } catch {
-    throw createError({ statusCode: 404, statusMessage: `Project directory not found: projects/${slug}/` });
+    throw createError({ statusCode: 404, statusMessage: `Project directory not found: projects/${orgId}/${slug}/` });
   }
 }

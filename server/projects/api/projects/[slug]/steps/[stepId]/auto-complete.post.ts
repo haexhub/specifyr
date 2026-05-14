@@ -9,6 +9,7 @@ import {
 } from "@su/specifyr-stores";
 import { getProjectWorkflowId } from "@su/workflows";
 import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "@su/workflow-discovery";
+import { resolveProjectOrgId } from "@su/project-store";
 import { parseBody, parseParams, stepParams } from "@su/validation";
 
 const autoCompleteSchema = z.object({
@@ -26,7 +27,9 @@ const autoCompleteSchema = z.object({
 export default defineEventHandler(async (event) => {
   const { slug, stepId } = parseParams(event, stepParams);
 
-  await assertProjectExists(slug);
+  // TODO(phase-3): drop DB lookup once project-access middleware sets event.context.orgId.
+  const orgId = await resolveProjectOrgId(slug);
+  await assertProjectExists(orgId, slug);
 
   const body = await parseBody(event, autoCompleteSchema);
   // requireArtifact=true: only complete if a concrete file exists (used on page load).
@@ -41,16 +44,16 @@ export default defineEventHandler(async (event) => {
     return { completed: false, status: current.status };
   }
 
-  const workflowId = await getProjectWorkflowId(slug);
+  const workflowId = await getProjectWorkflowId(orgId, slug);
   const workflow =
     workflowId === "spec-kit"
       ? SPEC_KIT_WORKFLOW
-      : (await loadInstalledExtensionWorkflow(slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
+      : (await loadInstalledExtensionWorkflow(orgId, slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
 
   const stepDef = workflow.steps.find((s) => s.id === stepId);
   const artifacts = stepDef?.artifacts ?? [];
 
-  const projectDir = projectCwd(slug);
+  const projectDir = projectCwd(orgId, slug);
   const shouldComplete = artifacts.length === 0
     ? !requireArtifact // page-load: skip; post-turn: complete
     : await anyArtifactExists(projectDir, artifacts);
@@ -60,7 +63,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const updated = await store.markComplete(slug, stepId, body.sessionId ?? null);
-  const events = await loadEventStore(slug);
+  const events = await loadEventStore(orgId, slug);
   await events.append({
     type: "step_auto_completed",
     level: "success",
