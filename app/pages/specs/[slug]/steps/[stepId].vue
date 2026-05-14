@@ -325,7 +325,7 @@ const nextStep = computed(() => {
           <p class="text-[11px] uppercase tracking-wider text-muted-foreground">
             {{ $t("stepDetail.step", { n: stepIndex + 1, total: workflowSteps.length }) }}
           </p>
-          <h1 class="text-base font-semibold leading-tight">{{ step.label }}</h1>
+          <h1 class="text-lg font-semibold leading-tight">{{ step.label }}</h1>
         </div>
         <div class="flex items-center gap-2">
           <Badge variant="outline">{{ step.command }}</Badge>
