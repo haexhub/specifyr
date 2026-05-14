@@ -151,6 +151,26 @@ function redactSecrets(
 }
 
 /**
+ * Public wrapper used by callers outside this file (e.g. git-remote.ts)
+ * that need the same allowlist before issuing remote-touching git
+ * operations. Caller passes an already-parsed URL so we don't repeat
+ * `new URL()` validation.
+ */
+export async function assertRemoteSafe(parsed: URL): Promise<void> {
+  if (parsed.protocol !== "https:") {
+    throw new Error("only https:// URLs are supported");
+  }
+  if (parsed.username || parsed.password) {
+    throw new Error("URL must not contain inline credentials; use the credentials field");
+  }
+  const host = parsed.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost")) {
+    throw new Error("URL host is not allowed");
+  }
+  await assertHostNotPrivate(host);
+}
+
+/**
  * Run `git clone --depth 1 [--branch <ref>] <url> <destination>` with the
  * given options. The `.git` directory is removed on success so the
  * resulting tree contains no embedded credentials in `.git/config`.
