@@ -97,6 +97,53 @@ async function validateRemoteUrl(url: string): Promise<void> {
   await assertRemoteSafe(parsed);
 }
 
+export interface CommitAndPushOptions {
+  projectRoot: string;
+  branch: string;
+  message: string;
+  bearerToken?: string;
+}
+
+export interface CommitAndPushResult {
+  ok: boolean;
+  pushed: boolean;
+  stderr: string;
+}
+
+export async function commitAndPush(
+  opts: CommitAndPushOptions,
+): Promise<CommitAndPushResult> {
+  const status = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["status", "--porcelain"],
+  });
+  if (!status.ok) return { ok: false, pushed: false, stderr: status.stderr };
+  if (status.stdout.trim().length === 0) {
+    return { ok: true, pushed: false, stderr: "" };
+  }
+
+  const add = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["add", "-A"],
+  });
+  if (!add.ok) return { ok: false, pushed: false, stderr: add.stderr };
+
+  const commit = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["commit", "-m", opts.message],
+  });
+  if (!commit.ok) return { ok: false, pushed: false, stderr: commit.stderr };
+
+  const push = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["push", "origin", `HEAD:${opts.branch}`],
+    bearerToken: opts.bearerToken,
+    timeoutMs: 120_000,
+  });
+  if (!push.ok) return { ok: false, pushed: false, stderr: push.stderr };
+  return { ok: true, pushed: true, stderr: "" };
+}
+
 export async function configureRemote(
   repoPath: string,
   url: string,

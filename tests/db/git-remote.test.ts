@@ -138,6 +138,66 @@ test("configureRemote rejects localhost", async () => {
   );
 });
 
+test("commitAndPush stages, commits and pushes pending changes to remote", async () => {
+  process.env.SPECIFYR_ALLOW_FILE_REMOTES = "1";
+  const upstream = path.join(tmpDir, "upstream-cap.git");
+  await fs.mkdir(upstream);
+  await runOk("git", ["init", "--bare", "-b", "main"], upstream);
+
+  const projectRoot = path.join(tmpDir, "project-cap");
+  await initRepo(projectRoot);
+  await fs.writeFile(path.join(projectRoot, "README.md"), "hello\n");
+  await runOk("git", ["add", "."], projectRoot);
+  await runOk("git", ["commit", "-m", "init"], projectRoot);
+  await runOk("git", ["remote", "add", "origin", `file://${upstream}`], projectRoot);
+
+  await fs.writeFile(path.join(projectRoot, "step.md"), "progress\n");
+
+  const { commitAndPush } = await import(
+    "../../server/shared/utils/git-remote.ts"
+  );
+  const result = await commitAndPush({
+    projectRoot,
+    branch: "main",
+    message: "step: constitution complete",
+  });
+  assert.equal(result.ok, true, result.stderr);
+  assert.equal(result.pushed, true);
+
+  const verify = path.join(tmpDir, "verify-cap");
+  await runOk("git", ["clone", `file://${upstream}`, verify], tmpDir);
+  assert.equal(
+    await fs.readFile(path.join(verify, "step.md"), "utf8"),
+    "progress\n",
+  );
+});
+
+test("commitAndPush is a no-op when working tree is clean", async () => {
+  process.env.SPECIFYR_ALLOW_FILE_REMOTES = "1";
+  const upstream = path.join(tmpDir, "upstream-noop.git");
+  await fs.mkdir(upstream);
+  await runOk("git", ["init", "--bare", "-b", "main"], upstream);
+
+  const projectRoot = path.join(tmpDir, "project-noop");
+  await initRepo(projectRoot);
+  await fs.writeFile(path.join(projectRoot, "README.md"), "hello\n");
+  await runOk("git", ["add", "."], projectRoot);
+  await runOk("git", ["commit", "-m", "init"], projectRoot);
+  await runOk("git", ["remote", "add", "origin", `file://${upstream}`], projectRoot);
+  await runOk("git", ["push", "origin", "HEAD:main"], projectRoot);
+
+  const { commitAndPush } = await import(
+    "../../server/shared/utils/git-remote.ts"
+  );
+  const result = await commitAndPush({
+    projectRoot,
+    branch: "main",
+    message: "should not commit anything",
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.pushed, false);
+});
+
 test("configureRemote rejects file:// remotes unless explicitly allowed", async () => {
   const repo = path.join(tmpDir, "repo-file");
   await initRepo(repo);
