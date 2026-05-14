@@ -404,6 +404,108 @@ if (!process.env.DATABASE_URL) {
       });
     });
 
+    describe("project-access middleware", () => {
+      const adminHeaders = authAs("admin@example.com", "Admin");
+      const memberHeaders = authAs("member@example.com", "Member");
+      const strangerHeaders = authAs("stranger@example.com", "Stranger");
+
+      async function bootstrapOrgWithProject(slug = "demo") {
+        const org = await $fetch<{ id: string; slug: string }>("/api/orgs", {
+          method: "POST",
+          headers: adminHeaders,
+          body: { name: "Acme " + Date.now() },
+        });
+        // Insert a project row directly so we can test middleware
+        // against the DB without depending on the project-create flow
+        // (which Phase 4 reshapes).
+        const { recordProjectOwnership } = await import(
+          "../../server/shared/utils/project-store.ts"
+        );
+        await recordProjectOwnership(slug, { ownerOrgId: org.id });
+        return { org, slug };
+      }
+
+      it("401s unauthenticated requests under /api/orgs/:orgSlug/projects/:projSlug/*", async () => {
+        const { org, slug } = await bootstrapOrgWithProject();
+        await expect(
+          $fetch(`/api/orgs/${org.slug}/projects/${slug}/anything`, {
+            headers: { cookie: "specifyr-dev-loggedout=1" },
+          }),
+        ).rejects.toMatchObject({ statusCode: 401 });
+      });
+
+      it("404s when org doesn't exist", async () => {
+        // Member exists so we're authenticated but the orgSlug is bogus.
+        await $fetch("/api/me", { headers: memberHeaders });
+        await expect(
+          $fetch("/api/orgs/no-such-org/projects/whatever/anything", {
+            headers: memberHeaders,
+          }),
+        ).rejects.toMatchObject({ statusCode: 404 });
+      });
+
+      it("403s when user is not a member of the org", async () => {
+        const { org, slug } = await bootstrapOrgWithProject();
+        await $fetch("/api/me", { headers: strangerHeaders });
+        await expect(
+          $fetch(`/api/orgs/${org.slug}/projects/${slug}/anything`, {
+            headers: strangerHeaders,
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+      });
+
+      it("404s when project doesn't exist under a valid org", async () => {
+        const { org } = await bootstrapOrgWithProject();
+        await expect(
+          $fetch(`/api/orgs/${org.slug}/projects/ghost/anything`, {
+            headers: adminHeaders,
+          }),
+        ).rejects.toMatchObject({ statusCode: 404 });
+      });
+
+      it("skips non-project URLs (regex miss → bypasses checks)", async () => {
+        // /api/orgs/<slug>/invites is org-scoped but NOT project-scoped,
+        // so the middleware regex doesn't match — the request should
+        // reach the orgs/invites handler instead of being gated here.
+        const org = await $fetch<{ slug: string }>("/api/orgs", {
+          method: "POST",
+          headers: adminHeaders,
+          body: { name: "BypassTest " + Date.now() },
+        });
+        // Admin creating an invite in their own org should succeed —
+        // proves /api/orgs/.../invites is not gated by project-access.
+        const invite = await $fetch<{ token: string }>(
+          `/api/orgs/${org.slug}/invites`,
+          {
+            method: "POST",
+            headers: adminHeaders,
+            body: { email: "skipped@example.com", role: "member" },
+          },
+        );
+        expect(invite.token).toMatch(/^[0-9a-f]+$/);
+      });
+
+      it("passes through when (orgSlug, projSlug, membership) all resolve", async () => {
+        // Real project routes are added in Phase 4. Until then, hitting
+        // a valid (orgSlug, projSlug) URL with no handler returns 404
+        // — but crucially NOT 401/403/404-from-middleware. The middleware
+        // pass-through is observable because the error message is
+        // h3's generic "Cannot find any route matching" instead of the
+        // middleware's "not authenticated" / "not a member" / etc.
+        const { org, slug } = await bootstrapOrgWithProject();
+        await expect(
+          $fetch(`/api/orgs/${org.slug}/projects/${slug}/__nonexistent`, {
+            headers: adminHeaders,
+          }),
+        ).rejects.toMatchObject({
+          statusCode: 404,
+          // h3 emits "Cannot find any route matching ..." when the
+          // middleware passes but no handler matches.
+          statusMessage: /cannot find any route/i,
+        });
+      });
+    });
+
     describe("/api/projects POST with ownerOrgSlug", () => {
       const adminHeaders = authAs("admin@example.com", "Admin");
       const strangerHeaders = authAs("stranger@example.com", "Stranger");
