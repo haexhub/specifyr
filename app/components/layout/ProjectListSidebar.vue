@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { LogIn, LogOut, Plus, FolderOpen, Puzzle, Settings, Trash2 } from "lucide-vue-next";
+import { LogIn, LogOut, Plus, FolderOpen, Puzzle, Settings, ShieldCheck, Trash2 } from "lucide-vue-next";
 import ProjectCreateDialog from "~/components/projects/ProjectCreateDialog.vue";
 import ConfirmDialog from "~/components/ui/ConfirmDialog.vue";
 import type { ProjectListItem } from "~/types/types";
@@ -193,6 +193,19 @@ async function confirmDelete() {
       >
         <Settings class="size-4 opacity-70" />
         <span v-if="!compact">Settings</span>
+      </NuxtLink>
+      <NuxtLink
+        v-if="me?.isPlatformAdmin"
+        to="/admin"
+        class="flex items-center gap-2 rounded-md text-sm transition"
+        :class="[
+          route.path.startsWith('/admin') ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground',
+          compact ? 'size-10 justify-center p-0' : 'px-2 py-2'
+        ]"
+        :title="compact ? 'Platform admin' : undefined"
+      >
+        <ShieldCheck class="size-4 opacity-70" />
+        <span v-if="!compact">Platform admin</span>
       </NuxtLink>
 
       <!-- User identity + logout (when authenticated). -->

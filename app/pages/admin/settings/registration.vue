@@ -1,8 +1,4 @@
 <script setup lang="ts">
-definePageMeta({ layout: "workspace", middleware: ["platform-admin"] });
-
-import { Settings } from "lucide-vue-next";
-
 type Policy = "open" | "domain" | "closed";
 
 interface SettingsResponse {
@@ -55,28 +51,7 @@ async function save() {
 
 <template>
   <div>
-    <nav class="flex flex-wrap gap-2 text-xs">
-      <NuxtLink
-        to="/admin/users"
-        class="rounded-md px-3 py-1 text-muted-foreground hover:bg-muted"
-      >
-        Users
-      </NuxtLink>
-      <NuxtLink
-        to="/admin/orgs"
-        class="rounded-md px-3 py-1 text-muted-foreground hover:bg-muted"
-      >
-        Organizations
-      </NuxtLink>
-      <NuxtLink
-        to="/admin/settings/registration"
-        class="rounded-md bg-muted px-3 py-1 font-medium"
-      >
-        <Settings class="mr-1 inline size-3.5" /> Settings
-      </NuxtLink>
-    </nav>
-
-    <h1 class="mt-4 text-2xl font-semibold">Self-registration policy</h1>
+    <h1 class="text-2xl font-semibold">Self-registration policy</h1>
     <p class="mt-1 text-sm text-muted-foreground">
       Controls whether new users can sign in to specifyr after authenticating
       with the IDP. Existing users are never blocked by these rules.
