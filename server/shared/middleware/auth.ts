@@ -7,6 +7,10 @@ import {
   type RegistrationPolicy,
 } from "../utils/platform-settings";
 
+function normalizeEmail(s: string): string {
+  return s.trim().toLowerCase();
+}
+
 declare module "h3" {
   interface H3EventContext {
     /** Set when the request is authenticated AND the DB is configured. */
@@ -67,15 +71,20 @@ export default defineEventHandler(async (event) => {
     getHeader(event, "remote-user")?.trim() ||
     null;
 
-  // Platform-admin flag is derived from the env list on every upsert.
-  // Storing it on the row (vs re-checking the env on every request)
-  // keeps later platform-admin gating cheap and lets future UI surface
-  // the flag without an env-var round-trip. Comma- or space-separated.
-  const adminEmails = (process.env.SPECIFYR_PLATFORM_ADMIN_EMAILS ?? "")
+  // Platform-admin flag is derived on every upsert from two sources:
+  // - SPECIFYR_PLATFORM_ADMIN_EMAILS env var (bootstrap; survives DB
+  //   wipes, can't be revoked via UI)
+  // - platform.admin_emails setting (managed by admins via /admin/settings)
+  // Union of the two — UI grants additive, env list is authoritative.
+  const envAdminEmails = (process.env.SPECIFYR_PLATFORM_ADMIN_EMAILS ?? "")
     .split(/[,\s]+/)
-    .map((e) => e.trim().toLowerCase())
+    .map(normalizeEmail)
     .filter(Boolean);
-  const isPlatformAdmin = adminEmails.includes(email);
+  const dbAdminEmails = (
+    await getSetting<string[]>(SETTING_KEYS.platformAdminEmails, [])
+  ).map(normalizeEmail);
+  const isPlatformAdmin =
+    envAdminEmails.includes(email) || dbAdminEmails.includes(email);
 
   // Self-registration policy gate. We check before insert because the
   // policy decision depends on whether the user already exists — we
@@ -86,10 +95,20 @@ export default defineEventHandler(async (event) => {
   // platform is "closed". The token check on the accept endpoint
   // remains the authoritative gate for that path.
   const [existing] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, blockedAt: users.blockedAt })
     .from(users)
     .where(eq(users.email, email))
     .limit(1);
+
+  // Platform-admin block: existing user with blocked_at set cannot sign
+  // in. We reject before the upsert so a blocked admin can't reset their
+  // own display_name / isPlatformAdmin flag by hitting any endpoint.
+  if (existing?.blockedAt) {
+    throw createError({
+      statusCode: 403,
+      statusMessage: "Account is blocked. Contact a platform admin.",
+    });
+  }
 
   const path = event.path ?? event.node.req.url ?? "";
   const isInviteFlow = /^\/(api\/)?invites\//.test(path);

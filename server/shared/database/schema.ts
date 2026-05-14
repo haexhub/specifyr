@@ -42,6 +42,10 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   displayName: text("display_name"),
   isPlatformAdmin: boolean("is_platform_admin").notNull().default(false),
+  // Set by a platform admin via /admin/users to disable sign-in without
+  // deleting the row. Auth middleware short-circuits with 403 when this
+  // is non-null, after the email is resolved but before the upsert.
+  blockedAt: timestamp("blocked_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
