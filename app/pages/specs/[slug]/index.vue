@@ -159,15 +159,18 @@ async function deleteProject() {
           {{ project.description }}
         </p>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-        @click="deleteDialogOpen = true"
-      >
-        <Trash2 class="mr-1.5 size-3.5" />
-        {{ $t("specIndex.deleteProject") }}
-      </Button>
+      <div class="flex items-center gap-2">
+        <ProjectsRepositorySyncBadge :slug="slug" />
+        <Button
+          variant="ghost"
+          size="sm"
+          class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          @click="deleteDialogOpen = true"
+        >
+          <Trash2 class="mr-1.5 size-3.5" />
+          {{ $t("specIndex.deleteProject") }}
+        </Button>
+      </div>
     </header>
 
         <Card>
