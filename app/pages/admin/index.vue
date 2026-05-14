@@ -59,6 +59,15 @@ const { data, pending, refresh } = await useFetch<OverviewResponse>(
   { default: () => emptyOverview },
 );
 
+const hasEverLoaded = ref(false);
+watch(
+  pending,
+  (v) => {
+    if (!v) hasEverLoaded.value = true;
+  },
+  { immediate: true },
+);
+
 const refreshing = ref(false);
 async function manualRefresh() {
   refreshing.value = true;
@@ -96,7 +105,10 @@ const providers = computed(() => {
         </p>
       </div>
       <div class="flex items-center gap-3 text-xs text-muted-foreground">
-        <span>Last refreshed: {{ generatedAtLabel }}</span>
+        <span>
+          Last refreshed:
+          <ClientOnly fallback="—">{{ generatedAtLabel }}</ClientOnly>
+        </span>
         <Button
           variant="outline"
           size="sm"
@@ -109,7 +121,7 @@ const providers = computed(() => {
       </div>
     </div>
 
-    <div v-if="pending && !data.users.total" class="mt-6 text-sm text-muted-foreground">
+    <div v-if="pending && !hasEverLoaded" class="mt-6 text-sm text-muted-foreground">
       Loading…
     </div>
 

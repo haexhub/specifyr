@@ -25,6 +25,12 @@ const { data: me } = await useFetch<{ id?: string } | null>("/api/me", {
   default: () => null,
 });
 
+const { locale } = useI18n();
+
+function formatJoinedAt(value: string) {
+  return new Date(value).toLocaleDateString(locale.value, { timeZone: "UTC" });
+}
+
 type Action = "block" | "unblock" | "delete";
 const pendingAction = ref<{ user: AdminUserRow; action: Action } | null>(null);
 const busy = ref(false);
@@ -129,7 +135,7 @@ function cancel() {
           </TableCell>
           <TableCell>{{ u.orgCount }}</TableCell>
           <TableCell class="text-muted-foreground">
-            {{ new Date(u.createdAt).toLocaleDateString() }}
+            {{ formatJoinedAt(u.createdAt) }}
           </TableCell>
           <TableCell>
             <div class="flex flex-wrap gap-1">

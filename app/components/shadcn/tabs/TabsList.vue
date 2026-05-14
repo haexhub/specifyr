@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { TabsList as TabsListPrimitive, type TabsListProps } from "reka-ui"
+import { TabsList as TabsListPrimitive, type TabsListProps, useForwardProps } from "reka-ui"
 import type { HTMLAttributes } from "vue"
 import { cn } from "~/utils/utils"
 
@@ -9,11 +9,13 @@ const delegated = computed(() => {
   const { class: _, ...rest } = props
   return rest
 })
+
+const forwarded = useForwardProps(delegated)
 </script>
 
 <template>
   <TabsListPrimitive
-    v-bind="delegated"
+    v-bind="forwarded"
     :class="cn('inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground', props.class)"
   >
     <slot />

@@ -17,6 +17,12 @@ interface OrgsResponse {
 const { data, pending } = await useFetch<OrgsResponse>("/api/admin/orgs", {
   default: () => ({ orgs: [], pagination: { limit: 50, offset: 0, total: 0 } }),
 });
+
+const { locale } = useI18n();
+
+function formatCreatedAt(value: string) {
+  return new Date(value).toLocaleDateString(locale.value, { timeZone: "UTC" });
+}
 </script>
 
 <template>
@@ -47,7 +53,7 @@ const { data, pending } = await useFetch<OrgsResponse>("/api/admin/orgs", {
           <TableCell>{{ o.memberCount }}</TableCell>
           <TableCell>{{ o.projectCount }}</TableCell>
           <TableCell class="text-muted-foreground">
-            {{ new Date(o.createdAt).toLocaleDateString() }}
+            {{ formatCreatedAt(o.createdAt) }}
           </TableCell>
         </TableRow>
       </TableBody>
