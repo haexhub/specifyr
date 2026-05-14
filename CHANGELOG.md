@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.15.0](https://github.com/haexhub/specifyr/compare/v0.14.0...v0.15.0) (2026-05-14)
+
+
+### Features
+
+* **admin:** platform admin overview with shared tabs layout ([#64](https://github.com/haexhub/specifyr/issues/64)) ([bc1ce7c](https://github.com/haexhub/specifyr/commit/bc1ce7cbc2f56eb68fbcc1b42949209febd37ba9))
+
+
+### Bug Fixes
+
+* **ui:** align sidebar and content header heights ([#65](https://github.com/haexhub/specifyr/issues/65)) ([ac97154](https://github.com/haexhub/specifyr/commit/ac97154d420dfa93667e2ce0cb86361862ab53c6))
+
 ## [0.14.0](https://github.com/haexhub/specifyr/compare/v0.13.1...v0.14.0) (2026-05-13)
 
 
