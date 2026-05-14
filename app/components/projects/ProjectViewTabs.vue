@@ -11,14 +11,17 @@
 //               /specs/<slug>/runtime                        → Runtime;
 //               /specs/<slug>/secrets                        → Secrets.
 
-import { FileText, Activity, KeyRound } from "lucide-vue-next";
+import { FileText, Activity, KeyRound, GitBranch } from "lucide-vue-next";
 
 const props = defineProps<{ slug: string }>();
 const route = useRoute();
 
 const isRuntime = computed(() => route.path.startsWith(`/specs/${props.slug}/runtime`));
 const isSecrets = computed(() => route.path.startsWith(`/specs/${props.slug}/secrets`));
-const isSpeckit = computed(() => !isRuntime.value && !isSecrets.value);
+const isRepository = computed(() => route.path.startsWith(`/specs/${props.slug}/repository`));
+const isSpeckit = computed(
+  () => !isRuntime.value && !isSecrets.value && !isRepository.value,
+);
 </script>
 
 <template>
@@ -52,6 +55,16 @@ const isSpeckit = computed(() => !isRuntime.value && !isSecrets.value);
     >
       <KeyRound class="size-3.5" />
       Secrets
+    </NuxtLink>
+    <NuxtLink
+      :to="`/specs/${slug}/repository`"
+      class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+      :class="isRepository
+        ? 'bg-background font-medium text-foreground shadow-sm'
+        : 'text-muted-foreground hover:text-foreground'"
+    >
+      <GitBranch class="size-3.5" />
+      Repository
     </NuxtLink>
   </nav>
 </template>
