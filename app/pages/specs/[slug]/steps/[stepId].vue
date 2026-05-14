@@ -320,12 +320,12 @@ const nextStep = computed(() => {
       </template>
 
     <section class="flex h-screen flex-1 flex-col">
-      <header class="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6 py-3">
+      <header class="flex h-15 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6">
         <div>
           <p class="text-[11px] uppercase tracking-wider text-muted-foreground">
             {{ $t("stepDetail.step", { n: stepIndex + 1, total: workflowSteps.length }) }}
           </p>
-          <h1 class="text-lg font-semibold">{{ step.label }}</h1>
+          <h1 class="text-base font-semibold leading-tight">{{ step.label }}</h1>
         </div>
         <div class="flex items-center gap-2">
           <Badge variant="outline">{{ step.command }}</Badge>
@@ -373,16 +373,18 @@ const nextStep = computed(() => {
 
     <aside
       v-if="!artifactOpen"
-      class="flex h-screen w-10 shrink-0 flex-col items-center border-l border-border bg-muted/10 py-3"
+      class="flex h-screen w-10 shrink-0 flex-col items-center border-l border-border bg-muted/10"
     >
-      <button
-        type="button"
-        class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
-        :title="$t('stepDetail.showArtifact')"
-        @click="artifactOpen = true"
-      >
-        <PanelRightOpen class="size-4" />
-      </button>
+      <div class="flex h-15 shrink-0 items-center justify-center border-b border-border/60">
+        <button
+          type="button"
+          class="inline-flex size-8 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+          :title="$t('stepDetail.showArtifact')"
+          @click="artifactOpen = true"
+        >
+          <PanelRightOpen class="size-4" />
+        </button>
+      </div>
       <p class="mt-4 rotate-180 text-[10px] font-medium uppercase tracking-[0.25em] text-muted-foreground [writing-mode:vertical-rl]">
         {{ $t("artifact.label") }}
       </p>
