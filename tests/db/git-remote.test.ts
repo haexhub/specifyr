@@ -113,3 +113,47 @@ test("configureRemote rejects URL with inline credentials", async () => {
     /credentials/i,
   );
 });
+
+test("configureRemote rejects private IPv4 hosts", async () => {
+  const repo = path.join(tmpDir, "repo-private");
+  await initRepo(repo);
+  const { configureRemote } = await import(
+    "../../server/shared/utils/git-remote.ts"
+  );
+  await assert.rejects(
+    () => configureRemote(repo, "https://10.0.0.1/x.git"),
+    /allowed/i,
+  );
+});
+
+test("configureRemote rejects localhost", async () => {
+  const repo = path.join(tmpDir, "repo-localhost");
+  await initRepo(repo);
+  const { configureRemote } = await import(
+    "../../server/shared/utils/git-remote.ts"
+  );
+  await assert.rejects(
+    () => configureRemote(repo, "https://localhost/x.git"),
+    /allowed/i,
+  );
+});
+
+test("configureRemote rejects file:// remotes unless explicitly allowed", async () => {
+  const repo = path.join(tmpDir, "repo-file");
+  await initRepo(repo);
+  const previous = process.env.SPECIFYR_ALLOW_FILE_REMOTES;
+  delete process.env.SPECIFYR_ALLOW_FILE_REMOTES;
+  try {
+    const { configureRemote } = await import(
+      "../../server/shared/utils/git-remote.ts"
+    );
+    await assert.rejects(
+      () => configureRemote(repo, "file:///tmp/upstream.git"),
+      /file:\/\/ remotes are not allowed/i,
+    );
+  } finally {
+    if (previous === undefined)
+      delete process.env.SPECIFYR_ALLOW_FILE_REMOTES;
+    else process.env.SPECIFYR_ALLOW_FILE_REMOTES = previous;
+  }
+});
