@@ -35,6 +35,10 @@ export async function recordProjectOwnership(
   return row ?? null;
 }
 
+/**
+ * @deprecated Use getProjectByOrgAndSlug. Slugs are not globally unique anymore,
+ * so this lookup is ambiguous when two orgs share the same slug. Phase 4 deletes it.
+ */
 export async function getProjectFromDb(slug: string): Promise<Project | null> {
   const db = getDb();
   if (!db) return null;
@@ -45,6 +49,34 @@ export async function getProjectFromDb(slug: string): Promise<Project | null> {
     .where(eq(projects.slug, slug))
     .limit(1);
   return row ?? null;
+}
+
+export async function getProjectByOrgAndSlug(
+  orgId: string,
+  slug: string,
+): Promise<Project | null> {
+  const db = getDb();
+  if (!db) return null;
+
+  const [row] = await db
+    .select()
+    .from(projects)
+    .where(and(eq(projects.ownerOrgId, orgId), eq(projects.slug, slug)))
+    .limit(1);
+  return row ?? null;
+}
+
+export async function deleteProjectFromDb(
+  orgId: string,
+  slug: string,
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false;
+  const result = await db
+    .delete(projects)
+    .where(and(eq(projects.ownerOrgId, orgId), eq(projects.slug, slug)))
+    .returning({ id: projects.id });
+  return result.length > 0;
 }
 
 // TODO(phase-3): drop once project-access middleware populates event.context.orgId.
@@ -103,12 +135,13 @@ export async function listProjectKeysForUser(
  * True iff the user is a member of the project's owning org.
  */
 export async function userOwnsProject(
+  orgId: string,
   slug: string,
   userId: string,
 ): Promise<boolean> {
   const db = getDb();
   if (!db) return false;
-  const project = await getProjectFromDb(slug);
+  const project = await getProjectByOrgAndSlug(orgId, slug);
   if (!project) return false;
   const [m] = await db
     .select({ orgId: orgMemberships.orgId })
