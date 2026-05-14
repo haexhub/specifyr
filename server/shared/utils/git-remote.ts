@@ -144,6 +144,55 @@ export async function commitAndPush(
   return { ok: true, pushed: true, stderr: "" };
 }
 
+export interface PullFromRemoteOptions {
+  projectRoot: string;
+  branch: string;
+  bearerToken?: string;
+}
+
+export interface PullFromRemoteResult {
+  ok: boolean;
+  updated: boolean;
+  stderr: string;
+}
+
+export async function pullFromRemote(
+  opts: PullFromRemoteOptions,
+): Promise<PullFromRemoteResult> {
+  const status = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["status", "--porcelain"],
+  });
+  if (!status.ok) return { ok: false, updated: false, stderr: status.stderr };
+  if (status.stdout.trim().length > 0) {
+    return {
+      ok: false,
+      updated: false,
+      stderr: "working tree has uncommitted changes",
+    };
+  }
+  const before = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["rev-parse", "HEAD"],
+  });
+  const pull = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["pull", "--ff-only", "origin", opts.branch],
+    bearerToken: opts.bearerToken,
+    timeoutMs: 120_000,
+  });
+  if (!pull.ok) return { ok: false, updated: false, stderr: pull.stderr };
+  const after = await runGitInProject({
+    cwd: opts.projectRoot,
+    args: ["rev-parse", "HEAD"],
+  });
+  return {
+    ok: true,
+    updated: before.stdout.trim() !== after.stdout.trim(),
+    stderr: "",
+  };
+}
+
 export async function configureRemote(
   repoPath: string,
   url: string,

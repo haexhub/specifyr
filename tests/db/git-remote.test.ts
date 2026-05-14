@@ -198,6 +198,65 @@ test("commitAndPush is a no-op when working tree is clean", async () => {
   assert.equal(result.pushed, false);
 });
 
+test("pullFromRemote fast-forwards local branch when upstream advances", async () => {
+  process.env.SPECIFYR_ALLOW_FILE_REMOTES = "1";
+  const upstream = path.join(tmpDir, "upstream-pull.git");
+  await fs.mkdir(upstream);
+  await runOk("git", ["init", "--bare", "-b", "main"], upstream);
+
+  const repoA = path.join(tmpDir, "repo-pull-a");
+  await initRepo(repoA);
+  await fs.writeFile(path.join(repoA, "init.md"), "1\n");
+  await runOk("git", ["add", "."], repoA);
+  await runOk("git", ["commit", "-m", "init"], repoA);
+  await runOk("git", ["remote", "add", "origin", `file://${upstream}`], repoA);
+  await runOk("git", ["push", "origin", "HEAD:main"], repoA);
+
+  const repoB = path.join(tmpDir, "repo-pull-b");
+  await runOk("git", ["clone", `file://${upstream}`, repoB], tmpDir);
+  await runOk("git", ["config", "user.email", "x@y"], repoB);
+  await runOk("git", ["config", "user.name", "x"], repoB);
+
+  await fs.writeFile(path.join(repoA, "advance.md"), "from A\n");
+  await runOk("git", ["add", "."], repoA);
+  await runOk("git", ["commit", "-m", "advance"], repoA);
+  await runOk("git", ["push", "origin", "HEAD:main"], repoA);
+
+  const { pullFromRemote } = await import(
+    "../../server/shared/utils/git-remote.ts"
+  );
+  const result = await pullFromRemote({ projectRoot: repoB, branch: "main" });
+  assert.equal(result.ok, true, result.stderr);
+  assert.equal(result.updated, true);
+  assert.equal(
+    await fs.readFile(path.join(repoB, "advance.md"), "utf8"),
+    "from A\n",
+  );
+});
+
+test("pullFromRemote refuses when working tree is dirty", async () => {
+  process.env.SPECIFYR_ALLOW_FILE_REMOTES = "1";
+  const upstream = path.join(tmpDir, "upstream-dirty.git");
+  await fs.mkdir(upstream);
+  await runOk("git", ["init", "--bare", "-b", "main"], upstream);
+
+  const repo = path.join(tmpDir, "repo-dirty");
+  await initRepo(repo);
+  await fs.writeFile(path.join(repo, "init.md"), "1\n");
+  await runOk("git", ["add", "."], repo);
+  await runOk("git", ["commit", "-m", "init"], repo);
+  await runOk("git", ["remote", "add", "origin", `file://${upstream}`], repo);
+  await runOk("git", ["push", "origin", "HEAD:main"], repo);
+  await fs.writeFile(path.join(repo, "dirty.md"), "uncommitted\n");
+
+  const { pullFromRemote } = await import(
+    "../../server/shared/utils/git-remote.ts"
+  );
+  const result = await pullFromRemote({ projectRoot: repo, branch: "main" });
+  assert.equal(result.ok, false);
+  assert.match(result.stderr, /uncommitted/i);
+});
+
 test("configureRemote rejects file:// remotes unless explicitly allowed", async () => {
   const repo = path.join(tmpDir, "repo-file");
   await initRepo(repo);
