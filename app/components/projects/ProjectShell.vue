@@ -14,33 +14,41 @@
 //   sidebar — view-specific sidebar content (rendered below the always-visible
 //             "Alle Projekte" + project title block in ProjectStepSidebar).
 //   default — page body. Caller wraps in its own header / cards / etc.
-//
-// Why not a Nuxt layout file:
-//   We want both pages to opt-in explicitly and keep the freedom to NOT use
-//   the shell on routes that need a different chrome (e.g. step detail with
-//   its own back-button pattern). A component is more flexible than a layout.
 
+import { Menu, PanelLeft } from "lucide-vue-next";
 import ProjectStepSidebar from "~/components/projects/ProjectStepSidebar.vue";
 import ProjectViewTabs from "~/components/projects/ProjectViewTabs.vue";
 import type { Workflow } from "~/utils/workflows";
 
-defineProps<{
-  orgSlug: string;
-  projSlug: string;
-  projectTitle?: string;
-  workflow?: Workflow | null;
-  showSteps?: boolean;
-}>();
+withDefaults(
+  defineProps<{
+    orgSlug: string;
+    projSlug: string;
+    projectTitle?: string;
+    workflow?: Workflow | null;
+    showSteps?: boolean;
+  }>(),
+  { showSteps: true },
+);
+
+const route = useRoute();
+const stepSidebar = provideProjectStepSidebar();
+const projectListSidebar = useProjectListSidebar();
+
+// Close mobile drawers on navigation so they don't linger after tab switches.
+watch(() => route.path, () => stepSidebar.close());
 </script>
 
 <template>
-  <div class="flex h-screen">
+  <div class="flex h-full">
     <ProjectsProjectStepSidebar
       :org-slug="orgSlug"
       :proj-slug="projSlug"
       :project-title="projectTitle"
       :workflow="workflow ?? undefined"
-      :show-steps="showSteps ?? true"
+      :show-steps="showSteps"
+      :mobile-open="stepSidebar.open.value"
+      @close="stepSidebar.close()"
     >
       <slot name="sidebar" />
     </ProjectsProjectStepSidebar>
@@ -50,15 +58,36 @@ defineProps<{
            No max-width — tabs sit at the same left padding as the content
            below, so content+tabs share an alignment edge regardless of
            viewport width. h-15 mirrors the sidebar header heights so the
-           border-b dividers line up horizontally across all columns. -->
-      <div class="flex h-15 shrink-0 items-center border-b border-border bg-background/50 px-6 lg:px-10">
-        <ProjectsProjectViewTabs :org-slug="orgSlug" :proj-slug="projSlug" />
+           border-b dividers line up horizontally across all columns.
+           On mobile we prepend two toggle buttons: global project list +
+           step sidebar. -->
+      <div class="flex h-15 shrink-0 items-center gap-1 border-b border-border bg-background/50 px-3 lg:px-10">
+        <button
+          v-if="projectListSidebar"
+          type="button"
+          class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground lg:hidden"
+          :aria-label="$t('sidebar.openMenu')"
+          @click="projectListSidebar.toggle()"
+        >
+          <Menu class="size-5" />
+        </button>
+        <button
+          type="button"
+          class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground lg:hidden"
+          :aria-label="$t('sidebar.openStepMenu')"
+          @click="stepSidebar.toggle()"
+        >
+          <PanelLeft class="size-5" />
+        </button>
+        <div class="min-w-0 flex-1 overflow-x-auto">
+          <ProjectsProjectViewTabs :org-slug="orgSlug" :proj-slug="projSlug" />
+        </div>
       </div>
 
       <!-- Page body: scrolls independently. Full-width within the padding;
            page content (cards, panes, grids) decides its own line length
            via internal layout (e.g. lg:grid-cols-2). -->
-      <div class="flex-1 overflow-y-auto p-6 lg:p-10">
+      <div class="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-10">
         <div class="space-y-6">
           <slot />
         </div>

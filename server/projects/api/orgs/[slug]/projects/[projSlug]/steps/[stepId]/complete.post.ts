@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { loadStepStateStore, loadEventStore } from "@su/specifyr-stores";
+import { triggerAutoPush } from "@su/repository-autosync";
 import { parseBody, parseParams, stepParams } from "@su/validation";
 
 const completeSchema = z.object({
@@ -26,6 +27,8 @@ export default defineEventHandler(async (event) => {
     createdAt: new Date().toISOString(),
     title: `Step '${stepId}' als erledigt markiert`
   });
+
+  triggerAutoPush(orgId, slug);
 
   return updated;
 });

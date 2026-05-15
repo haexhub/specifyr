@@ -1,4 +1,4 @@
-import type { StepId, StepStatus } from "./steps";
+import type { StepId, StepStatus } from "~/utils/steps";
 
 export interface ProjectListItem {
   slug: string;

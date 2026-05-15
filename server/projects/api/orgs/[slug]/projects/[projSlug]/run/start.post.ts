@@ -13,6 +13,7 @@ import {
   deregisterScheduler
 } from "@su/run-manager";
 import { createSpeckitRunnerFactory } from "@su/speckit-agent-runner";
+import { triggerAutoPush } from "@su/repository-autosync";
 
 export default defineEventHandler(async (event) => {
   const orgId = event.context.orgId!;
@@ -137,6 +138,7 @@ export default defineEventHandler(async (event) => {
       await pushSafe("error", { message: err instanceof Error ? err.message : String(err) });
     } finally {
       deregisterScheduler(slug);
+      triggerAutoPush(orgId, slug);
       await pushSafe("done", {});
       try {
         await stream.close();

@@ -112,3 +112,14 @@ test("getProjectSecrets returns {} for an unknown slug", async () => {
   const orgId = "00000000-0000-0000-0000-000000000002";
   assert.deepEqual(await getProjectSecrets(orgId, "never-seen-before"), {});
 });
+
+test("setSecret/getSecret roundtrip for git remote token", async () => {
+  const mod = await import("../../server/shared/utils/secrets-store.ts");
+  const key = (mod as { GIT_REMOTE_TOKEN_KEY?: string }).GIT_REMOTE_TOKEN_KEY;
+  assert.equal(typeof key, "string", "GIT_REMOTE_TOKEN_KEY must be exported");
+  assert.match(key!, /^__/, "reserved keys are prefixed with __");
+  const orgId = "00000000-0000-0000-0000-000000000003";
+  await mod.setSecret(orgId, "git-token-test", key!, "ghp_testtoken123");
+  const secrets = await mod.getProjectSecrets(orgId, "git-token-test");
+  assert.equal(secrets[key!], "ghp_testtoken123");
+});

@@ -75,6 +75,7 @@ All spec pages (`index`, `run`, `runtime`, `history`, `secrets`, `steps/[stepId]
 3. **Open work — not blocking this PR:**
    - Member-management UI: list/add/remove project members in the project's settings tab. Endpoints already wired (`/api/orgs/<orgSlug>/projects/<projSlug>/members` GET/POST/DELETE).
    - Migration journal robustness: I had to manually re-insert a journal row when drizzle-kit migrate appeared to silently fail mid-apply on a fresh DB. Worth investigating whether the dev startup migrator is enough or if drizzle-kit migrate has a real bug here.
+   - Org-scoping for the new git-remote-sync feature (PR #68, merged from main): `project-repository.ts` writes meta.json under the old slug-only path; routes + tests still use the single-slug API. Already retrofitted as part of the merge — see commits after the merge.
 
 ---
 
@@ -86,7 +87,7 @@ All spec pages (`index`, `run`, `runtime`, `history`, `secrets`, `steps/[stepId]
 - **API:** move `/api/projects/[slug]/*` → `/api/orgs/[orgSlug]/projects/[projSlug]/*`. A new project-access middleware resolves `orgSlug+projSlug` → attaches `event.context.orgId`, `event.context.projectSlug` to downstream handlers, and gates by org-membership. Handlers stop calling `getProjectFromDb` / `userOwnsProject` themselves.
 - **UI:** routes move to `/specs/[orgSlug]/[projSlug]/*`. Project list sidebar groups by org. NuxtLinks and `useFetch` URLs updated.
 - **No data migration.** All demo data on the dev machine is disposable. The cleanup step (`rm -rf ~/.specifyr/.specifyr ~/.specifyr/projects` + truncate `projects` table) is the first thing executed when the new code is ready.
-- **Bonus fix (orphan detection):** in the new `createProjectRecord`, if FS dirs exist but no DB row owns them, clean them up before creating. Eliminates the "Leiche" class of bugs.
+- **Bonus fix (orphan detection):** in the new `createProjectRecord`, if FS dirs exist but no DB row owns them, clean them up before creating. Eliminates the orphaned-directory class of bugs.
 
 **Tech Stack:** Drizzle ORM, PostgreSQL, Nuxt 3 file-based routing, Vue 3, Node `fs/promises`.
 
@@ -365,7 +366,7 @@ export class ArtifactStore {
 **Step 2: Find and update every ArtifactStore call site**
 
 ```bash
-grep -rn "new ArtifactStore\|artifactStore\." /home/haex/Projekte/specifyr/server /home/haex/Projekte/specifyr/src --include="*.ts" --include="*.js" 2>/dev/null
+grep -rn "new ArtifactStore\|artifactStore\." server src --include="*.ts" --include="*.js" 2>/dev/null
 ```
 
 For each: thread `orgId` through. Same TODO-comment pattern as Task 2.2 if it's pre-middleware.
@@ -373,7 +374,7 @@ For each: thread `orgId` through. Same TODO-comment pattern as Task 2.2 if it's 
 **Step 3: Repeat for the other slug-keyed stores**
 
 ```bash
-grep -rn "class SessionStore\|class StepStateStore\|class EventStore\|class RunStore" /home/haex/Projekte/specifyr/src
+grep -rn "class SessionStore\|class StepStateStore\|class EventStore\|class RunStore" src
 ```
 
 For each store:
@@ -900,7 +901,7 @@ Every callsite passes both props now. Same treatment for ProjectStepSidebar, Pro
 **Step 3: Hunt for stragglers**
 
 ```bash
-grep -rEn "\\$\\{slug\\}|/specs/\\$|/api/projects/" /home/haex/Projekte/specifyr/app --include="*.vue" --include="*.ts" 2>/dev/null
+grep -rEn "\\$\\{slug\\}|/specs/\\$|/api/projects/" app --include="*.vue" --include="*.ts" 2>/dev/null
 ```
 
 Each hit needs adjusting.

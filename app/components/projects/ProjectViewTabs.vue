@@ -7,7 +7,7 @@
 //   A reka-ui <Tabs> would be a stateful client-only widget that re-implements
 //   half of that.
 
-import { FileText, Activity, KeyRound } from "lucide-vue-next";
+import { FileText, Activity, KeyRound, GitBranch } from "lucide-vue-next";
 
 const props = defineProps<{ orgSlug: string; projSlug: string }>();
 const route = useRoute();
@@ -15,7 +15,10 @@ const route = useRoute();
 const base = computed(() => `/specs/${props.orgSlug}/${props.projSlug}`);
 const isRuntime = computed(() => route.path.startsWith(`${base.value}/runtime`));
 const isSecrets = computed(() => route.path.startsWith(`${base.value}/secrets`));
-const isSpeckit = computed(() => !isRuntime.value && !isSecrets.value);
+const isRepository = computed(() => route.path.startsWith(`${base.value}/repository`));
+const isSpeckit = computed(
+  () => !isRuntime.value && !isSecrets.value && !isRepository.value,
+);
 </script>
 
 <template>
@@ -49,6 +52,16 @@ const isSpeckit = computed(() => !isRuntime.value && !isSecrets.value);
     >
       <KeyRound class="size-3.5" />
       Secrets
+    </NuxtLink>
+    <NuxtLink
+      :to="`${base}/repository`"
+      class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+      :class="isRepository
+        ? 'bg-background font-medium text-foreground shadow-sm'
+        : 'text-muted-foreground hover:text-foreground'"
+    >
+      <GitBranch class="size-3.5" />
+      Repository
     </NuxtLink>
   </nav>
 </template>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PanelRightOpen, Play } from "lucide-vue-next";
+import { PanelRightOpen, Play, Menu, PanelLeft } from "lucide-vue-next";
 import { Badge } from "~/components/shadcn/badge";
 import { Button } from "~/components/shadcn/button";
 import ProjectStepSidebar from "~/components/projects/ProjectStepSidebar.vue";
@@ -58,6 +58,11 @@ onMounted(() => {
   const stored = Number.parseInt(localStorage.getItem(ARTIFACT_WIDTH_KEY) ?? "", 10);
   if (Number.isFinite(stored)) {
     artifactWidth.value = Math.min(Math.max(stored, ARTIFACT_WIDTH_MIN), ARTIFACT_WIDTH_MAX);
+  }
+  // Don't auto-open the artifact panel on small viewports — it would cover
+  // the chat area entirely. The user can still open it via the toggle.
+  if (window.matchMedia("(max-width: 1023px)").matches) {
+    artifactOpen.value = false;
   }
 });
 
@@ -266,6 +271,10 @@ const nextStep = computed(() => {
   if (stepIndex.value < 0) return null;
   return workflowSteps.value[stepIndex.value + 1] ?? null;
 });
+
+const stepSidebar = provideProjectStepSidebar();
+const projectListSidebar = useProjectListSidebar();
+watch(() => route.path, () => stepSidebar.close());
 </script>
 
 <template>
@@ -273,13 +282,15 @@ const nextStep = computed(() => {
     {{ $t("stepDetail.unknownStep", { id: stepIdParam }) }}
   </div>
 
-  <div v-else class="flex h-screen">
+  <div v-else class="flex h-full">
     <ProjectsProjectStepSidebar
       :org-slug="orgSlug"
       :proj-slug="projSlug"
       :project-title="project?.title"
       :active-step-id="step.id"
       :workflow="workflow"
+      :mobile-open="stepSidebar.open.value"
+      @close="stepSidebar.close()"
     >
       <ClientOnly>
         <UiSessionList
@@ -299,18 +310,37 @@ const nextStep = computed(() => {
 
     <ClientOnly>
       <template #fallback>
-        <section class="flex h-screen flex-1 items-center justify-center text-xs text-muted-foreground">
+        <section class="flex h-full flex-1 items-center justify-center text-xs text-muted-foreground">
           {{ $t("stepDetail.loadingWorkspace") }}
         </section>
       </template>
 
-    <section class="flex h-screen flex-1 flex-col">
-      <header class="flex h-15 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-6">
-        <div>
+    <section class="flex h-full min-w-0 flex-1 flex-col">
+      <header class="flex h-15 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border/60 px-3 lg:px-6">
+        <div class="flex items-center gap-1 lg:hidden">
+          <button
+            v-if="projectListSidebar"
+            type="button"
+            class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            :aria-label="$t('sidebar.openMenu')"
+            @click="projectListSidebar.toggle()"
+          >
+            <Menu class="size-5" />
+          </button>
+          <button
+            type="button"
+            class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground"
+            :aria-label="$t('sidebar.openStepMenu')"
+            @click="stepSidebar.toggle()"
+          >
+            <PanelLeft class="size-5" />
+          </button>
+        </div>
+        <div class="min-w-0">
           <p class="text-[11px] uppercase tracking-wider text-muted-foreground">
             {{ $t("stepDetail.step", { n: stepIndex + 1, total: workflowSteps.length }) }}
           </p>
-          <h1 class="text-base font-semibold leading-tight">{{ step.label }}</h1>
+          <h1 class="truncate text-lg font-semibold leading-tight">{{ step.label }}</h1>
         </div>
         <div class="flex items-center gap-2">
           <Badge variant="outline">{{ step.command }}</Badge>
@@ -323,6 +353,15 @@ const nextStep = computed(() => {
             <Play class="mr-1.5 size-3.5" :class="runningAction && 'animate-pulse'" />
             {{ runningAction ? $t("common.loading") : $t("stepDetail.run") }}
           </Button>
+          <button
+            v-if="!artifactOpen"
+            type="button"
+            class="inline-flex size-9 shrink-0 items-center justify-center rounded-md text-muted-foreground transition hover:bg-accent hover:text-foreground lg:hidden"
+            :aria-label="$t('stepDetail.showArtifact')"
+            @click="artifactOpen = true"
+          >
+            <PanelRightOpen class="size-5" />
+          </button>
         </div>
       </header>
 
@@ -359,7 +398,7 @@ const nextStep = computed(() => {
 
     <aside
       v-if="!artifactOpen"
-      class="flex h-screen w-10 shrink-0 flex-col items-center border-l border-border bg-muted/10"
+      class="hidden h-full w-10 shrink-0 flex-col items-center border-l border-border bg-muted/10 lg:flex"
     >
       <div class="flex h-15 shrink-0 items-center justify-center border-b border-border/60">
         <button
@@ -378,9 +417,9 @@ const nextStep = computed(() => {
 
     <aside
       v-if="artifactOpen"
-      class="relative flex h-screen shrink-0 flex-col border-l border-border bg-muted/10"
+      class="fixed inset-0 z-40 flex h-dvh flex-col border-l border-border bg-background lg:relative lg:inset-auto lg:z-auto lg:h-full lg:w-(--artifact-w) lg:bg-muted/10"
       :class="artifactResizing && 'select-none'"
-      :style="{ width: `${artifactWidth}px` }"
+      :style="{ '--artifact-w': `${artifactWidth}px` }"
     >
       <div
         class="group absolute inset-y-0 -left-1 z-20 w-2 cursor-col-resize"

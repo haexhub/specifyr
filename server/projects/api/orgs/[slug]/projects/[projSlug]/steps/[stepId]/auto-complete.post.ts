@@ -9,6 +9,7 @@ import {
 } from "@su/specifyr-stores";
 import { getProjectWorkflowId } from "@su/workflows";
 import { SPEC_KIT_WORKFLOW, loadInstalledExtensionWorkflow } from "@su/workflow-discovery";
+import { triggerAutoPush } from "@su/repository-autosync";
 import { parseBody, parseParams, stepParams } from "@su/validation";
 
 const autoCompleteSchema = z.object({
@@ -70,6 +71,8 @@ export default defineEventHandler(async (event) => {
     createdAt: new Date().toISOString(),
     title: `Step '${stepId}' automatisch als erledigt markiert`
   });
+
+  triggerAutoPush(orgId, slug);
 
   return { completed: true, status: updated.status };
 });

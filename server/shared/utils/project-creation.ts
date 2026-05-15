@@ -19,10 +19,10 @@ export async function createProjectRecord(options: {
 }) {
   const [{ ArtifactStore }, { runCommand }, { ensureDir, slugify }] = await Promise.all([
     importModule<{ ArtifactStore: new (cwd?: string) => any }>("src/core/artifact-store.js"),
-    importModule<{ runCommand: typeof import("../../src/utils/process.js").runCommand }>("src/utils/process.js"),
+    importModule<{ runCommand: typeof import("../../../src/utils/process.js").runCommand }>("src/utils/process.js"),
     importModule<{
-      ensureDir: typeof import("../../src/utils/fs.js").ensureDir;
-      slugify: typeof import("../../src/utils/fs.js").slugify;
+      ensureDir: typeof import("../../../src/utils/fs.js").ensureDir;
+      slugify: typeof import("../../../src/utils/fs.js").slugify;
     }>("src/utils/fs.js")
   ]);
 

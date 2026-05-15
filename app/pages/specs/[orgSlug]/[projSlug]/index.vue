@@ -132,21 +132,23 @@ async function deleteProject() {
 
     <header class="flex flex-wrap items-start justify-between gap-3">
       <div class="space-y-1">
-        <p class="text-xs uppercase tracking-[0.18em] text-muted-foreground">{{ project.slug }}</p>
         <h1 class="text-2xl font-semibold tracking-tight">{{ project.title }}</h1>
         <p v-if="project.description" class="text-sm leading-6 text-muted-foreground">
           {{ project.description }}
         </p>
       </div>
-      <Button
-        variant="ghost"
-        size="sm"
-        class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-        @click="deleteDialogOpen = true"
-      >
-        <Trash2 class="mr-1.5 size-3.5" />
-        {{ $t("specIndex.deleteProject") }}
-      </Button>
+      <div class="flex items-center gap-2">
+        <ProjectsRepositorySyncBadge :org-slug="orgSlug" :proj-slug="projSlug" />
+        <Button
+          variant="ghost"
+          size="sm"
+          class="text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          @click="deleteDialogOpen = true"
+        >
+          <Trash2 class="mr-1.5 size-3.5" />
+          {{ $t("specIndex.deleteProject") }}
+        </Button>
+      </div>
     </header>
 
         <Card>
