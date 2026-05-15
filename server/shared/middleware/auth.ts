@@ -150,20 +150,16 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // UPSERT — insert if new, update display_name + updated_at on conflict.
-  // We don't trust client to lower-case email, so we lower it ourselves
-  // (Authentik already does, but devs/curl might not).
-  //
-  // No auto-org creation here — mandatory-org model leaves new users
-  // with `memberships.length === 0` so the UI's onboarding gate forces
-  // them through `/onboarding/create-org` before they can do anything.
+  // UPSERT — insert if new; on conflict refresh isPlatformAdmin (env/UI
+  // can grant/revoke between sessions) but leave display_name alone so a
+  // user-edited value from /settings/me/profile isn't clobbered by the
+  // IDP header on the next request.
   const [row] = await db
     .insert(users)
     .values({ email, displayName, isPlatformAdmin })
     .onConflictDoUpdate({
       target: users.email,
       set: {
-        displayName,
         isPlatformAdmin,
         updatedAt: sql`now()`,
       },

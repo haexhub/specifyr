@@ -46,6 +46,9 @@ export const users = pgTable("users", {
   // deleting the row. Auth middleware short-circuits with 403 when this
   // is non-null, after the email is resolved but before the upsert.
   blockedAt: timestamp("blocked_at", { withTimezone: true }),
+  // BCP-47 locale code (e.g. "de", "en"). NULL = use browser/default.
+  // Client-side plugin applies this via $i18n.setLocale on login.
+  preferredLocale: text("preferred_locale"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

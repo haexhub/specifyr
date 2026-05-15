@@ -1,0 +1,17 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "remove": "Remove",
+    "loading": "Loading…",
+    "working": "Working…",
+    "error": "Error",
+    "add": "Add",
+    "catalog": "Catalog →",
+    "allProjects": "All projects",
+    "total": "total",
+    "statusComplete": "complete",
+    "statusInProgress": "in progress",
+    "statusStale": "stale"
+  }
+}
