@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.17.0](https://github.com/haexhub/specifyr/compare/v0.16.0...v0.17.0) (2026-05-15)
+
+
+### Features
+
+* org-scoped projects + per-project membership ([#70](https://github.com/haexhub/specifyr/issues/70)) ([9bbc0dc](https://github.com/haexhub/specifyr/commit/9bbc0dcf2f0a7048cdd4783311c937c7a9f8c1ef))
+
 ## [0.16.0](https://github.com/haexhub/specifyr/compare/v0.15.0...v0.16.0) (2026-05-14)
 
 
