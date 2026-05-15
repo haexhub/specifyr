@@ -8,58 +8,32 @@ import ProjectShell from "~/components/projects/ProjectShell.vue";
 import NotificationLogWidget from "~/components/ui/NotificationLogWidget.vue";
 import NotificationDrawer from "~/components/ui/NotificationDrawer.vue";
 import InstalledExtensionsWidget from "~/components/settings/InstalledExtensionsWidget.vue";
-import { type StepId, type StepStatus } from "~/utils/steps";
-import { resolveWorkflow, type Workflow } from "~/utils/workflows";
-import type { StepState, NotificationEvent } from "~/types/types";
+import type { Workflow } from "~/utils/workflows";
+import type { StepId, StepStatus } from "~/utils/steps";
+import type { NotificationEvent } from "~/types/types";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 const refreshProjects = inject<() => Promise<void>>("refreshProjects", async () => {});
 
-const orgSlug = computed(() => route.params.orgSlug as string);
-const projSlug = computed(() => route.params.projSlug as string);
-const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
-const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
+const { orgSlug, projSlug, apiBase, routeBase, cacheKey } = useProjectContext();
+const { project, error, workflow, workflowSteps } = await useProject();
+const { statusMap } = await useStepStates(workflowSteps);
+
 const deleteDialogOpen = ref(false);
 const deleting = ref(false);
 const notificationDrawerOpen = ref(false);
 
-const { data: project, error } = await useFetch<{
-  workflow?: string;
-  workflowDefinition?: Workflow;
-  title?: string;
-  [k: string]: unknown;
-}>(() => apiBase.value, {
-  key: () => `project-${orgSlug.value}-${projSlug.value}`
-});
-
-const workflow = computed(() =>
-  resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null)
-);
-const workflowSteps = computed(() => workflow.value.steps);
-
 const { data: availableWorkflows } = await useFetch<Workflow[]>(
   () => `${apiBase.value}/workflows`,
-  { default: () => [], key: () => `workflows-${orgSlug.value}-${projSlug.value}` }
-);
-
-const { data: stepStates } = await useFetch<StepState[]>(
-  () => `${apiBase.value}/steps`,
-  { default: () => [], key: () => `steps-${orgSlug.value}-${projSlug.value}` }
+  { default: () => [], key: () => `workflows-${cacheKey.value}` }
 );
 
 const { data: events, pending: eventsLoading } = await useFetch<NotificationEvent[]>(
   () => `${apiBase.value}/events`,
-  { default: () => [], key: () => `events-${orgSlug.value}-${projSlug.value}` }
+  { default: () => [], key: () => `events-${cacheKey.value}` }
 );
-
-const statusMap = computed(() => {
-  const map: Record<StepId, StepStatus | undefined> = {};
-  for (const s of workflowSteps.value) map[s.id] = undefined;
-  for (const s of stepStates.value ?? []) map[s.id] = s.status;
-  return map;
-});
 
 const completionStats = computed(() => {
   const statuses = Object.values(statusMap.value);

@@ -7,34 +7,24 @@ import SessionList from "~/components/ui/SessionList.vue";
 import ChatStream from "~/components/ui/ChatStream.vue";
 import ArtifactViewer from "~/components/ui/ArtifactViewer.vue";
 import HookGateBanner from "~/components/common/HookGateBanner.vue";
-import { stepById, type StepId, type StepStatus } from "~/utils/steps";
-import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/utils/workflows";
+import { stepById, type StepId } from "~/utils/steps";
+import type { WorkflowStep } from "~/utils/workflows";
 import { gatesForStep } from "~/utils/hooks";
-import type { SessionMetadata, StepState } from "~/types/types";
+import type { SessionMetadata } from "~/types/types";
 
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
-const orgSlug = computed(() => route.params.orgSlug as string);
-const projSlug = computed(() => route.params.projSlug as string);
-const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
+const { orgSlug, projSlug, apiBase, cacheKey } = useProjectContext();
+const { project, workflow, workflowSteps } = await useProject();
+const { statusMap: workflowStatusMap, refresh: refreshStepStates } = await useStepStates(workflowSteps);
+
 const stepIdParam = computed(() => route.params.stepId as string);
 const activeSessionId = computed(() => {
   const q = route.query.session;
   return typeof q === "string" && q.length > 0 ? q : null;
 });
-
-const { data: project } = await useFetch<{
-  workflow?: string;
-  workflowDefinition?: Workflow;
-  title?: string;
-}>(() => apiBase.value, { key: () => `project-${orgSlug.value}-${projSlug.value}` });
-
-const workflow = computed(() =>
-  resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null)
-);
-const workflowSteps = computed(() => workflow.value.steps);
 
 const step = computed(() => {
   try {
@@ -105,7 +95,7 @@ interface ExtensionRecord {
 
 const { data: extensionsManifest } = await useFetch<{ extensions: ExtensionRecord[] }>(
   () => `${apiBase.value}/extensions`,
-  { default: () => ({ extensions: [] }), key: () => `ext-${orgSlug.value}-${projSlug.value}` }
+  { default: () => ({ extensions: [] }), key: () => `ext-${cacheKey.value}` }
 );
 
 const installedSlugs = computed(() =>
@@ -119,16 +109,8 @@ const hookGates = computed(() => {
   return gatesForStep(step.value.id, installedSlugs.value);
 });
 
-const stepStates = ref<StepState[]>([]);
-const statusMap = computed(() => {
-  const map: Record<StepId, StepStatus | undefined> = {};
-  for (const wfStep of workflowSteps.value) map[wfStep.id] = undefined;
-  for (const s of stepStates.value) map[s.id] = s.status;
-  return map;
-});
-
-const currentStepStatus = computed<StepStatus | undefined>(() =>
-  step.value ? statusMap.value[step.value.id] : undefined
+const currentStepStatus = computed(() =>
+  step.value ? workflowStatusMap.value[step.value.id] : undefined,
 );
 
 const activeSession = computed(() =>
@@ -136,8 +118,7 @@ const activeSession = computed(() =>
 );
 
 async function loadStepStates() {
-  stepStates.value = await $fetch<StepState[]>(`${apiBase.value}/steps`);
-  await refreshNuxtData(`steps-${orgSlug.value}-${projSlug.value}`);
+  await refreshStepStates();
 }
 
 async function loadSessions() {

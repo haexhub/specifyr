@@ -2,13 +2,9 @@
 import { ArrowLeft, Filter } from "lucide-vue-next";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/shadcn/card";
 import ProjectShell from "~/components/projects/ProjectShell.vue";
-import { resolveWorkflow, type Workflow } from "~/utils/workflows";
 
-const route = useRoute();
-const orgSlug = computed(() => route.params.orgSlug as string);
-const projSlug = computed(() => route.params.projSlug as string);
-const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
-const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
+const { orgSlug, projSlug, apiBase, routeBase } = useProjectContext();
+const { project, workflow } = await useProject();
 
 interface EventRow {
   id: string;
@@ -25,19 +21,6 @@ interface EventRow {
     task_title?: string;
   };
 }
-
-const { data: project } = await useFetch<{
-  workflow?: string;
-  workflowDefinition?: Workflow;
-  title?: string;
-  [k: string]: unknown;
-}>(() => apiBase.value, {
-  key: () => `project-${orgSlug.value}-${projSlug.value}`,
-});
-
-const workflow = computed(() =>
-  resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null),
-);
 
 const events = ref<EventRow[]>([]);
 const loading = ref(false);

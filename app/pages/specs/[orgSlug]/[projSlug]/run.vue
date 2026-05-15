@@ -7,28 +7,14 @@ import RunTaskList, { type RunTaskRow } from "~/components/ui/RunTaskList.vue";
 import RunTaskDetail, { type TaskLogEntry } from "~/components/ui/RunTaskDetail.vue";
 import { nextTick } from "vue";
 import { openSse, type SseEvent } from "~/utils/sse-client";
-import { isStepUnlocked, type StepId, type StepStatus } from "~/utils/steps";
-import { resolveWorkflow, type Workflow, type WorkflowStep } from "~/utils/workflows";
-import type { StepState } from "~/types/types";
+import { isStepUnlocked } from "~/utils/steps";
+import type { WorkflowStep } from "~/utils/workflows";
 
 const { t } = useI18n();
-const route = useRoute();
 const router = useRouter();
-const orgSlug = computed(() => route.params.orgSlug as string);
-const projSlug = computed(() => route.params.projSlug as string);
-const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
-const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
-
-const { data: project } = await useFetch<{
-  workflow?: string;
-  workflowDefinition?: Workflow;
-  title?: string;
-}>(() => apiBase.value, { key: () => `project-${orgSlug.value}-${projSlug.value}` });
-
-const workflow = computed(() =>
-  resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null)
-);
-const workflowSteps = computed(() => workflow.value.steps);
+const { orgSlug, projSlug, apiBase, routeBase } = useProjectContext();
+const { project, workflow, workflowSteps } = await useProject();
+const { statusMap } = await useStepStates(workflowSteps);
 
 const runStep = computed(() => workflowSteps.value.find((s: WorkflowStep) => s.isRun) ?? workflowSteps.value[workflowSteps.value.length - 1]!);
 const tasksStep = computed(() => {
@@ -36,17 +22,6 @@ const tasksStep = computed(() => {
   return idx > 0 ? workflowSteps.value[idx - 1]! : runStep.value;
 });
 
-const { data: stepStates } = await useFetch<StepState[]>(
-  () => `${apiBase.value}/steps`,
-  { default: () => [], key: () => `steps-${orgSlug.value}-${projSlug.value}` }
-);
-
-const statusMap = computed(() => {
-  const map: Record<StepId, StepStatus | undefined> = {};
-  for (const step of workflowSteps.value) map[step.id] = undefined;
-  for (const s of stepStates.value ?? []) map[s.id] = s.status;
-  return map;
-});
 const unlocked = computed(() => isStepUnlocked(runStep.value.id, statusMap.value, workflowSteps.value));
 
 interface GraphTask {

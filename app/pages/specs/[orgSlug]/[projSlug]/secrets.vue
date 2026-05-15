@@ -6,10 +6,7 @@ import { Input } from "~/components/shadcn/input";
 import { Badge } from "~/components/shadcn/badge";
 import ProjectShell from "~/components/projects/ProjectShell.vue";
 
-const route = useRoute();
-const orgSlug = computed(() => route.params.orgSlug as string);
-const projSlug = computed(() => route.params.projSlug as string);
-const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
+const { orgSlug, projSlug, apiBase } = useProjectContext();
 
 const { data, refresh } = await useFetch<{ keys: string[] }>(
   () => `${apiBase.value}/secrets`,

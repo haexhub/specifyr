@@ -6,14 +6,11 @@ import ProjectShell from "~/components/projects/ProjectShell.vue";
 import AgentDetailDrawer from "~/components/agents/AgentDetailDrawer.vue";
 import AgentTaskBoard from "~/components/agents/AgentTaskBoard.vue";
 import CompanyAgentLlmGrid from "~/components/agents/CompanyAgentLlmGrid.vue";
-import { resolveWorkflow, type Workflow } from "~/utils/workflows";
 
 const route = useRoute();
 const router = useRouter();
-const orgSlug = computed(() => route.params.orgSlug as string);
-const projSlug = computed(() => route.params.projSlug as string);
-const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
-const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
+const { orgSlug, projSlug, apiBase, routeBase, cacheKey } = useProjectContext();
+const { project, workflow } = await useProject();
 
 const selectedRole = computed(() => {
   const v = route.query.agent;
@@ -65,19 +62,6 @@ interface EventRow {
   payload: Record<string, unknown>;
 }
 
-const { data: project } = await useFetch<{
-  workflow?: string;
-  workflowDefinition?: Workflow;
-  title?: string;
-  [k: string]: unknown;
-}>(() => apiBase.value, {
-  key: () => `project-${orgSlug.value}-${projSlug.value}`,
-});
-
-const workflow = computed(() =>
-  resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null),
-);
-
 const runStep = computed(() => {
   const steps = workflow.value.steps;
   return steps.find((s) => s.isRun) ?? steps[steps.length - 1]!;
@@ -87,7 +71,7 @@ const { data: companyStatus, refresh: refreshStatus } = await useFetch<CompanySt
   () => `${apiBase.value}/company/status`,
   {
     default: () => ({ slug: projSlug.value, status: "idle" } as CompanyStatus),
-    key: () => `cstatus-${orgSlug.value}-${projSlug.value}`,
+    key: () => `cstatus-${cacheKey.value}`,
   },
 );
 

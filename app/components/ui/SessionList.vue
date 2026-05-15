@@ -2,7 +2,7 @@
 import { MessageSquarePlus, Loader2, CheckCircle2, AlertCircle, Trash2 } from "lucide-vue-next";
 import type { SessionMetadata } from "~/types/types";
 
-const props = defineProps<{
+defineProps<{
   orgSlug: string;
   projSlug: string;
   stepId: string;
