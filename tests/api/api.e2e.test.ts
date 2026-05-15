@@ -506,11 +506,11 @@ if (!process.env.DATABASE_URL) {
       });
     });
 
-    describe("/api/projects POST with ownerOrgSlug", () => {
+    describe("POST /api/orgs/:slug/projects", () => {
       const adminHeaders = authAs("admin@example.com", "Admin");
       const strangerHeaders = authAs("stranger@example.com", "Stranger");
 
-      it("rejects ownerOrgSlug when caller is not a member", async () => {
+      it("rejects when caller is not a member of the org", async () => {
         const org = await $fetch<{ slug: string }>("/api/orgs", {
           method: "POST",
           headers: adminHeaders,
@@ -518,29 +518,27 @@ if (!process.env.DATABASE_URL) {
         });
         // Make sure stranger user exists
         await $fetch("/api/me", { headers: strangerHeaders });
-        // Stranger tries to create a project owned by Acme
+        // Stranger tries to create a project under Acme
         await expect(
-          $fetch("/api/projects", {
+          $fetch(`/api/orgs/${org.slug}/projects`, {
             method: "POST",
             headers: strangerHeaders,
             body: {
               title: "stolen project " + Date.now(),
               description: "",
-              ownerOrgSlug: org.slug,
             },
           }),
         ).rejects.toMatchObject({ statusCode: 403 });
       });
 
-      it("404s when ownerOrgSlug doesn't resolve", async () => {
+      it("404s when the org slug doesn't resolve", async () => {
         await expect(
-          $fetch("/api/projects", {
+          $fetch("/api/orgs/no-such-org/projects", {
             method: "POST",
             headers: adminHeaders,
             body: {
               title: "x" + Date.now(),
               description: "",
-              ownerOrgSlug: "no-such-org",
             },
           }),
         ).rejects.toMatchObject({ statusCode: 404 });
