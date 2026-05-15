@@ -48,10 +48,9 @@ function isActive(project: ProjectListItem): boolean {
 const groupedProjects = computed(() => {
   const map = new Map<string, { orgSlug: string; items: ProjectListItem[] }>();
   for (const p of props.projects) {
-    const key = p.orgSlug ?? "";
-    const entry = map.get(key) ?? { orgSlug: p.orgSlug ?? "", items: [] };
+    const entry = map.get(p.orgSlug) ?? { orgSlug: p.orgSlug, items: [] };
     entry.items.push(p);
-    map.set(key, entry);
+    map.set(p.orgSlug, entry);
   }
   return [...map.values()].sort((a, b) => a.orgSlug.localeCompare(b.orgSlug));
 });
@@ -214,7 +213,7 @@ async function confirmDelete() {
       <template v-if="projects.length">
         <div
           v-for="group in groupedProjects"
-          :key="group.orgSlug || 'no-org'"
+          :key="group.orgSlug"
           class="mb-2"
         >
           <p
