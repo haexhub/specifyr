@@ -17,7 +17,9 @@ https://github.com/haexhub/specifyr/pull/70
 | Phase 3 — Project-Store + Access Middleware | ✅ done | |
 | Phase 4 — API Route Restructuring | ✅ done | Plus per-project membership (extension of original plan, see below) |
 | Phase 5 — UI | ✅ done | Plus 3 composables (`useProjectContext`, `useProject`, `useStepStates`) |
-| Phase 6 — Cleanup + Verification | ⏳ **next session** | See handoff below |
+| Phase 6.3 — Test fixture updates | ✅ done | secrets-store + orchestrator + turn-broker-acp now thread orgId; 370/370 unit, 32/32 e2e |
+| Phase 6.1 — Wipe demo data | ⏳ user-initiated | Destructive — see Task 6.1 |
+| Phase 6.2 — Manual smoke test | ⏳ user-driven | Browser walkthrough — see Task 6.2 |
 
 ### Extension to original plan: per-project membership
 
@@ -52,11 +54,11 @@ All spec pages (`index`, `run`, `runtime`, `history`, `secrets`, `steps/[stepId]
 
 ### Test status (2026-05-15)
 
-- **`pnpm test:e2e`**: 32/32 green. The route-collision fix renamed the new tree's first segment from `[orgSlug]` to `[slug]` so Nitro can merge it with the pre-existing `server/api/orgs/[slug]/...` tree (both must use the same param name at the same URL position).
-- **`pnpm test`**: 446 pass, **9 fail** — all pre-existing fixture mismatches introduced by Phase 2's org-scoping refactor (commit `84eaff8`), not by Phase 4/5. The fixtures still call the old single-slug API:
-   - `tests/db/secrets-store.test.ts` — `setSecret`/`getProjectSecrets`/`deleteSecret`/`listSecretKeys` now take `(orgId, slug, …)`.
-   - `tests/orchestrator.test.js` — `SpecOrchestrator` methods (`createSpec`, `refineSpec`, `generatePlan`, `generateTasks`, `approve`, `startRun`, `projectSnapshot`) are now `(orgId, slug)`-keyed; test harness needs to seed an org first.
-   - `tests/core/turn-broker-acp.test.js` — `TurnBroker` keys by `(orgId, slug, stepId, sid)`.
+- **`pnpm test:e2e`** (with `DATABASE_URL=postgres://postgres:devpw@localhost:5566/specifyr`): 32/32 green. The route-collision fix renamed the new tree's first segment from `[orgSlug]` to `[slug]` so Nitro can merge it with the pre-existing `server/api/orgs/[slug]/...` tree (both must use the same param name at the same URL position).
+- **`pnpm test`**: 370/370 pass. Fixtures previously failing on `(orgId, slug)`-keyed APIs are now updated:
+   - `tests/db/secrets-store.test.ts` — threads `orgId` into `setSecret`/`getProjectSecrets`/`deleteSecret`/`listSecretKeys`.
+   - `tests/orchestrator.test.js` — threads `orgId` through `SpecOrchestrator` methods and the legacy `createUiHandler` URL (now `/api/orgs/<orgId>/projects/<slug>`).
+   - `tests/core/turn-broker-acp.test.js` — threads `orgId` through `SessionStore.createSession`, `TurnBroker.startTurn`, and the `running` Map key (`${orgId}|${slug}|${stepId}|${sid}`).
 
 ### Handoff — what's left for the next session
 
@@ -70,8 +72,7 @@ All spec pages (`index`, `run`, `runtime`, `history`, `secrets`, `steps/[stepId]
    - Org-admin vs org-member access to `/specs/<orgSlug>/<projSlug>/...` URLs.
    - Member-management UI (does not yet exist in the UI — endpoints are there, frontend is TODO).
    - Approval deep-link goes to the right project.
-3. **Phase 6.3 — test fixture updates** for the 9 failing unit tests (see Test status above).
-4. **Open work — not blocking this PR:**
+3. **Open work — not blocking this PR:**
    - Member-management UI: list/add/remove project members in the project's settings tab. Endpoints already wired (`/api/orgs/<orgSlug>/projects/<projSlug>/members` GET/POST/DELETE).
    - Migration journal robustness: I had to manually re-insert a journal row when drizzle-kit migrate appeared to silently fail mid-apply on a fresh DB. Worth investigating whether the dev startup migrator is enough or if drizzle-kit migrate has a real bug here.
 
