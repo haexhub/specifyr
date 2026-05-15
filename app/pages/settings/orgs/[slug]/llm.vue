@@ -79,7 +79,7 @@ const readOnly = computed(() => data.value?.myRole !== "admin");
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-3xl px-6 py-8">
+  <div>
     <NuxtLink
       v-if="data"
       :to="`/settings/orgs/${data.org.slug}`"
