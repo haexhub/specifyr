@@ -189,66 +189,106 @@ export function defaultCompanyNetworkPeers(): string[] {
 // globalThis persists across Nitro HMR reloads. A module-scoped Map would be
 // re-created on each reload while old pollers kept running — causing duplicate
 // company runtimes to dispatch the same task twice (one container per runtime).
+interface RegisteredCompany {
+  runtime: CompanyRuntimeInstance;
+  orgId: string;
+  orgSlug: string;
+  slug: string;
+}
+
 declare global {
-  var __companyRegistry: Map<string, CompanyRuntimeInstance> | undefined;
+  var __companyRegistry: Map<string, RegisteredCompany> | undefined;
   var __companyStartingSet: Set<string> | undefined;
 }
 
-const registry: Map<string, CompanyRuntimeInstance> =
+// Registry key: `${orgId}/${slug}` because project slugs are unique only
+// per-org. Lookups by slug alone are intentionally NOT supported anymore —
+// the caller must know which org's company they're targeting.
+const registry: Map<string, RegisteredCompany> =
   globalThis.__companyRegistry ?? (globalThis.__companyRegistry = new Map());
 const startingSet: Set<string> =
   globalThis.__companyStartingSet ?? (globalThis.__companyStartingSet = new Set());
 
-export function getActiveCompany(slug: string): CompanyRuntimeInstance | undefined {
-  return registry.get(slug);
+function key(orgId: string, slug: string): string {
+  return `${orgId}/${slug}`;
 }
 
-export function isCompanyStarting(slug: string): boolean {
-  return startingSet.has(slug);
+export function getActiveCompany(
+  orgId: string,
+  slug: string,
+): CompanyRuntimeInstance | undefined {
+  return registry.get(key(orgId, slug))?.runtime;
 }
 
-export function markCompanyStarting(slug: string) {
-  startingSet.add(slug);
+export function isCompanyStarting(orgId: string, slug: string): boolean {
+  return startingSet.has(key(orgId, slug));
 }
 
-export function clearCompanyStarting(slug: string) {
-  startingSet.delete(slug);
+export function markCompanyStarting(orgId: string, slug: string) {
+  startingSet.add(key(orgId, slug));
 }
 
-export function registerCompany(slug: string, runtime: CompanyRuntimeInstance) {
-  const existing = registry.get(slug);
-  if (existing && existing !== runtime) {
-    existing.stop().catch(() => {});
+export function clearCompanyStarting(orgId: string, slug: string) {
+  startingSet.delete(key(orgId, slug));
+}
+
+export function registerCompany(
+  ctx: { orgId: string; orgSlug: string; slug: string },
+  runtime: CompanyRuntimeInstance,
+) {
+  const k = key(ctx.orgId, ctx.slug);
+  const existing = registry.get(k);
+  if (existing && existing.runtime !== runtime) {
+    existing.runtime.stop().catch(() => {});
   }
-  registry.set(slug, runtime);
+  registry.set(k, { runtime, orgId: ctx.orgId, orgSlug: ctx.orgSlug, slug: ctx.slug });
 }
 
 /**
- * Iterate every active runtime as `[slug, runtime]` pairs. Used by approval
- * endpoints that need to find a request without knowing its owning company —
- * the deep-link in the Telegram notification is intentionally slug-free.
+ * Iterate every active runtime. Used by approval endpoints that need to
+ * find a request without knowing its owning company up-front.
  */
-export function listActiveCompanies(): Array<[string, CompanyRuntimeInstance]> {
-  return [...registry.entries()];
+export function listActiveCompanies(): RegisteredCompany[] {
+  return [...registry.values()];
 }
 
 /**
  * Find the runtime that owns a given approval request-id, by scanning each
- * runtime's pending list. Returns null if no active runtime has it (approval
- * already resolved, timed out, or never existed).
+ * runtime's pending list. Returns null if no active runtime has it.
  */
 export function findRuntimeByApprovalId(
   requestId: string,
-): { slug: string; runtime: CompanyRuntimeInstance } | null {
-  for (const [slug, runtime] of registry) {
-    const pending = runtime.approvalService.listPending();
+): RegisteredCompany | null {
+  for (const entry of registry.values()) {
+    const pending = entry.runtime.approvalService.listPending();
     if (pending.some((p) => p.requestId === requestId)) {
-      return { slug, runtime };
+      return entry;
     }
   }
   return null;
 }
 
-export function deregisterCompany(slug: string) {
-  registry.delete(slug);
+/**
+ * Slug-only lookup for the MCP worker → server callback. Workers only know
+ * their slug + bearer token, not the orgId. Because slugs are unique per
+ * org (not globally), two orgs can have an active runtime for the same
+ * slug — we must disambiguate by token, not just take the first match.
+ * Token comparison here uses constant-time matching via the supplied
+ * `tokensMatch`, so a probe of `slug` alone leaks nothing about which
+ * orgs are running it.
+ */
+export function findCompanyBySlugForMcp(
+  slug: string,
+  opsToken: string,
+  tokensMatch: (provided: string, expected: string) => boolean,
+): RegisteredCompany | undefined {
+  for (const entry of registry.values()) {
+    if (entry.slug !== slug) continue;
+    if (tokensMatch(opsToken, entry.runtime.opsToken)) return entry;
+  }
+  return undefined;
+}
+
+export function deregisterCompany(orgId: string, slug: string) {
+  registry.delete(key(orgId, slug));
 }

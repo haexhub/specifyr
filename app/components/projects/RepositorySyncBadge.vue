@@ -6,11 +6,14 @@ interface RepositoryStatus {
   lastPushedAt?: string | null;
 }
 
-const props = defineProps<{ slug: string }>();
+const props = defineProps<{ orgSlug: string; projSlug: string }>();
 
 const { data, refresh, status } = await useFetch<RepositoryStatus>(
-  () => `/api/projects/${props.slug}/repository`,
-  { key: () => `repo-status-${props.slug}`, default: () => ({ configured: false }) },
+  () => `/api/orgs/${props.orgSlug}/projects/${props.projSlug}/repository`,
+  {
+    key: () => `repo-status-${props.orgSlug}-${props.projSlug}`,
+    default: () => ({ configured: false }),
+  },
 );
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -40,7 +43,7 @@ const failed = computed(() => status.value === "error");
 <template>
   <NuxtLink
     v-if="data?.configured"
-    :to="`/specs/${slug}/repository`"
+    :to="`/specs/${orgSlug}/${projSlug}/repository`"
     class="inline-flex items-center gap-1.5 rounded-md border px-2 py-1 text-xs transition hover:bg-muted/50"
     :class="failed ? 'border-destructive/40 text-destructive' : 'border-border text-muted-foreground'"
   >
@@ -51,7 +54,7 @@ const failed = computed(() => status.value === "error");
   </NuxtLink>
   <NuxtLink
     v-else
-    :to="`/specs/${slug}/repository`"
+    :to="`/specs/${orgSlug}/${projSlug}/repository`"
     class="inline-flex items-center gap-1.5 rounded-md border border-dashed px-2 py-1 text-xs text-muted-foreground transition hover:bg-muted/50"
   >
     <GitBranch class="size-3" />

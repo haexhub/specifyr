@@ -1,6 +1,5 @@
 import path from "node:path";
-import fs from "node:fs/promises";
-import { ensureDir, exists, readJson, writeJson } from "../utils/fs.js";
+import { ensureDir, readJson, writeJson } from "../utils/fs.js";
 import { SPECIFYR_DIR } from "./constants.js";
 
 // Default order for projects without an explicit workflow (back-compat with pre-workflow data).
@@ -25,58 +24,58 @@ export class StepStateStore {
     this.rootDir = path.join(cwd, SPECIFYR_DIR);
   }
 
-  stepFilePath(slug, stepId) {
-    return path.join(this.rootDir, slug, "steps", `${stepId}.json`);
+  stepFilePath(orgId, slug, stepId) {
+    return path.join(this.rootDir, orgId, slug, "steps", `${stepId}.json`);
   }
 
-  async getStep(slug, stepId) {
-    const saved = await readJson(this.stepFilePath(slug, stepId), null);
+  async getStep(orgId, slug, stepId) {
+    const saved = await readJson(this.stepFilePath(orgId, slug, stepId), null);
     return saved ?? defaultStepState(stepId);
   }
 
-  async listSteps(slug, stepIds = STEP_ORDER) {
+  async listSteps(orgId, slug, stepIds = STEP_ORDER) {
     const results = [];
     for (const stepId of stepIds) {
-      results.push(await this.getStep(slug, stepId));
+      results.push(await this.getStep(orgId, slug, stepId));
     }
     return results;
   }
 
-  async saveStep(slug, state) {
-    const filePath = this.stepFilePath(slug, state.id);
+  async saveStep(orgId, slug, state) {
+    const filePath = this.stepFilePath(orgId, slug, state.id);
     await ensureDir(path.dirname(filePath));
     const updated = { ...state, updatedAt: new Date().toISOString() };
     await writeJson(filePath, updated);
     return updated;
   }
 
-  async setStatus(slug, stepId, status, extra = {}) {
+  async setStatus(orgId, slug, stepId, status, extra = {}) {
     if (!STEP_STATUSES.includes(status)) {
       throw new Error(`Unknown step status: ${status}`);
     }
-    const current = await this.getStep(slug, stepId);
+    const current = await this.getStep(orgId, slug, stepId);
     const next = { ...current, ...extra, status };
     if (status !== "stale") {
       next.staleSince = null;
       next.staleReason = null;
     }
-    return this.saveStep(slug, next);
+    return this.saveStep(orgId, slug, next);
   }
 
-  async markComplete(slug, stepId, sessionId) {
-    return this.setStatus(slug, stepId, "complete", { lastSessionId: sessionId });
+  async markComplete(orgId, slug, stepId, sessionId) {
+    return this.setStatus(orgId, slug, stepId, "complete", { lastSessionId: sessionId });
   }
 
-  async markInProgress(slug, stepId, sessionId) {
-    const current = await this.getStep(slug, stepId);
+  async markInProgress(orgId, slug, stepId, sessionId) {
+    const current = await this.getStep(orgId, slug, stepId);
     if (current.status === "complete") {
       // moving back into iteration should keep complete; we use in_progress only for untouched → running
       return current;
     }
-    return this.setStatus(slug, stepId, "in_progress", { lastSessionId: sessionId });
+    return this.setStatus(orgId, slug, stepId, "in_progress", { lastSessionId: sessionId });
   }
 
-  async markDownstreamStale(slug, fromStepId, reason, stepIds = STEP_ORDER) {
+  async markDownstreamStale(orgId, slug, fromStepId, reason, stepIds = STEP_ORDER) {
     const fromIdx = stepIds.indexOf(fromStepId);
     if (fromIdx === -1) return;
 
@@ -84,7 +83,7 @@ export class StepStateStore {
     const affected = [];
     for (let i = fromIdx + 1; i < stepIds.length; i++) {
       const downstreamId = stepIds[i];
-      const state = await this.getStep(slug, downstreamId);
+      const state = await this.getStep(orgId, slug, downstreamId);
       if (state.status === "complete") {
         const next = {
           ...state,
@@ -92,7 +91,7 @@ export class StepStateStore {
           staleSince: now,
           staleReason: reason ?? `${fromStepId} was updated after completion.`
         };
-        await this.saveStep(slug, next);
+        await this.saveStep(orgId, slug, next);
         affected.push(downstreamId);
       }
     }

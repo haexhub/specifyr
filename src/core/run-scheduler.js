@@ -25,6 +25,7 @@ import { loadAppConfig } from "./app-config.js";
 export class RunScheduler extends EventEmitter {
   constructor({
     cwd,
+    orgId,
     slug,
     projectCwd,
     graph,
@@ -35,6 +36,7 @@ export class RunScheduler extends EventEmitter {
   } = {}) {
     super();
     this.cwd = cwd;
+    this.orgId = orgId;
     this.slug = slug;
     this.projectCwd = projectCwd;
     this.graph = graph;
@@ -102,13 +104,13 @@ export class RunScheduler extends EventEmitter {
   async execute() {
     await this.pickRunner();
     this.emit("run_started", { runner: this.activeRunnerName });
-    await this.runStore.setRunStatus(this.slug, {
+    await this.runStore.setRunStatus(this.orgId, this.slug, {
       status: "running",
       startedAt: new Date().toISOString(),
       completedAt: null
     });
 
-    const state = await this.runStore.getCurrent(this.slug);
+    const state = await this.runStore.getCurrent(this.orgId, this.slug);
 
     while (!this.abort) {
       // Launch as many tasks as the rules allow
@@ -132,7 +134,7 @@ export class RunScheduler extends EventEmitter {
     }
 
     const tasks = this.graph.tasks;
-    const fresh = await this.runStore.getCurrent(this.slug);
+    const fresh = await this.runStore.getCurrent(this.orgId, this.slug);
     const allDone = tasks.every((t) => {
       const s = fresh.tasks[t.id]?.status;
       return s === "completed" || s === "failed" || s === "blocked_by_upstream" || s === "skipped";
@@ -147,7 +149,7 @@ export class RunScheduler extends EventEmitter {
       finalStatus = anyFailed ? "failed" : "completed";
     }
 
-    await this.runStore.setRunStatus(this.slug, {
+    await this.runStore.setRunStatus(this.orgId, this.slug, {
       status: finalStatus,
       completedAt: new Date().toISOString(),
       currentTaskId: null
@@ -201,9 +203,9 @@ export class RunScheduler extends EventEmitter {
     // Only the first in-flight gets to be "current" in the state pointer — harmless
     // for parallel mode, still useful for UIs that highlight "what's running now".
     if (!state.currentTaskId) state.currentTaskId = task.id;
-    this.runStore.saveCurrent(this.slug, state).catch(() => {});
+    this.runStore.saveCurrent(this.orgId, this.slug, state).catch(() => {});
     this.emit("task_started", { taskId: task.id });
-    this.runStore.appendTaskLog(this.slug, task.id, {
+    this.runStore.appendTaskLog(this.orgId, this.slug, task.id, {
       kind: "start",
       title: task.title,
       description: task.description
@@ -242,13 +244,13 @@ export class RunScheduler extends EventEmitter {
             typeof ev.content.text === "string"
           ) {
             this.emit("task_chunk", { taskId: task.id, text: ev.content.text });
-            this.runStore.appendTaskLog(this.slug, task.id, { kind: "chunk", text: ev.content.text });
+            this.runStore.appendTaskLog(this.orgId, this.slug, task.id, { kind: "chunk", text: ev.content.text });
           } else if (ev?.sessionUpdate === "tool_call") {
             this.emit("task_event", {
               taskId: task.id,
               raw: { type: "tool_call", name: ev.title, input: ev.rawInput }
             });
-            this.runStore.appendTaskLog(this.slug, task.id, { kind: "tool_call", name: ev.title });
+            this.runStore.appendTaskLog(this.orgId, this.slug, task.id, { kind: "tool_call", name: ev.title });
           }
           this.emit("task_event", { taskId: task.id, raw: ev });
         }
@@ -260,7 +262,7 @@ export class RunScheduler extends EventEmitter {
         const summary =
           (typeof result?.result === "string" && result.result.split("\n").slice(-3).join(" ").trim()) ||
           "completed";
-        const fresh = await this.runStore.getCurrent(this.slug);
+        const fresh = await this.runStore.getCurrent(this.orgId, this.slug);
         fresh.tasks[task.id] = {
           ...fresh.tasks[task.id],
           status: "completed",
@@ -268,8 +270,8 @@ export class RunScheduler extends EventEmitter {
           summary,
           claudeSessionId
         };
-        await this.runStore.saveCurrent(this.slug, fresh);
-        await this.runStore.appendTaskLog(this.slug, task.id, {
+        await this.runStore.saveCurrent(this.orgId, this.slug, fresh);
+        await this.runStore.appendTaskLog(this.orgId, this.slug, task.id, {
           kind: "complete",
           summary,
           claudeSessionId
@@ -277,7 +279,7 @@ export class RunScheduler extends EventEmitter {
         this.emit("task_completed", { taskId: task.id, summary });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        const fresh = await this.runStore.getCurrent(this.slug);
+        const fresh = await this.runStore.getCurrent(this.orgId, this.slug);
         fresh.tasks[task.id] = {
           ...fresh.tasks[task.id],
           status: "failed",
@@ -285,8 +287,8 @@ export class RunScheduler extends EventEmitter {
           lastError: message
         };
         await this.propagateBlock(task.id, fresh);
-        await this.runStore.saveCurrent(this.slug, fresh);
-        await this.runStore.appendTaskLog(this.slug, task.id, { kind: "failed", error: message });
+        await this.runStore.saveCurrent(this.orgId, this.slug, fresh);
+        await this.runStore.appendTaskLog(this.orgId, this.slug, task.id, { kind: "failed", error: message });
         this.emit("task_failed", { taskId: task.id, error: message });
       } finally {
         this.inFlight.delete(task.id);

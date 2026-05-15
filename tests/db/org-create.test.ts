@@ -15,7 +15,7 @@ test(
   { skip: skipIfNoDb },
   async () => {
     await withDb(async (db) => {
-      const { createOrgWithAdmin, getOrgInitStatusForProjectSlug } =
+      const { createOrgWithAdmin, getOrgInitStatus } =
         await import("../../server/shared/utils/org-store.ts");
       const { orgSchemaName } = await import(
         "../../server/shared/utils/per-org-schema.ts"
@@ -44,14 +44,7 @@ test(
       assert.equal(rows.rows[0]?.n, 7);
 
       // Helper returns the same pending state
-      // (use a synthetic project row to exercise the join)
-      await db.execute(sql`
-        INSERT INTO projects (slug, owner_org_id)
-        VALUES ('vault-co-project', ${org.id}::uuid)
-      `);
-      const status = await getOrgInitStatusForProjectSlug(
-        "vault-co-project",
-      );
+      const status = await getOrgInitStatus(org.id);
       assert.equal(status, "pending_vault_init");
     });
   },
@@ -78,38 +71,36 @@ test(
 );
 
 test(
-  "getOrgInitStatusForProjectSlug returns null for an unknown slug",
+  "getOrgInitStatus returns null for an unknown orgId",
   { skip: skipIfNoDb },
   async () => {
     await withDb(async () => {
-      const { getOrgInitStatusForProjectSlug } = await import(
+      const { getOrgInitStatus } = await import(
         "../../server/shared/utils/org-store.ts"
       );
-      const status =
-        await getOrgInitStatusForProjectSlug("does-not-exist-anywhere");
+      const status = await getOrgInitStatus(
+        "00000000-0000-0000-0000-000000000000",
+      );
       assert.equal(status, null);
     });
   },
 );
 
 test(
-  "getOrgInitStatusForProjectSlug returns 'ready' after manual flip",
+  "getOrgInitStatus returns 'ready' after manual flip",
   { skip: skipIfNoDb },
   async () => {
     await withDb(async (db) => {
-      const { createOrgWithAdmin, getOrgInitStatusForProjectSlug } =
-        await import("../../server/shared/utils/org-store.ts");
+      const { createOrgWithAdmin, getOrgInitStatus } = await import(
+        "../../server/shared/utils/org-store.ts"
+      );
       const u = await seedUser();
       const org = await createOrgWithAdmin("Flipped", u.id);
-      await db.execute(sql`
-        INSERT INTO projects (slug, owner_org_id)
-        VALUES ('flipped-project', ${org.id}::uuid)
-      `);
       // Simulate the Phase 3 vault flip
       await db.execute(sql`
         UPDATE orgs SET init_status = 'ready' WHERE id = ${org.id}::uuid
       `);
-      const status = await getOrgInitStatusForProjectSlug("flipped-project");
+      const status = await getOrgInitStatus(org.id);
       assert.equal(status, "ready");
     });
   },

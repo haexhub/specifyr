@@ -2,6 +2,10 @@ import type { StepId, StepStatus } from "~/utils/steps";
 
 export interface ProjectListItem {
   slug: string;
+  // orgId is always present from the API; orgSlug is enriched server-side
+  // via a join so the UI can build /specs/<orgSlug>/<projSlug> links.
+  orgId: string;
+  orgSlug: string;
   title: string;
   description?: string;
   projectRoot?: string | null;

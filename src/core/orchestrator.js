@@ -55,55 +55,55 @@ export class SpecOrchestrator {
     return this.store.rootDir;
   }
 
-  async createSpec(title, problemStatement = "") {
+  async createSpec(orgId, title, problemStatement = "") {
     await this.ensureConfigured();
     const slug = slugify(title);
     if (!slug) {
       throw new Error("Could not derive a slug from the title.");
     }
     const specContent = createSpecTemplate(title, slug, problemStatement);
-    await this.store.createProject(slug, title, specContent);
+    await this.store.createProject(orgId, slug, title, specContent);
     const run = createRun(slug);
-    await this.store.saveArtifact(slug, "run", run);
+    await this.store.saveArtifact(orgId, slug, "run", run);
     await this.syncSpecKit(slug, { title, spec: specContent, plan: "", tasks: "" });
-    const events = new EventStore(this.store.getProjectDir(slug));
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     await events.append(this.createEvent("spec.created", "system", { slug, title }));
     return { slug, title };
   }
 
-  async refineSpec(slug) {
+  async refineSpec(orgId, slug) {
     await this.ensureConfigured();
-    const { spec, run } = await this.loadProjectContext(slug);
+    const { spec, run } = await this.loadProjectContext(orgId, slug);
     const pattern = this.patterns.resolve(WORKFLOW_STAGES.SPEC_REFINE, { slug });
     const result = await this.provider.generate(spec, { stage: "spec_refine", pattern });
     const refinedSpec = `${spec.raw.trim()}\n\n## Refinement Notes\n${result.notes.map((note) => `- ${note}`).join("\n")}\n`;
     const nextRun = this.updateRun(run, "refined");
-    await this.store.saveArtifact(slug, "spec", refinedSpec);
-    await this.store.saveArtifact(slug, "run", nextRun);
-    await this.syncArtifacts(slug);
-    const events = new EventStore(this.store.getProjectDir(slug));
+    await this.store.saveArtifact(orgId, slug, "spec", refinedSpec);
+    await this.store.saveArtifact(orgId, slug, "run", nextRun);
+    await this.syncArtifacts(orgId, slug);
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     await events.append(this.createEvent("spec.refined", "orchestrator", { pattern: pattern.name, provider: this.provider.name }));
     return nextRun;
   }
 
-  async generatePlan(slug) {
+  async generatePlan(orgId, slug) {
     await this.ensureConfigured();
-    const { spec, run } = await this.loadProjectContext(slug);
+    const { spec, run } = await this.loadProjectContext(orgId, slug);
     const pattern = this.patterns.resolve(WORKFLOW_STAGES.PLAN_GENERATE, { slug });
     const planData = await this.provider.generate(spec, { stage: "plan_generate", pattern });
     const planMarkdown = createPlanMarkdown(spec, planData);
     const nextRun = this.updateRun(run, "planned");
-    await this.store.saveArtifact(slug, "plan", planMarkdown);
-    await this.store.saveArtifact(slug, "run", nextRun);
-    await this.syncArtifacts(slug);
-    const events = new EventStore(this.store.getProjectDir(slug));
+    await this.store.saveArtifact(orgId, slug, "plan", planMarkdown);
+    await this.store.saveArtifact(orgId, slug, "run", nextRun);
+    await this.syncArtifacts(orgId, slug);
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     await events.append(this.createEvent("plan.generated", "orchestrator", { pattern: pattern.name, provider: this.provider.name }));
     return nextRun;
   }
 
-  async generateTasks(slug) {
+  async generateTasks(orgId, slug) {
     await this.ensureConfigured();
-    const { spec, plan, run } = await this.loadProjectContext(slug);
+    const { spec, plan, run } = await this.loadProjectContext(orgId, slug);
     if (!plan.data) {
       throw new Error("Plan is missing or invalid. Generate a plan first.");
     }
@@ -113,21 +113,21 @@ export class SpecOrchestrator {
       { stage: "tasks_generate", pattern }
     );
     const tasksMarkdown = createTasksMarkdown(spec, tasksData);
-    await this.store.saveArtifact(slug, "tasks", tasksMarkdown);
+    await this.store.saveArtifact(orgId, slug, "tasks", tasksMarkdown);
     const nextRun = this.updateRun(run, "planned");
-    await this.store.saveArtifact(slug, "run", nextRun);
-    await this.syncArtifacts(slug);
-    const events = new EventStore(this.store.getProjectDir(slug));
+    await this.store.saveArtifact(orgId, slug, "run", nextRun);
+    await this.syncArtifacts(orgId, slug);
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     await events.append(this.createEvent("tasks.generated", "orchestrator", { pattern: pattern.name, provider: this.provider.name }));
     return nextRun;
   }
 
-  async approve(slug, stage, actor = "human") {
+  async approve(orgId, slug, stage, actor = "human") {
     await this.ensureConfigured();
     if (!APPROVAL_STAGES.includes(stage)) {
       throw new Error(`Approval stage must be one of: ${APPROVAL_STAGES.join(", ")}.`);
     }
-    const run = await this.store.loadArtifact(slug, "run", null);
+    const run = await this.store.loadArtifact(orgId, slug, "run", null);
     if (!run) {
       throw new Error(`Unknown project '${slug}'.`);
     }
@@ -137,16 +137,16 @@ export class SpecOrchestrator {
       nextRun.status = "approved_for_execution";
     }
     nextRun.updatedAt = new Date().toISOString();
-    await this.store.saveArtifact(slug, "run", nextRun);
-    await this.store.saveArtifact(slug, "approvals", nextRun.approvals);
-    const events = new EventStore(this.store.getProjectDir(slug));
+    await this.store.saveArtifact(orgId, slug, "run", nextRun);
+    await this.store.saveArtifact(orgId, slug, "approvals", nextRun.approvals);
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     await events.append(this.createEvent("approval.granted", actor, { stage }));
     return nextRun;
   }
 
-  async startRun(slug) {
+  async startRun(orgId, slug) {
     await this.ensureConfigured();
-    const context = await this.loadProjectContext(slug);
+    const context = await this.loadProjectContext(orgId, slug);
     const { run, tasks } = context;
     if (!this.approvals.hasApproval(run, "task_batch")) {
       throw new Error("Run cannot start before task_batch approval.");
@@ -154,9 +154,9 @@ export class SpecOrchestrator {
     if (!tasks.data || tasks.data.tasks.length === 0) {
       throw new Error("No tasks found. Generate tasks first.");
     }
-    const events = new EventStore(this.store.getProjectDir(slug));
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     const startingRun = this.updateRun(run, "running");
-    await this.store.saveArtifact(slug, "run", startingRun);
+    await this.store.saveArtifact(orgId, slug, "run", startingRun);
     await events.append(this.createEvent("run.started", "orchestrator", { totalTasks: tasks.data.tasks.length }));
 
     const taskMap = new Map(tasks.data.tasks.map((task) => [task.id, task]));
@@ -182,7 +182,7 @@ export class SpecOrchestrator {
           taskResults,
           updatedAt: new Date().toISOString()
         };
-        await this.store.saveArtifact(slug, "run", blockedRun);
+        await this.store.saveArtifact(orgId, slug, "run", blockedRun);
         await events.append(this.createEvent("run.blocked", "orchestrator", { reason: "No ready tasks remain." }));
         return blockedRun;
       }
@@ -233,16 +233,16 @@ export class SpecOrchestrator {
       taskResults,
       updatedAt: new Date().toISOString()
     };
-    await this.store.saveArtifact(slug, "run", finalRun);
-    await this.store.saveArtifact(slug, "results", { tasks: taskResults, summary: review });
+    await this.store.saveArtifact(orgId, slug, "run", finalRun);
+    await this.store.saveArtifact(orgId, slug, "results", { tasks: taskResults, summary: review });
     await events.append(this.createEvent("run.finished", "orchestrator", { status: finalStatus, review }));
     return finalRun;
   }
 
-  async status(slug) {
+  async status(orgId, slug) {
     await this.ensureConfigured();
-    const context = await this.loadProjectContext(slug);
-    const events = new EventStore(this.store.getProjectDir(slug));
+    const context = await this.loadProjectContext(orgId, slug);
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     return {
       slug,
       title: context.meta.title,
@@ -258,36 +258,36 @@ export class SpecOrchestrator {
     return this.store.listProjects();
   }
 
-  async syncSpecFromSpecKit(slug, title = null) {
+  async syncSpecFromSpecKit(orgId, slug, title = null) {
     await this.ensureConfigured();
     const specContent = await this.specKit.readSpec(slug);
     if (!specContent.trim()) {
       throw new Error(`No spec-kit spec found for '${slug}'.`);
     }
 
-    const existingMeta = await this.store.loadArtifact(slug, "meta", null);
+    const existingMeta = await this.store.loadArtifact(orgId, slug, "meta", null);
     const resolvedTitle = title ?? existingMeta?.title ?? this.titleFromSpec(specContent, slug);
 
     if (!existingMeta) {
-      await this.store.createProject(slug, resolvedTitle, specContent);
-      await this.store.saveArtifact(slug, "run", createRun(slug));
+      await this.store.createProject(orgId, slug, resolvedTitle, specContent);
+      await this.store.saveArtifact(orgId, slug, "run", createRun(slug));
     } else {
-      await this.store.saveArtifact(slug, "spec", specContent);
+      await this.store.saveArtifact(orgId, slug, "spec", specContent);
     }
 
-    const run = await this.store.loadArtifact(slug, "run", null);
+    const run = await this.store.loadArtifact(orgId, slug, "run", null);
     const nextRun = this.updateRun(run, "draft");
-    await this.store.saveArtifact(slug, "run", nextRun);
-    const events = new EventStore(this.store.getProjectDir(slug));
+    await this.store.saveArtifact(orgId, slug, "run", nextRun);
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     await events.append(this.createEvent("spec.synced_from_spec_kit", "spec-kit", { slug }));
-    await this.syncArtifacts(slug);
+    await this.syncArtifacts(orgId, slug);
     return { slug, title: resolvedTitle };
   }
 
-  async projectSnapshot(slug) {
+  async projectSnapshot(orgId, slug) {
     await this.ensureConfigured();
-    const context = await this.loadProjectContext(slug);
-    const events = new EventStore(this.store.getProjectDir(slug));
+    const context = await this.loadProjectContext(orgId, slug);
+    const events = new EventStore(this.store.getProjectDir(orgId, slug));
     return {
       slug,
       title: context.meta.title,
@@ -298,21 +298,21 @@ export class SpecOrchestrator {
       plan: context.plan.raw,
       tasks: context.tasks.raw,
       run: context.run,
-      results: await this.store.loadArtifact(slug, "results", { tasks: {}, summary: null }),
+      results: await this.store.loadArtifact(orgId, slug, "results", { tasks: {}, summary: null }),
       events: await events.list()
     };
   }
 
-  async loadProjectContext(slug) {
+  async loadProjectContext(orgId, slug) {
     await this.ensureConfigured();
-    const meta = await this.store.loadArtifact(slug, "meta", null);
+    const meta = await this.store.loadArtifact(orgId, slug, "meta", null);
     if (!meta) {
       throw new Error(`Unknown project '${slug}'.`);
     }
-    const specRaw = await this.store.loadArtifact(slug, "spec", "");
-    const planRaw = await this.store.loadArtifact(slug, "plan", "");
-    const tasksRaw = await this.store.loadArtifact(slug, "tasks", "");
-    const run = await this.store.loadArtifact(slug, "run", null);
+    const specRaw = await this.store.loadArtifact(orgId, slug, "spec", "");
+    const planRaw = await this.store.loadArtifact(orgId, slug, "plan", "");
+    const tasksRaw = await this.store.loadArtifact(orgId, slug, "tasks", "");
+    const run = await this.store.loadArtifact(orgId, slug, "run", null);
     if (!run) {
       throw new Error(`Run state for '${slug}' is missing.`);
     }
@@ -387,14 +387,14 @@ export class SpecOrchestrator {
     }
   }
 
-  async syncArtifacts(slug) {
-    const meta = await this.store.loadArtifact(slug, "meta", null);
+  async syncArtifacts(orgId, slug) {
+    const meta = await this.store.loadArtifact(orgId, slug, "meta", null);
     if (!meta || this.config?.integrations?.specKitSync === false) {
       return;
     }
-    const spec = await this.store.loadArtifact(slug, "spec", "");
-    const plan = await this.store.loadArtifact(slug, "plan", "");
-    const tasks = await this.store.loadArtifact(slug, "tasks", "");
+    const spec = await this.store.loadArtifact(orgId, slug, "spec", "");
+    const plan = await this.store.loadArtifact(orgId, slug, "plan", "");
+    const tasks = await this.store.loadArtifact(orgId, slug, "tasks", "");
     await this.syncSpecKit(slug, { title: meta.title, spec, plan, tasks });
   }
 

@@ -46,29 +46,38 @@ if (!process.env.DATABASE_URL) {
       await cleanDb();
     });
 
-    async function bootstrapProject(headers: AuthHeaders): Promise<string> {
+    async function bootstrapProject(
+      headers: AuthHeaders,
+    ): Promise<{ orgSlug: string; slug: string }> {
       await $fetch("/api/me", { headers });
-      await $fetch("/api/orgs", {
+      const org = await $fetch<{ slug: string }>("/api/orgs", {
         method: "POST",
         headers,
         body: { name: "Repo Test Org" },
       });
-      const created = await $fetch<{ slug: string }>("/api/projects", {
-        method: "POST",
-        headers,
-        body: {
-          title: `repo-test-${Date.now()}`,
-          description: "",
+      const created = await $fetch<{ slug: string }>(
+        `/api/orgs/${org.slug}/projects`,
+        {
+          method: "POST",
+          headers,
+          body: {
+            title: `repo-test-${Date.now()}`,
+            description: "",
+          },
         },
-      });
-      return created.slug;
+      );
+      return { orgSlug: org.slug, slug: created.slug };
+    }
+
+    function repoBase(orgSlug: string, slug: string): string {
+      return `/api/orgs/${orgSlug}/projects/${slug}/repository`;
     }
 
     it("GET returns configured:false before any PUT", async () => {
       const headers = authAs("alice@example.com");
-      const slug = await bootstrapProject(headers);
+      const { orgSlug, slug } = await bootstrapProject(headers);
       const r = await $fetch<{ configured: boolean }>(
-        `/api/projects/${slug}/repository`,
+        repoBase(orgSlug, slug),
         { headers },
       );
       expect(r.configured).toBe(false);
@@ -76,8 +85,8 @@ if (!process.env.DATABASE_URL) {
 
     it("PUT persists repository config + token; GET returns hasToken:true without leaking the token", async () => {
       const headers = authAs("alice@example.com");
-      const slug = await bootstrapProject(headers);
-      await $fetch(`/api/projects/${slug}/repository`, {
+      const { orgSlug, slug } = await bootstrapProject(headers);
+      await $fetch(repoBase(orgSlug, slug), {
         method: "PUT",
         headers,
         body: {
@@ -94,7 +103,7 @@ if (!process.env.DATABASE_URL) {
         username: string;
         hasToken: boolean;
         token?: string;
-      }>(`/api/projects/${slug}/repository`, { headers });
+      }>(repoBase(orgSlug, slug), { headers });
       expect(r.configured).toBe(true);
       expect(r.url).toBe("https://github.com/acme/demo.git");
       expect(r.branch).toBe("main");
@@ -105,9 +114,9 @@ if (!process.env.DATABASE_URL) {
 
     it("PUT rejects ssh-style URL with 400", async () => {
       const headers = authAs("alice@example.com");
-      const slug = await bootstrapProject(headers);
+      const { orgSlug, slug } = await bootstrapProject(headers);
       await expect(
-        $fetch(`/api/projects/${slug}/repository`, {
+        $fetch(repoBase(orgSlug, slug), {
           method: "PUT",
           headers,
           body: {
@@ -122,8 +131,8 @@ if (!process.env.DATABASE_URL) {
 
     it("DELETE removes repository config and token", async () => {
       const headers = authAs("alice@example.com");
-      const slug = await bootstrapProject(headers);
-      await $fetch(`/api/projects/${slug}/repository`, {
+      const { orgSlug, slug } = await bootstrapProject(headers);
+      await $fetch(repoBase(orgSlug, slug), {
         method: "PUT",
         headers,
         body: {
@@ -133,12 +142,12 @@ if (!process.env.DATABASE_URL) {
           token: "t",
         },
       });
-      await $fetch(`/api/projects/${slug}/repository`, {
+      await $fetch(repoBase(orgSlug, slug), {
         method: "DELETE",
         headers,
       });
       const r = await $fetch<{ configured: boolean }>(
-        `/api/projects/${slug}/repository`,
+        repoBase(orgSlug, slug),
         { headers },
       );
       expect(r.configured).toBe(false);
@@ -146,9 +155,9 @@ if (!process.env.DATABASE_URL) {
 
     it("POST /secrets cannot overwrite the reserved git token key", async () => {
       const headers = authAs("alice@example.com");
-      const slug = await bootstrapProject(headers);
+      const { orgSlug, slug } = await bootstrapProject(headers);
       await expect(
-        $fetch(`/api/projects/${slug}/secrets`, {
+        $fetch(`/api/orgs/${orgSlug}/projects/${slug}/secrets`, {
           method: "POST",
           headers,
           body: { key: "__git_remote_token", value: "anything" },
@@ -173,9 +182,9 @@ if (!process.env.DATABASE_URL) {
 
       it("400 when repository not configured", async () => {
         const headers = authAs("alice@example.com");
-        const slug = await bootstrapProject(headers);
+        const { orgSlug, slug } = await bootstrapProject(headers);
         await expect(
-          $fetch(`/api/projects/${slug}/repository/push`, {
+          $fetch(`${repoBase(orgSlug, slug)}/push`, {
             method: "POST",
             headers,
             body: { message: "boom" },

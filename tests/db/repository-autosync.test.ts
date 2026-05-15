@@ -12,6 +12,8 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+const TEST_ORG_ID = "00000000-0000-0000-0000-000000000001";
+
 let tmpDataDir: string;
 let originalDataDir: string | undefined;
 let originalSecretKey: string | undefined;
@@ -35,7 +37,7 @@ after(async () => {
 });
 
 beforeEach(async () => {
-  const metaDir = path.join(tmpDataDir, ".specifyr", "autosync-test");
+  const metaDir = path.join(tmpDataDir, ".specifyr", TEST_ORG_ID, "autosync-test");
   await fs.rm(metaDir, { recursive: true, force: true });
   await fs.mkdir(metaDir, { recursive: true });
   await fs.writeFile(
@@ -49,7 +51,7 @@ test("triggerAutoPush is a no-op when repository is not configured", async () =>
     "../../server/shared/utils/repository-autosync.ts"
   );
   let calls = 0;
-  const result = await mod.triggerAutoPushImmediate("autosync-test", {
+  const result = await mod.triggerAutoPushImmediate(TEST_ORG_ID, "autosync-test", {
     push: async () => {
       calls++;
       return { ok: true, pushed: true, stderr: "" };
@@ -66,18 +68,18 @@ test("triggerAutoPushImmediate calls the injected push when repository is config
   const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
     "../../server/shared/utils/secrets-store.ts"
   );
-  await setProjectRepository("autosync-test", {
+  await setProjectRepository(TEST_ORG_ID, "autosync-test", {
     url: "https://github.com/x/y.git",
     branch: "main",
     username: "u",
   });
-  await setSecret("autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
+  await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
 
   const mod = await import(
     "../../server/shared/utils/repository-autosync.ts"
   );
   let calls = 0;
-  const result = await mod.triggerAutoPushImmediate("autosync-test", {
+  const result = await mod.triggerAutoPushImmediate(TEST_ORG_ID, "autosync-test", {
     push: async () => {
       calls++;
       return { ok: true, pushed: true, stderr: "" };
@@ -96,18 +98,18 @@ test("triggerAutoPushImmediate swallows errors from the push (logs only)", async
   const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
     "../../server/shared/utils/secrets-store.ts"
   );
-  await setProjectRepository("autosync-test", {
+  await setProjectRepository(TEST_ORG_ID, "autosync-test", {
     url: "https://github.com/x/y.git",
     branch: "main",
     username: "u",
   });
-  await setSecret("autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
+  await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
 
   const mod = await import(
     "../../server/shared/utils/repository-autosync.ts"
   );
   // Must not throw despite the push throwing.
-  const result = await mod.triggerAutoPushImmediate("autosync-test", {
+  const result = await mod.triggerAutoPushImmediate(TEST_ORG_ID, "autosync-test", {
     push: async () => {
       throw new Error("boom");
     },
@@ -124,33 +126,33 @@ test("triggerAutoPush debounces multiple rapid calls", async () => {
   const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
     "../../server/shared/utils/secrets-store.ts"
   );
-  await setProjectRepository("autosync-test", {
+  await setProjectRepository(TEST_ORG_ID, "autosync-test", {
     url: "https://github.com/x/y.git",
     branch: "main",
     username: "u",
   });
-  await setSecret("autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
+  await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
 
   const mod = await import(
     "../../server/shared/utils/repository-autosync.ts"
   );
   let calls = 0;
   // Use a tiny debounce window for the test so we don't wait 5s.
-  mod.triggerAutoPush("autosync-test", {
+  mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
     debounceMs: 60,
     push: async () => {
       calls++;
       return { ok: true, pushed: true, stderr: "" };
     },
   });
-  mod.triggerAutoPush("autosync-test", {
+  mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
     debounceMs: 60,
     push: async () => {
       calls++;
       return { ok: true, pushed: true, stderr: "" };
     },
   });
-  mod.triggerAutoPush("autosync-test", {
+  mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
     debounceMs: 60,
     push: async () => {
       calls++;

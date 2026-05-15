@@ -34,6 +34,7 @@ export default defineEventHandler((event) => {
   return {
     requestId: entry.requestId,
     slug: found.slug,
+    orgSlug: found.orgSlug,
     agent: entry.agent,
     capability: entry.capability,
   };

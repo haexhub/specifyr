@@ -9,15 +9,16 @@ import { SessionStore } from "../../src/core/session-store.js";
 async function setup() {
   const root = await mkdtemp(path.join(tmpdir(), "turn-broker-acp-"));
   const sessionStore = new SessionStore(root);
+  const orgId = "00000000-0000-0000-0000-000000000001";
   const slug = "x";
   const stepId = "s";
   // createSession auto-generates the session id (UUID); use the returned meta.id.
-  const meta = await sessionStore.createSession(slug, stepId, { title: "t" });
-  return { root, sessionStore, slug, stepId, sid: meta.id };
+  const meta = await sessionStore.createSession(orgId, slug, stepId, { title: "t" });
+  return { root, sessionStore, orgId, slug, stepId, sid: meta.id };
 }
 
 test("TurnBroker persists onEvent payloads as event:'session_update' with SessionUpdate data", async () => {
-  const { sessionStore, slug, stepId, sid } = await setup();
+  const { sessionStore, orgId, slug, stepId, sid } = await setup();
 
   let triggerEmit;
   const fakeRunner = {
@@ -54,14 +55,14 @@ test("TurnBroker persists onEvent payloads as event:'session_update' with Sessio
 
   const broker = new TurnBroker({ sessionStore, runnerFactory });
 
-  await broker.startTurn({ slug, stepId, sid, prompt: "go", cwd: "/tmp" });
+  await broker.startTurn({ orgId, slug, stepId, sid, prompt: "go", cwd: "/tmp" });
 
   // Wait for the inner async run() to finish.
-  const state = broker.running.get(`${slug}|${stepId}|${sid}`);
+  const state = broker.running.get(`${orgId}|${slug}|${stepId}|${sid}`);
   if (state) await state.promise;
 
   const eventsFile = path.join(
-    sessionStore.sessionsDir(slug, stepId),
+    sessionStore.sessionsDir(orgId, slug, stepId),
     `${sid}.events.jsonl`
   );
   const raw = await readFile(eventsFile, "utf8");

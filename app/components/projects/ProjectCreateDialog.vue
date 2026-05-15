@@ -37,9 +37,17 @@ interface OrgOption {
 const orgs = ref<OrgOption[]>([]);
 const selectedOwner = ref<string>("");
 
+// Only admin-orgs are eligible — creating a project requires admin role.
+const adminOrgs = computed(() => orgs.value.filter((o) => o.role === "admin"));
+
 async function refreshOrgs() {
   try {
-    orgs.value = await $fetch<OrgOption[]>("/api/orgs");
+    const all = await $fetch<OrgOption[]>("/api/orgs");
+    orgs.value = all;
+    // Auto-select the user's only admin-org so the picker collapses to a hint.
+    if (adminOrgs.value.length === 1 && !selectedOwner.value) {
+      selectedOwner.value = adminOrgs.value[0]!.slug;
+    }
   } catch {
     orgs.value = [];
   }
@@ -111,31 +119,37 @@ async function submit() {
   const trimmed = title.value.trim();
   if (!trimmed || submitting.value) return;
 
+  // URL is the source of truth for the owning org; require a selection
+  // before posting so the route can resolve unambiguously.
+  if (!selectedOwner.value) {
+    errorMessage.value = t("projectCreate.pickWorkspace");
+    return;
+  }
+
   submitting.value = true;
   errorMessage.value = "";
   titleError.value = "";
 
   try {
-    // Workflow-extensions must be installed for the workflow to surface on the project side.
-    // Silently union the chosen workflow's extension slug into the install list so the user
-    // doesn't have to remember to check the box.
     const extensionsToInstall = new Set(selectedExtensions.value);
     if (selectedWorkflowSummary.value?.extensionSlug) {
       extensionsToInstall.add(selectedWorkflowSummary.value.extensionSlug);
     }
 
-    const created = await $fetch<ProjectListItem>("/api/projects", {
-      method: "POST",
-      body: {
-        title: trimmed,
-        description: description.value.trim(),
-        extensions: [...extensionsToInstall],
-        workflow: selectedWorkflow.value,
-        ownerOrgSlug: selectedOwner.value || null
-      }
-    });
+    const created = await $fetch<ProjectListItem>(
+      `/api/orgs/${selectedOwner.value}/projects`,
+      {
+        method: "POST",
+        body: {
+          title: trimmed,
+          description: description.value.trim(),
+          extensions: [...extensionsToInstall],
+          workflow: selectedWorkflow.value,
+        },
+      },
+    );
     emit("created", created);
-    await navigateTo(`/specs/${created.slug}`);
+    await navigateTo(`/specs/${created.orgSlug}/${created.slug}`);
   } catch (error: any) {
     if (error?.response?.status === 409) {
       titleError.value = t("projectCreate.alreadyExists", { name: trimmed });
@@ -197,7 +211,11 @@ async function submit() {
             />
           </div>
 
-          <div v-if="orgs.length > 1" class="space-y-1.5">
+          <div v-if="adminOrgs.length === 0" class="rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+            Only org admins can create projects. Ask an admin of one of your
+            orgs to add a project on your behalf or to promote you.
+          </div>
+          <div v-else-if="adminOrgs.length > 1" class="space-y-1.5">
             <label for="project-owner" class="text-sm font-medium">Workspace</label>
             <select
               id="project-owner"
@@ -205,14 +223,20 @@ async function submit() {
               class="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background transition focus:ring-2 focus:ring-ring focus:ring-offset-2"
             >
               <option value="">Pick a workspace…</option>
-              <option v-for="o in orgs" :key="o.id" :value="o.slug">
+              <option v-for="o in adminOrgs" :key="o.id" :value="o.slug">
                 {{ o.name }}
               </option>
             </select>
             <p class="text-[11px] text-muted-foreground">
-              Members of this workspace will have access to the project.
+              Org admins always have access; other members need explicit project membership.
             </p>
           </div>
+          <p
+            v-else-if="adminOrgs.length === 1"
+            class="text-[11px] text-muted-foreground"
+          >
+            Creating in <code>{{ adminOrgs[0]?.slug }}</code>.
+          </p>
 
           <div class="space-y-1.5">
             <label for="project-workflow" class="text-sm font-medium">{{ $t("projectCreate.workflow") }}</label>
@@ -286,7 +310,10 @@ async function submit() {
             <Button type="button" variant="ghost" :disabled="submitting" @click="close">
               {{ $t("common.cancel") }}
             </Button>
-            <Button type="submit" :disabled="submitting || !title.trim()">
+            <Button
+              type="submit"
+              :disabled="submitting || !title.trim() || adminOrgs.length === 0 || !selectedOwner"
+            >
               {{ submitting ? $t("projectCreate.creating") : $t("projectCreate.create") }}
             </Button>
           </div>

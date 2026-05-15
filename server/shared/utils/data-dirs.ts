@@ -6,20 +6,42 @@ import path from "node:path";
  * Single source of truth for all runtime data directory paths.
  *
  * Default layout under ~/.specifyr/:
- *   projects/   — one subdirectory per project slug
- *   extensions/ — global extension source directories
- *   state/      — per-project app state
+ *   projects/<orgId>/<projSlug>/   — project content, org-scoped
+ *   .specifyr/<orgId>/<projSlug>/  — internal artifacts (spec.md, sessions, ...)
+ *   extensions/                    — global extension source directories
  *
- * Every path is overridable via environment variables, making the layout
- * fully configurable for Docker deployments or custom setups.
+ * The <orgId> segment uses the org UUID, not the slug, so a future
+ * org-rename feature doesn't have to move directories on disk.
+ *
+ * Every path is overridable via environment variables.
  */
 
 export function dataDir(): string {
   return process.env.SPECIFYR_DATA_DIR ?? path.join(os.homedir(), ".specifyr");
 }
 
-export function projectsDir(): string {
+export function projectsRoot(): string {
   return process.env.SPECIFYR_PROJECTS_DIR ?? path.join(dataDir(), "projects");
+}
+
+export function orgProjectsDir(orgId: string): string {
+  return path.join(projectsRoot(), orgId);
+}
+
+export function projectDir(orgId: string, slug: string): string {
+  return path.join(orgProjectsDir(orgId), slug);
+}
+
+export function artifactsRoot(): string {
+  return path.join(dataDir(), ".specifyr");
+}
+
+export function orgArtifactsDir(orgId: string): string {
+  return path.join(artifactsRoot(), orgId);
+}
+
+export function projectArtifactsDir(orgId: string, slug: string): string {
+  return path.join(orgArtifactsDir(orgId), slug);
 }
 
 // Global extensions directory — extension source repos live here and are
@@ -31,10 +53,14 @@ export function extensionsDir(): string {
 // Docker-aware host path for projects — needed when specifyr runs in a container
 // and spawns sibling Hermes agent containers whose bind-mount sources must be
 // resolved against the HOST filesystem, not the container FS.
-export function hostProjectsDir(): string {
+export function hostProjectsRoot(): string {
   if (process.env.SPECIFYR_HOST_PROJECTS_DIR) return process.env.SPECIFYR_HOST_PROJECTS_DIR;
   if (process.env.SPECIFYR_HOST_DATA_DIR) return path.join(process.env.SPECIFYR_HOST_DATA_DIR, "projects");
-  return projectsDir();
+  return projectsRoot();
+}
+
+export function hostProjectDir(orgId: string, slug: string): string {
+  return path.join(hostProjectsRoot(), orgId, slug);
 }
 
 /**

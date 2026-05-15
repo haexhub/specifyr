@@ -27,11 +27,13 @@ interface OrgCredsResponse {
   credentials: CredentialRow[];
 }
 
-const props = defineProps<{ slug: string }>();
+const props = defineProps<{ orgSlug: string; projSlug: string }>();
+
+const apiBase = computed(() => `/api/orgs/${props.orgSlug}/projects/${props.projSlug}`);
 
 const { data: aggregate, refresh: refreshAggregate } = await useFetch<Aggregate>(
-  () => `/api/projects/${props.slug}/company/agent-profiles`,
-  { default: () => ({ slug: props.slug, ownerOrgId: null, ownerOrgSlug: null, roles: [], perRole: [] }) },
+  () => `${apiBase.value}/company/agent-profiles`,
+  { default: () => ({ slug: props.projSlug, ownerOrgId: null, ownerOrgSlug: null, roles: [], perRole: [] }) },
 );
 
 const { data: userCredentials, refresh: refreshUserCreds } = await useFetch<CredentialRow[]>(

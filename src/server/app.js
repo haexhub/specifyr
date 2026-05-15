@@ -27,10 +27,11 @@ export function createUiHandler(options = {}) {
       return;
     }
 
-    if (url.pathname.startsWith("/api/projects/")) {
-      const slug = url.pathname.split("/").pop();
+    const projectMatch = /^\/api\/orgs\/([^/]+)\/projects\/([^/]+)$/.exec(url.pathname);
+    if (projectMatch) {
+      const [, orgId, slug] = projectMatch;
       try {
-        sendJson(response, 200, await orchestrator.projectSnapshot(slug));
+        sendJson(response, 200, await orchestrator.projectSnapshot(orgId, slug));
       } catch (error) {
         sendJson(response, 404, { error: error.message });
       }

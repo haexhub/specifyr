@@ -2,6 +2,7 @@
 .DS_Store
 node_modules/
 .worktrees/
+.pnpm-store/
 
 # Local env file — contains secrets (TELEGRAM_BOT_TOKEN, ANTHROPIC_API_KEY, …).
 # Use .env.example as the template. Never commit the real .env.

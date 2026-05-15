@@ -31,8 +31,10 @@ after(async () => {
   await fs.rm(tmpDataDir, { recursive: true, force: true });
 });
 
+const TEST_ORG_ID = "00000000-0000-0000-0000-000000000001";
+
 beforeEach(async () => {
-  const dir = path.join(tmpDataDir, ".specifyr", "demo");
+  const dir = path.join(tmpDataDir, ".specifyr", TEST_ORG_ID, "demo");
   await fs.rm(dir, { recursive: true, force: true });
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(
@@ -49,19 +51,19 @@ test("getProjectRepository returns null when not configured", async () => {
   const { getProjectRepository } = await import(
     "../../server/shared/utils/project-repository.ts"
   );
-  assert.equal(await getProjectRepository("demo"), null);
+  assert.equal(await getProjectRepository(TEST_ORG_ID, "demo"), null);
 });
 
 test("setProjectRepository persists url + branch + username", async () => {
   const { setProjectRepository, getProjectRepository } = await import(
     "../../server/shared/utils/project-repository.ts"
   );
-  await setProjectRepository("demo", {
+  await setProjectRepository(TEST_ORG_ID, "demo", {
     url: "https://github.com/acme/demo.git",
     branch: "main",
     username: "acme-bot",
   });
-  const cfg = await getProjectRepository("demo");
+  const cfg = await getProjectRepository(TEST_ORG_ID, "demo");
   assert.deepEqual(cfg, {
     url: "https://github.com/acme/demo.git",
     branch: "main",
@@ -75,7 +77,7 @@ test("setProjectRepository rejects non-https url", async () => {
   );
   await assert.rejects(
     () =>
-      setProjectRepository("demo", {
+      setProjectRepository(TEST_ORG_ID, "demo", {
         url: "git@github.com:acme/demo.git",
         branch: "main",
         username: "x",
@@ -90,7 +92,7 @@ test("setProjectRepository rejects URL with inline credentials", async () => {
   );
   await assert.rejects(
     () =>
-      setProjectRepository("demo", {
+      setProjectRepository(TEST_ORG_ID, "demo", {
         url: "https://user:pass@github.com/acme/demo.git",
         branch: "main",
         username: "x",
@@ -102,11 +104,11 @@ test("setProjectRepository rejects URL with inline credentials", async () => {
 test("clearProjectRepository removes repository key from meta", async () => {
   const { setProjectRepository, clearProjectRepository, getProjectRepository } =
     await import("../../server/shared/utils/project-repository.ts");
-  await setProjectRepository("demo", {
+  await setProjectRepository(TEST_ORG_ID, "demo", {
     url: "https://example.com/y.git",
     branch: "main",
     username: "u",
   });
-  await clearProjectRepository("demo");
-  assert.equal(await getProjectRepository("demo"), null);
+  await clearProjectRepository(TEST_ORG_ID, "demo");
+  assert.equal(await getProjectRepository(TEST_ORG_ID, "demo"), null);
 });

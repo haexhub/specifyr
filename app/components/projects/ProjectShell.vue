@@ -22,12 +22,13 @@ import type { Workflow } from "~/utils/workflows";
 
 withDefaults(
   defineProps<{
-    slug: string;
+    orgSlug: string;
+    projSlug: string;
     projectTitle?: string;
     workflow?: Workflow | null;
     showSteps?: boolean;
   }>(),
-  { showSteps: true }
+  { showSteps: true },
 );
 
 const route = useRoute();
@@ -41,7 +42,8 @@ watch(() => route.path, () => stepSidebar.close());
 <template>
   <div class="flex h-full">
     <ProjectsProjectStepSidebar
-      :slug="slug"
+      :org-slug="orgSlug"
+      :proj-slug="projSlug"
       :project-title="projectTitle"
       :workflow="workflow ?? undefined"
       :show-steps="showSteps"
@@ -78,7 +80,7 @@ watch(() => route.path, () => stepSidebar.close());
           <PanelLeft class="size-5" />
         </button>
         <div class="min-w-0 flex-1 overflow-x-auto">
-          <ProjectsProjectViewTabs :slug="slug" />
+          <ProjectsProjectViewTabs :org-slug="orgSlug" :proj-slug="projSlug" />
         </div>
       </div>
 

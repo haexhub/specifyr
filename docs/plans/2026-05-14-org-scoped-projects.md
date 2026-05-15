@@ -2,6 +2,83 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+---
+
+## Status (2026-05-15)
+
+**Branch:** `feat/org-scoped-projects` → **PR #70**
+https://github.com/haexhub/specifyr/pull/70
+
+| Phase | Status | Notes |
+| --- | --- | --- |
+| Phase 0 — Branch + Pre-Flight | ✅ done | |
+| Phase 1 — DB schema | ✅ done | Migration `0009_loose_the_fury.sql` |
+| Phase 2 — FS path helpers + ArtifactStore | ✅ done | |
+| Phase 3 — Project-Store + Access Middleware | ✅ done | |
+| Phase 4 — API Route Restructuring | ✅ done | Plus per-project membership (extension of original plan, see below) |
+| Phase 5 — UI | ✅ done | Plus 3 composables (`useProjectContext`, `useProject`, `useStepStates`) |
+| Phase 6.3 — Test fixture updates | ✅ done | secrets-store + orchestrator + turn-broker-acp now thread orgId; 370/370 unit, 32/32 e2e |
+| Phase 6.1 — Wipe demo data | ⏳ user-initiated | Destructive — see Task 6.1 |
+| Phase 6.2 — Manual smoke test | ⏳ user-driven | Browser walkthrough — see Task 6.2 |
+
+### Extension to original plan: per-project membership
+
+User-requested mid-execution. Adds a per-project access-control layer on top of org-membership:
+
+- New table `project_memberships(project_id, user_id)`, migration `0010_known_energizer.sql`.
+- Access rule: **org admin** has implicit access to all projects; **org member** needs an explicit `project_memberships` row.
+- Project creator is auto-added as project member at create time.
+- New helpers in `project-store.ts`: `canUserAccessProject`, `addProjectMember`, `removeProjectMember`, `listProjectMembers`, plus `listProjectKeysForUser` rewritten to join via either role.
+- Project-access middleware now enforces it on every `/api/orgs/.../projects/...` route.
+- New CRUD endpoints `/api/orgs/<orgSlug>/projects/<projSlug>/members` (GET = anyone with access, POST/DELETE = org admin only).
+- `userOwnsProject` removed (replaced by `canUserAccessProject`).
+- `ProjectCreateDialog`: only org admins can create.
+
+### Company-runtime registry rework (fallout from slug uniqueness)
+
+- Registry now keyed by `${orgId}/${slug}` instead of just `slug`.
+- `getActiveCompany`, `registerCompany`, `deregisterCompany`, `markCompanyStarting`, `clearCompanyStarting`, `isCompanyStarting` all take `(orgId, slug)` now.
+- `listActiveCompanies()` returns `RegisteredCompany[]` (each entry has `runtime`, `orgId`, `orgSlug`, `slug`).
+- New `findCompanyBySlugForMcp(slug)` for the worker→server MCP callback (workers don't know `orgId`; token disambiguates).
+- `getOrgInitStatusForProjectSlug(slug)` → `getOrgInitStatus(orgId)`.
+- Admin overview, approvals endpoints (`pending.get.ts`, `[id].get.ts`) consume the new shape and surface `orgSlug` to clients.
+
+### Composables (Phase 5 follow-up)
+
+`app/composables/`:
+- `useProjectContext()` — pulls `orgSlug`/`projSlug` from `route.params`, exposes `apiBase`/`routeBase`/`cacheKey`.
+- `useProject()` — fetches the project snapshot, exposes `project`/`workflow`/`workflowSteps`.
+- `useStepStates(workflowSteps)` — fetches step states, derives `statusMap`.
+
+All spec pages (`index`, `run`, `runtime`, `history`, `secrets`, `steps/[stepId]`) consume them.
+
+### Test status (2026-05-15)
+
+- **`pnpm test:e2e`** (with `DATABASE_URL=postgres://postgres:devpw@localhost:5566/specifyr`): 32/32 green. The route-collision fix renamed the new tree's first segment from `[orgSlug]` to `[slug]` so Nitro can merge it with the pre-existing `server/api/orgs/[slug]/...` tree (both must use the same param name at the same URL position).
+- **`pnpm test`**: 370/370 pass. Fixtures previously failing on `(orgId, slug)`-keyed APIs are now updated:
+   - `tests/db/secrets-store.test.ts` — threads `orgId` into `setSecret`/`getProjectSecrets`/`deleteSecret`/`listSecretKeys`.
+   - `tests/orchestrator.test.js` — threads `orgId` through `SpecOrchestrator` methods and the legacy `createUiHandler` URL (now `/api/orgs/<orgId>/projects/<slug>`).
+   - `tests/core/turn-broker-acp.test.js` — threads `orgId` through `SessionStore.createSession`, `TurnBroker.startTurn`, and the `running` Map key (`${orgId}|${slug}|${stepId}|${sid}`).
+
+### Handoff — what's left for the next session
+
+1. **Phase 6.1 — wipe demo data** (destructive; user-initiated):
+   ```bash
+   rm -rf ~/.specifyr/.specifyr ~/.specifyr/projects
+   docker exec -i specifyr-postgres-dev psql -U postgres -d specifyr -c "TRUNCATE TABLE projects CASCADE;"
+   ```
+2. **Phase 6.2 — manual smoke test in the browser** (test plan in Task 6.2 below). Pay special attention to:
+   - Two orgs with a project of the same slug → both work, FS shows two `<orgId>/` dirs.
+   - Org-admin vs org-member access to `/specs/<orgSlug>/<projSlug>/...` URLs.
+   - Member-management UI (does not yet exist in the UI — endpoints are there, frontend is TODO).
+   - Approval deep-link goes to the right project.
+3. **Open work — not blocking this PR:**
+   - Member-management UI: list/add/remove project members in the project's settings tab. Endpoints already wired (`/api/orgs/<orgSlug>/projects/<projSlug>/members` GET/POST/DELETE).
+   - Migration journal robustness: I had to manually re-insert a journal row when drizzle-kit migrate appeared to silently fail mid-apply on a fresh DB. Worth investigating whether the dev startup migrator is enough or if drizzle-kit migrate has a real bug here.
+   - Org-scoping for the new git-remote-sync feature (PR #68, merged from main): `project-repository.ts` writes meta.json under the old slug-only path; routes + tests still use the single-slug API. Already retrofitted as part of the merge — see commits after the merge.
+
+---
+
 **Goal:** Make project slugs unique per-org (not platform-wide), restructure URLs to `/specs/<orgSlug>/<projSlug>` and FS to `~/.specifyr/projects/<orgId>/<projSlug>/`. Single tenant boundary at the org level for both DB and disk, enabling future per-org filesystem / sharding.
 
 **Architecture:**
