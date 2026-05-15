@@ -35,7 +35,7 @@ const saved = ref(false);
 
 const dirty = computed(
   () =>
-    displayName.value.trim() !== initialDisplayName.value ||
+    displayName.value.trim() !== initialDisplayName.value.trim() ||
     preferredLocale.value !== initialPreferredLocale.value,
 );
 

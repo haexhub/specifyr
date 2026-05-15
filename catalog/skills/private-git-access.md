@@ -31,7 +31,10 @@ git -c credential.helper='' \
     clone https://github.com/ORG/REPO.git
 ```
 
-For the GitHub CLI (`gh`), authentication is automatic when `GH_TOKEN` is set.
+For the GitHub CLI (`gh`), authentication is automatic when `GITHUB_TOKEN` is
+set in the environment (`gh` also accepts `GH_TOKEN` as an alias, but stick to
+the canonical `GITHUB_TOKEN` so the same secret works for `git`, `gh`, and any
+script that reads it).
 
 ## GitLab (SaaS or self-hosted)
 

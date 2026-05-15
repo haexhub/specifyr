@@ -43,6 +43,16 @@ async function masterKey(): Promise<Buffer> {
     if (key.length !== 32) throw new Error("SPECIFYR_SECRET_KEY must be 64 hex chars (32 bytes)");
     return key;
   }
+  // Shared DB ⇒ shared master key. A locally-generated per-instance
+  // <dataDir>/master.key would silently make ciphertext written by one
+  // instance unreadable from another and lock secrets to one node's
+  // filesystem. Fail fast instead.
+  if (process.env.DATABASE_URL) {
+    throw new Error(
+      "secrets-store: SPECIFYR_SECRET_KEY is required when DATABASE_URL is configured. " +
+        "Generate with `openssl rand -hex 32` and set it in the environment.",
+    );
+  }
   const keyPath = path.join(dataDir(), "master.key");
   try {
     const hex = (await fs.readFile(keyPath, "utf8")).trim();

@@ -24,11 +24,20 @@ export default defineEventHandler(async (event) => {
 
   // Project secrets live in the per-org schema keyed by project_slug — no
   // cross-schema FK to cascade for us, so the application owns cleanup.
+  // Fail closed: if we can't delete the secrets, abort *before* removing
+  // the project row, otherwise a same-slug recreate would inherit the
+  // leftover ciphertexts.
   try {
     await deleteAllProjectSecrets(orgId, slug);
     removed.push("db:project_secrets");
   } catch (error) {
-    failures.push(`db:project_secrets: ${error instanceof Error ? error.message : String(error)}`);
+    const detail = error instanceof Error ? error.message : String(error);
+    failures.push(`db:project_secrets: ${detail}`);
+    throw createError({
+      statusCode: 500,
+      statusMessage: `Project delete aborted: failed to remove project secrets — ${detail}`,
+      data: { removed, failures },
+    });
   }
 
   try {

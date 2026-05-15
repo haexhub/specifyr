@@ -177,6 +177,8 @@ async function addSecret() {
                 type="button"
                 variant="ghost"
                 size="icon"
+                :aria-label="showValue ? 'Hide secret value' : 'Show secret value'"
+                :aria-pressed="showValue"
                 class="absolute right-1 top-1/2 -translate-y-1/2 size-8 text-muted-foreground hover:text-foreground"
                 @click="showValue = !showValue"
               >

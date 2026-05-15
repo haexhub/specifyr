@@ -144,14 +144,16 @@ const COMPANY_AGENT_RUNNERS = ["hermes"] as const;
 export const SUPPORTED_LOCALES = ["de", "en"] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
-// Trim, then collapse empty string to null so clearing the field falls
-// back to whatever the IDP last provided. Cap at 120 chars to match the
-// users.display_name DB usage downstream.
+// Trim FIRST, then enforce length, then collapse empty string to null so
+// clearing the field falls back to whatever the IDP last provided. Cap
+// at 120 chars to match the users.display_name DB usage downstream.
+// (Order matters: a "  long…   " string just over 120 chars but ≤120
+// after trim would otherwise be wrongly rejected.)
 export const mePatchSchema = z.object({
   displayName: z
     .string()
-    .max(120)
     .transform((v) => v.trim())
+    .pipe(z.string().max(120))
     .transform((v) => (v.length === 0 ? null : v))
     .nullable()
     .optional(),

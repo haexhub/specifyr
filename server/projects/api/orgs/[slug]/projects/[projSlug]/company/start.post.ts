@@ -226,6 +226,43 @@ export default defineEventHandler(async (event) => {
         return;
       }
 
+      // Org-level secrets first, project-level second — project keys
+      // override org keys on collision (standard env-var precedence).
+      // Loaded here (before image builds and network setup) so the
+      // missing-secrets preflight below can short-circuit a doomed run
+      // with a clear punch list instead of an opaque runtime failure
+      // inside the container 30 seconds in.
+      const [orgSecrets, projectSecrets] = await Promise.all([
+        getOrgSecrets(orgId),
+        getProjectSecrets(orgId, slug),
+      ]);
+      const mergedSecrets: Record<string, string> = { ...orgSecrets, ...projectSecrets };
+
+      // Fail-fast: every secret an agent declares in its `secrets:` list
+      // must be defined at org- or project-level. Catching this BEFORE we
+      // burn time on image builds gives the operator a clear punch list
+      // ("agent X needs Y, Y is missing") instead of an opaque runtime
+      // env-var-undefined failure inside the container.
+      const missingSecretsByRole: Record<string, string[]> = {};
+      for (const [role, agent] of agentMap) {
+        const declared: string[] = (agent as { secrets?: string[] }).secrets ?? [];
+        const missing = declared.filter((key) => !(key in mergedSecrets));
+        if (missing.length > 0) missingSecretsByRole[role] = missing;
+      }
+      if (Object.keys(missingSecretsByRole).length > 0) {
+        const detail = Object.entries(missingSecretsByRole)
+          .map(([role, keys]) => `${role}: [${keys.join(", ")}]`)
+          .join("; ");
+        await push("error", {
+          message:
+            `Missing project/org secrets — ${detail}. ` +
+            `Open the project's Secrets page and define the keys, ` +
+            `or remove them from the agent's 'secrets:' list.`,
+          missingSecretsByRole,
+        });
+        return;
+      }
+
       // Purge stale auth.json for every agent. hermes caches the resolved
       // credential (including the token value and auth_type) in auth.json.
       // Without deletion, a prior run's cached OAuth token overrides the
@@ -301,39 +338,7 @@ export default defineEventHandler(async (event) => {
 
       const opsToken = randomBytes(32).toString("hex");
       const opsUrl = config.companyOpsUrlBase;
-      // Org-level secrets first, project-level second — project keys
-      // override org keys on collision (standard env-var precedence).
-      const [orgSecrets, projectSecrets] = await Promise.all([
-        getOrgSecrets(orgId),
-        getProjectSecrets(orgId, slug),
-      ]);
-      const mergedSecrets: Record<string, string> = { ...orgSecrets, ...projectSecrets };
       const proxyUrl = config.companyClaudeProxyUrl || undefined;
-
-      // Fail-fast: every secret an agent declares in its `secrets:` list
-      // must be defined at org- or project-level. Catching this BEFORE we
-      // burn time on image builds gives the operator a clear punch list
-      // ("agent X needs Y, Y is missing") instead of an opaque runtime
-      // env-var-undefined failure inside the container.
-      const missingSecretsByRole: Record<string, string[]> = {};
-      for (const [role, agent] of agentMap) {
-        const declared: string[] = (agent as { secrets?: string[] }).secrets ?? [];
-        const missing = declared.filter((key) => !(key in mergedSecrets));
-        if (missing.length > 0) missingSecretsByRole[role] = missing;
-      }
-      if (Object.keys(missingSecretsByRole).length > 0) {
-        const detail = Object.entries(missingSecretsByRole)
-          .map(([role, keys]) => `${role}: [${keys.join(", ")}]`)
-          .join("; ");
-        await push("error", {
-          message:
-            `Missing project/org secrets — ${detail}. ` +
-            `Open the project's Secrets page and define the keys, ` +
-            `or remove them from the agent's 'secrets:' list.`,
-          missingSecretsByRole,
-        });
-        return;
-      }
 
       // Inject per-provider env for an agent that has its own profile.
       // Hermes reads the standard provider env vars (ANTHROPIC_API_KEY,

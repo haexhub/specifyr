@@ -28,6 +28,7 @@ function sanitizeKey(v: string): string {
 }
 
 async function removeSecret(key: string) {
+  error.value = null;
   try {
     await $fetch(`${endpoint.value}/${encodeURIComponent(key)}`, { method: "DELETE" });
     await refresh();
@@ -106,6 +107,7 @@ async function addSecret() {
               v-if="!readOnly"
               size="sm"
               variant="ghost"
+              :aria-label="`Delete secret ${key}`"
               class="text-destructive hover:bg-destructive/10"
               @click="removeSecret(key)"
             >
@@ -139,6 +141,8 @@ async function addSecret() {
               type="button"
               variant="ghost"
               size="icon"
+              :aria-label="showValue ? 'Hide secret value' : 'Show secret value'"
+              :aria-pressed="showValue"
               class="absolute right-1 top-1/2 -translate-y-1/2 size-8 text-muted-foreground hover:text-foreground"
               @click="showValue = !showValue"
             >
