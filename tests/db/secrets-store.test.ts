@@ -90,23 +90,25 @@ test("masterKey rejects a malformed SPECIFYR_SECRET_KEY", async () => {
 test("setSecret / getProjectSecrets / deleteSecret roundtrip", async () => {
   const { setSecret, getProjectSecrets, deleteSecret, listSecretKeys } =
     await import("../../server/shared/utils/secrets-store.ts");
+  const orgId = "00000000-0000-0000-0000-000000000001";
   const slug = "test-project-roundtrip";
-  await setSecret(slug, "FOO", "bar");
-  await setSecret(slug, "BAZ", "qux");
+  await setSecret(orgId, slug, "FOO", "bar");
+  await setSecret(orgId, slug, "BAZ", "qux");
   assert.deepEqual(
-    (await listSecretKeys(slug)).sort(),
+    (await listSecretKeys(orgId, slug)).sort(),
     ["BAZ", "FOO"],
   );
-  assert.deepEqual(await getProjectSecrets(slug), { FOO: "bar", BAZ: "qux" });
+  assert.deepEqual(await getProjectSecrets(orgId, slug), { FOO: "bar", BAZ: "qux" });
 
-  assert.equal(await deleteSecret(slug, "FOO"), true);
-  assert.equal(await deleteSecret(slug, "FOO"), false, "second delete is idempotent");
-  assert.deepEqual(await getProjectSecrets(slug), { BAZ: "qux" });
+  assert.equal(await deleteSecret(orgId, slug, "FOO"), true);
+  assert.equal(await deleteSecret(orgId, slug, "FOO"), false, "second delete is idempotent");
+  assert.deepEqual(await getProjectSecrets(orgId, slug), { BAZ: "qux" });
 });
 
 test("getProjectSecrets returns {} for an unknown slug", async () => {
   const { getProjectSecrets } = await import(
     "../../server/shared/utils/secrets-store.ts"
   );
-  assert.deepEqual(await getProjectSecrets("never-seen-before"), {});
+  const orgId = "00000000-0000-0000-0000-000000000002";
+  assert.deepEqual(await getProjectSecrets(orgId, "never-seen-before"), {});
 });
