@@ -2,7 +2,9 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /**
- * In-memory registry of active run schedulers, keyed by project slug.
+ * In-memory registry of active run schedulers, keyed by (orgId, slug).
+ * Project slugs are unique per organization, so the composite key is required
+ * to avoid cross-org collisions on identically-named projects.
  * A scheduler is created when a run starts and cleaned up on completion/cancel.
  */
 
@@ -59,14 +61,18 @@ export async function getRunStoreModule() {
 
 const registry = new Map<string, SchedulerInstance>();
 
-export function getActiveScheduler(slug: string): SchedulerInstance | undefined {
-  return registry.get(slug);
+function schedulerKey(orgId: string, slug: string): string {
+  return `${orgId}/${slug}`;
 }
 
-export function registerScheduler(slug: string, scheduler: SchedulerInstance) {
-  registry.set(slug, scheduler);
+export function getActiveScheduler(orgId: string, slug: string): SchedulerInstance | undefined {
+  return registry.get(schedulerKey(orgId, slug));
 }
 
-export function deregisterScheduler(slug: string) {
-  registry.delete(slug);
+export function registerScheduler(orgId: string, slug: string, scheduler: SchedulerInstance) {
+  registry.set(schedulerKey(orgId, slug), scheduler);
+}
+
+export function deregisterScheduler(orgId: string, slug: string) {
+  registry.delete(schedulerKey(orgId, slug));
 }

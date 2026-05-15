@@ -43,14 +43,29 @@ export async function createProjectRecord(options: {
 
   await ensureDir(projectsParent);
 
+  // Reject duplicates BEFORE any filesystem side effects. If a row already
+  // owns this (orgId, slug), running `specify init` / `git init` / file
+  // writes would either fail loudly partway through or, worse, scribble into
+  // a directory another project legitimately owns. The DB unique constraint
+  // is the ultimate safety net; this pre-check just avoids the side-effect
+  // window.
+  const existingRow = await getProjectByOrgAndSlug(options.ownerOrgId, slug);
+  if (existingRow) {
+    const err: Error & { statusCode?: number; code?: string } = new Error(
+      `A project with slug '${slug}' already exists in this organization.`
+    );
+    err.statusCode = 409;
+    err.code = "PROJECT_SLUG_TAKEN";
+    throw err;
+  }
+
   // Orphan check: if FS dirs exist but no DB row owns them (e.g. from a
   // previously failed create), wipe the FS leftovers before proceeding.
   // Without this, `specify init` would fail with "directory exists" or
   // ArtifactStore.createProject would throw "already exists" even though
   // the project was never actually created. Cost: one extra DB hit per
   // create — acceptable.
-  const existingRow = await getProjectByOrgAndSlug(options.ownerOrgId, slug);
-  if (!existingRow) {
+  {
     const artifactDir = projectArtifactsDir(options.ownerOrgId, slug);
     for (const stale of [artifactDir, projectRoot]) {
       try {

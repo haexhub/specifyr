@@ -269,15 +269,22 @@ export function findRuntimeByApprovalId(
 }
 
 /**
- * Slug-only lookup for the MCP worker → server callback. The bearer token
- * disambiguates between collisions in practice (a worker only knows the
- * token for its own runtime). Caller verifies the token.
+ * Slug-only lookup for the MCP worker → server callback. Workers only know
+ * their slug + bearer token, not the orgId. Because slugs are unique per
+ * org (not globally), two orgs can have an active runtime for the same
+ * slug — we must disambiguate by token, not just take the first match.
+ * Token comparison here uses constant-time matching via the supplied
+ * `tokensMatch`, so a probe of `slug` alone leaks nothing about which
+ * orgs are running it.
  */
 export function findCompanyBySlugForMcp(
   slug: string,
+  opsToken: string,
+  tokensMatch: (provided: string, expected: string) => boolean,
 ): RegisteredCompany | undefined {
   for (const entry of registry.values()) {
-    if (entry.slug === slug) return entry;
+    if (entry.slug !== slug) continue;
+    if (tokensMatch(opsToken, entry.runtime.opsToken)) return entry;
   }
   return undefined;
 }

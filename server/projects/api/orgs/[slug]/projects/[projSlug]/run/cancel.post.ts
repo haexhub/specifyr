@@ -4,7 +4,7 @@ import { loadEventStore } from "@su/specifyr-stores";
 export default defineEventHandler(async (event) => {
   const orgId = event.context.orgId!;
   const slug = event.context.projectSlug!;
-  const scheduler = getActiveScheduler(slug);
+  const scheduler = getActiveScheduler(orgId, slug);
   if (!scheduler) {
     return { slug, cancelled: false, reason: "no active run" };
   }

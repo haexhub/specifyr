@@ -159,3 +159,22 @@ export function clearProjectRepository(orgId: string, slug: string): Promise<voi
     }
   });
 }
+
+/**
+ * Run an arbitrary read-modify-write against meta.json under the same
+ * per-(orgId,slug) lock as `setProjectRepository`/`setLastPushedAt`, so
+ * unrelated fields (workflow, repository, …) can't clobber each other
+ * under concurrent requests. Throws if meta.json is missing — callers
+ * that need create-on-missing must handle ENOENT themselves.
+ */
+export function mutateProjectMeta(
+  orgId: string,
+  slug: string,
+  mutate: (meta: Record<string, unknown>) => Record<string, unknown> | void,
+): Promise<void> {
+  return enqueueMetaWrite(orgId, slug, async () => {
+    const meta = await readMeta(orgId, slug);
+    const next = mutate(meta) ?? meta;
+    await writeMeta(orgId, slug, next as Record<string, unknown>);
+  });
+}

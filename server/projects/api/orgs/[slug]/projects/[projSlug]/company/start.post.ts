@@ -131,6 +131,11 @@ export default defineEventHandler(async (event) => {
   markCompanyStarting(orgId, slug);
   let networkOwnedButUnregistered = false;
   let networkPeersForCleanup: string[] = [];
+  // Per-org docker network identity. Slugs are unique per org (not globally),
+  // so keying the network by slug alone would let orgA/foo collide with
+  // orgB/foo and the failed-start cleanup could tear down the other org's
+  // network. orgId is a UUID — safe inside docker network names.
+  const dockerCompanyId = `${orgId}-${slug}`;
   (async () => {
     try {
       const pCwd = projectCwd(orgId, slug);
@@ -279,7 +284,7 @@ export default defineEventHandler(async (event) => {
       let companyNetworkName: string;
       try {
         const net = await ensureCompanyNetwork({
-          companyId: slug,
+          companyId: dockerCompanyId,
           peers: networkPeers,
           onLog: (msg) => push("status", { message: msg }),
         });
@@ -460,7 +465,7 @@ export default defineEventHandler(async (event) => {
         try {
           const { removeCompanyNetwork } = await getCompanyNetworkModule();
           await removeCompanyNetwork({
-            companyId: slug,
+            companyId: dockerCompanyId,
             peers: networkPeersForCleanup,
           });
         } catch { /* best-effort */ }

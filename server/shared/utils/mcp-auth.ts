@@ -38,18 +38,9 @@ async function loadMcpAuth() {
 
 export async function requireRuntimeAuth(event: any, slug: string) {
   // Worker → server callback: the worker only knows its project slug + bearer.
-  // We resolve any runtime that matches the slug, then disambiguate by token.
-  // In practice each (orgId, slug) pair mints a distinct token, so a token
-  // match uniquely identifies the runtime even if two orgs happen to run a
-  // company with the same project slug.
-  const entry = findCompanyBySlugForMcp(slug);
-  if (!entry) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: `No company runtime running for project '${slug}'`,
-    });
-  }
-
+  // Slugs are unique per org, not globally — two orgs may have an active runtime
+  // for the same slug. We resolve by (slug, token) so the legitimate worker is
+  // never shadowed by another org's runtime that happens to share the slug.
   const { extractBearer, tokensMatch } = await loadMcpAuth();
 
   const provided = extractBearer(getRequestHeader(event, "authorization"));
@@ -59,7 +50,11 @@ export async function requireRuntimeAuth(event: any, slug: string) {
       statusMessage: "Missing or malformed Authorization header (expected 'Bearer <token>')",
     });
   }
-  if (!tokensMatch(provided, entry.runtime.opsToken)) {
+
+  const entry = findCompanyBySlugForMcp(slug, provided, tokensMatch);
+  if (!entry) {
+    // Same response for "no runtime" and "wrong token" so an attacker cannot
+    // distinguish whether a slug has an active runtime by probing tokens.
     throw createError({ statusCode: 401, statusMessage: "Invalid token" });
   }
 

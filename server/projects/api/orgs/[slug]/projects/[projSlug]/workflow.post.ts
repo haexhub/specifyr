@@ -1,9 +1,7 @@
-import path from "node:path";
-import fs from "node:fs/promises";
 import { z } from "zod";
-import { projectArtifactsDir } from "@su/data-dirs";
 import { assertProjectExists } from "@su/specifyr-stores";
 import { listProjectWorkflows } from "@su/workflow-discovery";
+import { mutateProjectMeta } from "@su/project-repository";
 import { parseBody } from "@su/validation";
 
 const workflowBodySchema = z.object({
@@ -27,18 +25,22 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  const metaPath = path.join(projectArtifactsDir(orgId, slug), "meta.json");
-  let meta: Record<string, unknown> = {};
+  // Route the read-modify-write through the shared per-(orgId,slug) meta
+  // queue so concurrent updates to other meta fields (e.g. repository
+  // config, lastPushedAt) cannot clobber each other.
   try {
-    meta = JSON.parse(await fs.readFile(metaPath, "utf8"));
-  } catch {
-    // Missing meta is fatal here — the project exists on disk (assertProjectExists passed) but
-    // without meta we have no record to update. Fail loud rather than silently creating one.
-    throw createError({ statusCode: 500, statusMessage: "Project metadata not found." });
+    await mutateProjectMeta(orgId, slug, (meta) => {
+      meta.workflow = workflow;
+    });
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      // Missing meta is fatal here — assertProjectExists passed but the
+      // project has no metadata to update. Fail loud rather than silently
+      // creating one.
+      throw createError({ statusCode: 500, statusMessage: "Project metadata not found." });
+    }
+    throw err;
   }
-
-  meta.workflow = workflow;
-  await fs.writeFile(metaPath, `${JSON.stringify(meta, null, 2)}\n`, "utf8");
 
   return { slug, workflow };
 });

@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     slug,
-    running: Boolean(getActiveScheduler(slug)),
+    running: Boolean(getActiveScheduler(orgId, slug)),
     current,
     graph
   };

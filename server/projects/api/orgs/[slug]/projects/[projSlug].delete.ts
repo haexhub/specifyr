@@ -21,7 +21,12 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  await deleteProjectFromDb(orgId, slug);
+  try {
+    await deleteProjectFromDb(orgId, slug);
+    removed.push("db:project_row");
+  } catch (error) {
+    failures.push(`db:project_row: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   if (failures.length && !removed.length) {
     throw createError({

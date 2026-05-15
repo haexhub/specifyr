@@ -44,7 +44,14 @@ async function fetchEvents() {
   }
 }
 
-onMounted(fetchEvents);
+watch(
+  apiBase,
+  async () => {
+    events.value = [];
+    await fetchEvents();
+  },
+  { immediate: true },
+);
 
 const knownRoles = computed(() => {
   const set = new Set<string>();

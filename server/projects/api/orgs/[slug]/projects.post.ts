@@ -64,25 +64,52 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode, statusMessage: message });
   }
 
-  // DB ownership row. FS work already committed; if this fails we end up
-  // with an FS-only project — the orphan check in createProjectRecord
-  // cleans it up on the next creation attempt for the same slug.
-  let projectRow = null;
+  // DB ownership row. FS work already committed; if this fails the project
+  // would be reachable only as an orphan directory (cleaned up by the orphan
+  // check in createProjectRecord on the next attempt). Returning success here
+  // would hand the caller a project they cannot list, edit, or grant access
+  // to — fail the request instead so the client can retry.
+  let projectRow;
   try {
     projectRow = await recordProjectOwnership(record.slug, { ownerOrgId: orgId });
   } catch (err) {
-    console.warn("[projects.post] DB ownership write failed:", err);
+    console.error("[projects.post] DB ownership write failed:", err);
+    throw createError({
+      statusCode: 500,
+      statusMessage: "Project creation failed while persisting ownership. Please retry.",
+    });
   }
 
   // Auto-add the creator as a project member so they retain access
-  // even if they later get demoted from admin to member.
+  // even if they later get demoted from admin to member. Bounded retry
+  // because transient DB errors here would silently strand the creator
+  // (admins still have implicit access, but a later demotion would lock
+  // them out); surface a warning if all retries fail so the client can
+  // re-grant explicitly.
+  const warnings: string[] = [];
   if (projectRow) {
-    try {
-      await addProjectMember(projectRow.id, userId);
-    } catch (err) {
-      console.warn("[projects.post] DB project-membership write failed:", err);
+    let lastErr: unknown = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await addProjectMember(projectRow.id, userId);
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        if (attempt < 2) await new Promise((r) => setTimeout(r, 50 * (attempt + 1)));
+      }
+    }
+    if (lastErr) {
+      console.warn("[projects.post] DB project-membership write failed after retries:", lastErr);
+      warnings.push(
+        "Creator could not be added as an explicit project member; org admins retain access.",
+      );
     }
   }
 
-  return { ...record, orgSlug: event.context.orgSlug };
+  return {
+    ...record,
+    orgSlug: event.context.orgSlug,
+    ...(warnings.length ? { warnings } : {}),
+  };
 });

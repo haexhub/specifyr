@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: "Missing tid" });
   }
 
-  if (getActiveScheduler(slug)) {
+  if (getActiveScheduler(orgId, slug)) {
     throw createError({
       statusCode: 409,
       statusMessage: "Run läuft gerade — erst abbrechen, dann Tasks skippen."

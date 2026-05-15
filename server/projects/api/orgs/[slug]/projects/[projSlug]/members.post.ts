@@ -7,7 +7,7 @@ import { parseBody } from "@su/validation";
 
 const addMemberSchema = z.object({
   userId: z.uuid().optional(),
-  email: z.string().trim().toLowerCase().email().optional(),
+  email: z.email().transform((e) => e.trim().toLowerCase()).optional(),
 }).refine((b) => b.userId || b.email, {
   message: "must provide either userId or email",
 });
@@ -37,36 +37,50 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 503, statusMessage: "DB not configured" });
   }
 
-  // Resolve userId from email if needed.
-  let targetUserId = body.userId;
-  if (!targetUserId && body.email) {
-    const [u] = await db
-      .select({ id: users.id })
+  // Resolve target to a user who is already a member of THIS org. We must
+  // never distinguish "no such user" from "user exists in some other org"
+  // — otherwise an admin in OrgA can enumerate every email/userId in the
+  // system by toggling the response status. Both failure modes collapse
+  // into the same 404.
+  let targetUserId: string | undefined;
+  if (body.userId) {
+    const [m] = await db
+      .select({ userId: orgMemberships.userId })
+      .from(orgMemberships)
+      .where(
+        and(
+          eq(orgMemberships.orgId, orgId),
+          eq(orgMemberships.userId, body.userId),
+        ),
+      )
+      .limit(1);
+    if (!m) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: "No matching member in this org.",
+      });
+    }
+    targetUserId = m.userId;
+  } else if (body.email) {
+    const [m] = await db
+      .select({ userId: users.id })
       .from(users)
+      .innerJoin(
+        orgMemberships,
+        and(
+          eq(orgMemberships.userId, users.id),
+          eq(orgMemberships.orgId, orgId),
+        ),
+      )
       .where(eq(users.email, body.email))
       .limit(1);
-    if (!u) {
-      throw createError({ statusCode: 404, statusMessage: "user not found" });
+    if (!m) {
+      throw createError({
+        statusCode: 404,
+        statusMessage: "No matching member in this org.",
+      });
     }
-    targetUserId = u.id;
-  }
-
-  // Require the target to be an org member already.
-  const [m] = await db
-    .select({ orgId: orgMemberships.orgId })
-    .from(orgMemberships)
-    .where(
-      and(
-        eq(orgMemberships.orgId, orgId),
-        eq(orgMemberships.userId, targetUserId!),
-      ),
-    )
-    .limit(1);
-  if (!m) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "User must be a member of this org first.",
-    });
+    targetUserId = m.userId;
   }
 
   const row = await addProjectMember(projectId, targetUserId!);

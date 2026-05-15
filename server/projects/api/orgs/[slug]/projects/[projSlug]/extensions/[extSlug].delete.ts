@@ -62,17 +62,47 @@ async function removeFromRegistry(
 export default defineEventHandler(async (event) => {
   const orgId = event.context.orgId!;
   const slug = event.context.projectSlug!;
-  const extSlug = getRouterParam(event, "extSlug");
-  if (!extSlug) {
+  const rawExtSlug = getRouterParam(event, "extSlug");
+  if (!rawExtSlug) {
     throw createError({ statusCode: 400, statusMessage: "Missing extSlug" });
   }
 
+  // Look the slug up in the project's extension manifest before touching the
+  // filesystem. The manifest is the authoritative list of "installed in this
+  // project" — user authorisation for the project is already enforced by the
+  // project-access middleware, so this lookup is purely the "does it exist?"
+  // gate. The slug returned from the manifest entry is the value we use for
+  // every downstream FS / CLI / registry op; the URL-supplied raw value
+  // never reaches a path.join. That makes the path-traversal / NUL checks
+  // below defence-in-depth, not the primary safeguard.
   const manifestPath = path.join(projectArtifactsDir(orgId, slug), "extensions.json");
   let manifest: ExtensionsManifest;
   try {
     manifest = JSON.parse(await fs.readFile(manifestPath, "utf8")) as ExtensionsManifest;
   } catch {
     manifest = { slug, extensions: [], updatedAt: null };
+  }
+
+  const entry = manifest.extensions.find((e) => e.slug === rawExtSlug);
+  if (!entry) {
+    throw createError({
+      statusCode: 404,
+      statusMessage: `Extension '${rawExtSlug}' is not installed in this project.`,
+    });
+  }
+
+  const extSlug = entry.slug;
+  // Defence-in-depth: even with manifest lookup, a manifest that was written
+  // with a poisoned slug (older code, hand-edited file) must not be allowed
+  // to escape `.specify/extensions/`.
+  if (
+    extSlug === "." ||
+    extSlug === ".." ||
+    extSlug.includes("/") ||
+    extSlug.includes("\\") ||
+    extSlug.includes("\0")
+  ) {
+    throw createError({ statusCode: 400, statusMessage: "Invalid extSlug" });
   }
 
   // Removal pipeline: CLI first (deregisters hooks/commands), then physical cleanup of

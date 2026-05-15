@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const slug = event.context.projectSlug!;
   await assertProjectExists(orgId, slug);
 
-  if (getActiveScheduler(slug)) {
+  if (getActiveScheduler(orgId, slug)) {
     throw createError({ statusCode: 409, statusMessage: "Run already in progress" });
   }
 
@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
     runtimeConfig: useRuntimeConfig(),
   });
   const scheduler = new RunScheduler({ cwd, orgId, slug, projectCwd: pCwd, graph, runnerFactory });
-  registerScheduler(slug, scheduler);
+  registerScheduler(orgId, slug, scheduler);
 
   const stream = createEventStream(event);
 
@@ -137,7 +137,7 @@ export default defineEventHandler(async (event) => {
     } catch (err) {
       await pushSafe("error", { message: err instanceof Error ? err.message : String(err) });
     } finally {
-      deregisterScheduler(slug);
+      deregisterScheduler(orgId, slug);
       triggerAutoPush(orgId, slug);
       await pushSafe("done", {});
       try {

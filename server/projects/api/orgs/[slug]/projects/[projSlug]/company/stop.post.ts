@@ -39,7 +39,9 @@ export default defineEventHandler(async (event) => {
   try {
     const { removeCompanyNetwork } = await getCompanyNetworkModule();
     await removeCompanyNetwork({
-      companyId: slug,
+      // Must match the composite used in start.post.ts — slug alone would
+      // accidentally tear down another org's network with the same slug.
+      companyId: `${orgId}-${slug}`,
       peers: defaultCompanyNetworkPeers(),
     });
   } catch { /* best-effort */ }
