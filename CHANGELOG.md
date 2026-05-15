@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.18.0](https://github.com/haexhub/specifyr/compare/v0.17.0...v0.18.0) (2026-05-15)
+
+
+### Features
+
+* **secrets:** per-agent allowlist + Postgres-backed storage ([#72](https://github.com/haexhub/specifyr/issues/72)) ([3932982](https://github.com/haexhub/specifyr/commit/39329821266958ee64e5e6c6b91cb103dfdff905))
+
+
+### Bug Fixes
+
+* **tests:** refresh per-org-schema assertions after secrets feature ([#74](https://github.com/haexhub/specifyr/issues/74)) ([eb7dc3a](https://github.com/haexhub/specifyr/commit/eb7dc3a39c513081e5ba12d10a97cfb397cd33fb))
+
 ## [0.17.0](https://github.com/haexhub/specifyr/compare/v0.16.0...v0.17.0) (2026-05-15)
 
 
