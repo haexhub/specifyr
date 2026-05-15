@@ -1,7 +1,7 @@
 /**
  * Per-org-schema builder tests. Verifies the DDL emitted by
- * createOrgSchema(): 7 tables, partial unique indices, per-org role,
- * append-only grants on secret_access_log.
+ * createOrgSchema(): the expected tables, partial unique indices,
+ * per-org role, append-only grants on secret_access_log.
  */
 
 import { test } from "node:test";
@@ -21,6 +21,8 @@ const EXPECTED_TABLES = [
   "agent_specs",
   "auth_nonces",
   "master_keys",
+  "org_secrets",
+  "project_secrets",
   "secret_access_log",
   "service_credentials",
 ];
@@ -52,7 +54,7 @@ test("orgSchemaName replaces dashes with underscores", () => {
 });
 
 test(
-  "createOrgSchema creates the 7 expected tables and the role",
+  "createOrgSchema creates the expected tables and the role",
   { skip: skipIfNoDb },
   async () => {
     await withDb(async (db) => {
