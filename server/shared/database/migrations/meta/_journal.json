@@ -71,6 +71,13 @@
       "when": 1778780812104,
       "tag": "0009_loose_the_fury",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1778827118116,
+      "tag": "0010_known_energizer",
+      "breakpoints": true
     }
   ]
 }

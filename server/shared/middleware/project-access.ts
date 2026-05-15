@@ -1,27 +1,39 @@
 import { getMembership, getOrgBySlug } from "@su/org-store";
-import { getProjectByOrgAndSlug } from "@su/project-store";
+import {
+  canUserAccessProject,
+  getProjectByOrgAndSlug,
+} from "@su/project-store";
 
 /**
- * Resolves /api/orgs/:orgSlug/projects/:projSlug/* URLs:
- *   - 401 if unauthenticated
- *   - 404 if org or project doesn't exist
- *   - 403 if user is not a member of the org
- *   - On success: attaches { orgId, orgSlug, projectSlug } to event.context
+ * Gates two URL families and populates `event.context` for downstream handlers:
  *
- * Skip-list: paths that don't fit the (orgSlug, projSlug) pattern bypass.
- * The route layer can rely on `event.context.orgId` being set whenever
- * the URL matches the regex — downstream handlers don't need to call
- * userOwnsProject() or resolveProjectOrgId() themselves.
+ *   /api/orgs/:orgSlug/projects                          (list + create)
+ *     - 401 if unauthenticated
+ *     - 404 if org doesn't exist
+ *     - 403 if user is not a member of the org
+ *     - On success: event.context.orgId, event.context.orgSlug, event.context.orgRole
+ *
+ *   /api/orgs/:orgSlug/projects/:projSlug/...            (per-project routes)
+ *     - 401 if unauthenticated
+ *     - 404 if org or project doesn't exist
+ *     - 403 if user is not a member of the org
+ *     - 403 if user is not an org admin AND not a project member
+ *     - On success: event.context.orgId, event.context.orgSlug, event.context.orgRole,
+ *       event.context.projectSlug, event.context.projectId
+ *
+ * The route layer can rely on these context fields being set — downstream
+ * handlers don't need to repeat the membership checks themselves.
  *
  * Load order: Nuxt sorts middleware alphabetically, so `auth.ts` runs
  * before `project-access.ts` — `event.context.userId` is populated by
  * the time we get here.
  */
-const PROJECT_PATH_RE = /^\/api\/orgs\/([^/]+)\/projects\/([^/]+)(\/|$)/;
+const ORG_PROJECTS_RE =
+  /^\/api\/orgs\/([^/]+)\/projects(?:\/([^/]+))?(?:\/|$)/;
 
 export default defineEventHandler(async (event) => {
   const path = event.path ?? event.node.req.url ?? "";
-  const match = PROJECT_PATH_RE.exec(path);
+  const match = ORG_PROJECTS_RE.exec(path);
   if (!match) return;
 
   const [, orgSlug, projSlug] = match;
@@ -42,12 +54,34 @@ export default defineEventHandler(async (event) => {
       statusMessage: "not a member of this org",
     });
   }
+
+  event.context.orgId = org.id;
+  event.context.orgSlug = orgSlug;
+  event.context.orgRole = membership.role;
+
+  if (!projSlug) {
+    // Org-only route (list/create). Org membership is enough — the
+    // handler decides whether the operation requires admin role (e.g.
+    // creating a project is admin-only in the new model).
+    return;
+  }
+
   const project = await getProjectByOrgAndSlug(org.id, projSlug);
   if (!project) {
     throw createError({ statusCode: 404, statusMessage: "project not found" });
   }
+  // Org admins have implicit access to every project. For non-admins,
+  // require an explicit project_memberships row.
+  if (membership.role !== "admin") {
+    const allowed = await canUserAccessProject(org.id, projSlug, userId);
+    if (!allowed) {
+      throw createError({
+        statusCode: 403,
+        statusMessage: "no access to this project",
+      });
+    }
+  }
 
-  event.context.orgId = org.id;
-  event.context.orgSlug = orgSlug;
   event.context.projectSlug = projSlug;
+  event.context.projectId = project.id;
 });

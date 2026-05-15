@@ -16,10 +16,14 @@ declare module "h3" {
     /** Set when the request is authenticated AND the DB is configured. */
     userId?: string;
     userEmail?: string;
-    /** Set by project-access middleware on /api/orgs/:orgSlug/projects/:projSlug/* routes. */
+    /** Set by project-access middleware on /api/orgs/:orgSlug/projects[/:projSlug]/* routes. */
     orgId?: string;
     orgSlug?: string;
+    /** "admin" or "member" — the caller's org role for this URL's org. */
+    orgRole?: "admin" | "member";
+    /** Set only when the URL also includes a project slug. */
     projectSlug?: string;
+    projectId?: string;
   }
 }
 

@@ -154,6 +154,32 @@ export const orgMemberships = pgTable(
 export type OrgMembership = typeof orgMemberships.$inferSelect;
 export type NewOrgMembership = typeof orgMemberships.$inferInsert;
 
+// Per-project membership. Lets org admins grant access to specific
+// projects within their org without elevating the user to org-admin.
+// Access rule (see project-access middleware): a user can access a
+// project iff they are an org admin OR they are listed here. Project
+// creators are auto-added at creation time so the creator never loses
+// access by being a non-admin org member.
+export const projectMemberships = pgTable(
+  "project_memberships",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.projectId, t.userId] }),
+    userIdx: index("project_memberships_user_idx").on(t.userId),
+  }),
+);
+
+export type ProjectMembership = typeof projectMemberships.$inferSelect;
+export type NewProjectMembership = typeof projectMemberships.$inferInsert;
+
 // One-time invite tokens. Created by an org admin, redeemed by the
 // recipient after they log in via Authelia. `email` is recorded for
 // display only — the redemption uses the authenticated user's email,

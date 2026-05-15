@@ -1,19 +1,28 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { getDb } from "../database/client";
-import { orgMemberships, projects, type Project } from "../database/schema";
+import {
+  orgMemberships,
+  projectMemberships,
+  projects,
+  users,
+  type Project,
+  type ProjectMembership,
+} from "../database/schema";
 
 /**
- * DB-backed project ownership.
+ * DB-backed project ownership + per-project access control.
  *
- * The filesystem (under <dataDir>/projects/<slug>/) remains the source
- * of truth for project CONTENT (artifacts, sessions, settings.json).
- * This module owns the question "who owns project <slug>?" — used by
- * the auth layer to gate access.
+ * The filesystem (under <dataDir>/projects/<orgId>/<slug>/) remains the
+ * source of truth for project CONTENT (artifacts, sessions, settings.json).
+ * This module owns:
+ *   - "who owns project (orgId, slug)?" — composite-key ownership row
+ *   - "can user X read/modify project P?" — org-admin OR project-member
  *
- * Mandatory-org model: every project belongs to exactly one org. There
- * is no per-user ownership. The "personal" workspace is a single-member
- * org with the user as owner. Access is gated by membership in
- * `owner_org_id`.
+ * Access rule (also enforced by the project-access middleware):
+ *   - Org admin has implicit access to every project in their org.
+ *   - Org members need an explicit row in `project_memberships`.
+ *   - Project creators are auto-added at creation time so the creator
+ *     never loses access by being a non-admin org member.
  *
  * Every function returns null/empty when DATABASE_URL is unset, so
  * callers can safely fall back to legacy single-user behavior in dev.
@@ -32,22 +41,6 @@ export async function recordProjectOwnership(
     .insert(projects)
     .values({ slug, ownerOrgId: owner.ownerOrgId })
     .returning();
-  return row ?? null;
-}
-
-/**
- * @deprecated Use getProjectByOrgAndSlug. Slugs are not globally unique anymore,
- * so this lookup is ambiguous when two orgs share the same slug. Phase 4 deletes it.
- */
-export async function getProjectFromDb(slug: string): Promise<Project | null> {
-  const db = getDb();
-  if (!db) return null;
-
-  const [row] = await db
-    .select()
-    .from(projects)
-    .where(eq(projects.slug, slug))
-    .limit(1);
   return row ?? null;
 }
 
@@ -79,37 +72,9 @@ export async function deleteProjectFromDb(
   return result.length > 0;
 }
 
-// TODO(phase-3): drop once project-access middleware populates event.context.orgId.
-// Slugs are no longer globally unique — this is a transitional helper that
-// resolves an owner orgId from a slug via DB lookup. Throws 404 if unknown.
-export async function resolveProjectOrgId(slug: string): Promise<string> {
-  const project = await getProjectFromDb(slug);
-  if (!project) {
-    throw createError({
-      statusCode: 404,
-      statusMessage: `Project not found: ${slug}`,
-    });
-  }
-  return project.ownerOrgId;
-}
-
 /**
- * Slugs of projects the user can access — every project owned by an org
- * the user is a member of.
- *
- * @deprecated Use listProjectKeysForUser — slugs are no longer globally unique.
- */
-export async function listProjectSlugsForUser(
-  userId: string,
-): Promise<string[]> {
-  const keys = await listProjectKeysForUser(userId);
-  return keys.map((k) => k.slug);
-}
-
-/**
- * (orgId, slug) pairs the user can access — every project owned by an org
- * the user is a member of. Composite key is required because slugs are
- * unique only per-org.
+ * (orgId, slug) pairs the user can access — every project where the user
+ * is either an admin of the owning org OR an explicit project member.
  */
 export async function listProjectKeysForUser(
   userId: string,
@@ -117,24 +82,39 @@ export async function listProjectKeysForUser(
   const db = getDb();
   if (!db) return [];
 
-  const memberships = await db
-    .select({ orgId: orgMemberships.orgId })
-    .from(orgMemberships)
-    .where(eq(orgMemberships.userId, userId));
-  const orgIds = memberships.map((m) => m.orgId);
-  if (orgIds.length === 0) return [];
-
+  // Two-source union via SQL: admin-of-org → all org projects; project_memberships → that project.
   const rows = await db
-    .select({ orgId: projects.ownerOrgId, slug: projects.slug })
+    .selectDistinct({ orgId: projects.ownerOrgId, slug: projects.slug })
     .from(projects)
-    .where(inArray(projects.ownerOrgId, orgIds));
+    .leftJoin(
+      orgMemberships,
+      and(
+        eq(orgMemberships.orgId, projects.ownerOrgId),
+        eq(orgMemberships.userId, userId),
+      ),
+    )
+    .leftJoin(
+      projectMemberships,
+      and(
+        eq(projectMemberships.projectId, projects.id),
+        eq(projectMemberships.userId, userId),
+      ),
+    )
+    .where(
+      or(
+        eq(orgMemberships.role, "admin"),
+        sql`${projectMemberships.userId} IS NOT NULL`,
+      ),
+    );
   return rows;
 }
 
 /**
- * True iff the user is a member of the project's owning org.
+ * True iff the user is an admin of the project's owning org OR an
+ * explicit project member. This is the authoritative access check used
+ * by the project-access middleware.
  */
-export async function userOwnsProject(
+export async function canUserAccessProject(
   orgId: string,
   slug: string,
   userId: string,
@@ -143,15 +123,79 @@ export async function userOwnsProject(
   if (!db) return false;
   const project = await getProjectByOrgAndSlug(orgId, slug);
   if (!project) return false;
-  const [m] = await db
+  const [adminRow] = await db
     .select({ orgId: orgMemberships.orgId })
     .from(orgMemberships)
     .where(
       and(
         eq(orgMemberships.orgId, project.ownerOrgId),
         eq(orgMemberships.userId, userId),
+        eq(orgMemberships.role, "admin"),
       ),
     )
     .limit(1);
-  return !!m;
+  if (adminRow) return true;
+  const [memberRow] = await db
+    .select({ projectId: projectMemberships.projectId })
+    .from(projectMemberships)
+    .where(
+      and(
+        eq(projectMemberships.projectId, project.id),
+        eq(projectMemberships.userId, userId),
+      ),
+    )
+    .limit(1);
+  return !!memberRow;
+}
+
+export async function addProjectMember(
+  projectId: string,
+  userId: string,
+): Promise<ProjectMembership | null> {
+  const db = getDb();
+  if (!db) return null;
+  const [row] = await db
+    .insert(projectMemberships)
+    .values({ projectId, userId })
+    .onConflictDoNothing()
+    .returning();
+  return row ?? null;
+}
+
+export async function removeProjectMember(
+  projectId: string,
+  userId: string,
+): Promise<boolean> {
+  const db = getDb();
+  if (!db) return false;
+  const result = await db
+    .delete(projectMemberships)
+    .where(
+      and(
+        eq(projectMemberships.projectId, projectId),
+        eq(projectMemberships.userId, userId),
+      ),
+    )
+    .returning({ projectId: projectMemberships.projectId });
+  return result.length > 0;
+}
+
+export async function listProjectMembers(
+  projectId: string,
+): Promise<
+  { userId: string; email: string; displayName: string | null; createdAt: Date }[]
+> {
+  const db = getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      userId: projectMemberships.userId,
+      email: users.email,
+      displayName: users.displayName,
+      createdAt: projectMemberships.createdAt,
+    })
+    .from(projectMemberships)
+    .innerJoin(users, eq(users.id, projectMemberships.userId))
+    .where(eq(projectMemberships.projectId, projectId));
+  return rows;
 }

@@ -88,23 +88,23 @@ export const idUuidParam = z.object({ id: z.uuid() });
 export const tokenParam = z.object({ token: z.string().min(1).max(256) });
 
 export const stepParams = z.object({
-  slug: slugString,
+  projSlug: slugString,
   stepId: z.string().min(1).max(128),
 });
 
 export const sessionParams = z.object({
-  slug: slugString,
+  projSlug: slugString,
   stepId: z.string().min(1).max(128),
   sid: z.string().min(1).max(128),
 });
 
 export const taskIdParams = z.object({
-  slug: slugString,
+  projSlug: slugString,
   tid: z.string().min(1).max(256),
 });
 
 export const projectExtensionParams = z.object({
-  slug: slugString,
+  projSlug: slugString,
   extSlug: z.string().min(1).max(128),
 });
 
@@ -120,7 +120,7 @@ export const orgPermissionParams = z.object({
 });
 
 export const projectSecretParams = z.object({
-  slug: slugString,
+  projSlug: slugString,
   key: z.string().min(1).max(256),
 });
 
@@ -182,7 +182,7 @@ export const companyAgentProfileSchema = z.object({
 });
 
 export const companyAgentRoleParam = z.object({
-  slug: slugString,
+  projSlug: slugString,
   role: agentRoleString,
 });
 

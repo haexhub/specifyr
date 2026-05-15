@@ -5,7 +5,6 @@ import {
   orgInvites,
   orgMemberships,
   orgs,
-  projects,
   users,
   type Org,
   type OrgInvite,
@@ -96,21 +95,19 @@ export async function listOrgsForUser(userId: string): Promise<OrgWithRole[]> {
 }
 
 /**
- * Looks up the vault `init_status` of the org that owns the given
- * project slug. Used by the agent-start guard to refuse spawning while
- * the org's vault provisioning is still pending. Returns null when no
- * project / org row exists for the slug (caller decides how to handle).
+ * Looks up the vault `init_status` of the given org. Used by the
+ * agent-start guard to refuse spawning while the org's vault
+ * provisioning is still pending. Returns null when no org row exists.
  */
-export async function getOrgInitStatusForProjectSlug(
-  slug: string,
+export async function getOrgInitStatus(
+  orgId: string,
 ): Promise<"pending_vault_init" | "ready" | null> {
   const db = getDb();
   if (!db) return null;
   const [row] = await db
     .select({ initStatus: orgs.initStatus })
     .from(orgs)
-    .innerJoin(projects, eq(projects.ownerOrgId, orgs.id))
-    .where(eq(projects.slug, slug))
+    .where(eq(orgs.id, orgId))
     .limit(1);
   return row?.initStatus ?? null;
 }

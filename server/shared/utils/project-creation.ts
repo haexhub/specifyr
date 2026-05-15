@@ -1,7 +1,9 @@
 import path from "node:path";
+import fs from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { installExtensionsInProject } from "./extension-install";
-import { dataDir, orgProjectsDir } from "./data-dirs";
+import { dataDir, orgProjectsDir, projectArtifactsDir } from "./data-dirs";
+import { getProjectByOrgAndSlug } from "./project-store";
 
 async function importModule<T = Record<string, unknown>>(relativePath: string): Promise<T> {
   const moduleUrl = pathToFileURL(path.join(process.cwd(), relativePath)).href;
@@ -40,6 +42,28 @@ export async function createProjectRecord(options: {
   const store = new ArtifactStore(dataDir());
 
   await ensureDir(projectsParent);
+
+  // Orphan check: if FS dirs exist but no DB row owns them (e.g. from a
+  // previously failed create), wipe the FS leftovers before proceeding.
+  // Without this, `specify init` would fail with "directory exists" or
+  // ArtifactStore.createProject would throw "already exists" even though
+  // the project was never actually created. Cost: one extra DB hit per
+  // create — acceptable.
+  const existingRow = await getProjectByOrgAndSlug(options.ownerOrgId, slug);
+  if (!existingRow) {
+    const artifactDir = projectArtifactsDir(options.ownerOrgId, slug);
+    for (const stale of [artifactDir, projectRoot]) {
+      try {
+        const stat = await fs.stat(stale);
+        if (stat) {
+          console.warn(`[project-creation] removing orphan dir: ${stale}`);
+          await fs.rm(stale, { recursive: true, force: true });
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") throw err;
+      }
+    }
+  }
 
   // `specify init` is interactive by default (arrow-key menu for AI selection, git-init prompt).
   // --ai generic and --no-git make it fully non-interactive so spawn() from Nuxt can succeed.
@@ -91,7 +115,6 @@ export async function createProjectRecord(options: {
   }
 
   // Write provider-neutral project guidance for ACP-backed coding agents.
-  const fs = await import("node:fs/promises");
   const agentsMd = [
     `# ${title} — Company Workspace`,
     ``,
