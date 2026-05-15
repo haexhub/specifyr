@@ -7,10 +7,12 @@ import { Badge } from "~/components/shadcn/badge";
 import ProjectShell from "~/components/projects/ProjectShell.vue";
 
 const route = useRoute();
-const slug = computed(() => route.params.slug as string);
+const orgSlug = computed(() => route.params.orgSlug as string);
+const projSlug = computed(() => route.params.projSlug as string);
+const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
 
 const { data, refresh } = await useFetch<{ keys: string[] }>(
-  () => `/api/projects/${slug.value}/secrets`,
+  () => `${apiBase.value}/secrets`,
 );
 const keys = computed(() => data.value?.keys ?? []);
 
@@ -22,7 +24,7 @@ const error = ref<string | null>(null);
 
 async function removeSecret(key: string) {
   try {
-    await $fetch(`/api/projects/${slug.value}/secrets/${encodeURIComponent(key)}`, {
+    await $fetch(`${apiBase.value}/secrets/${encodeURIComponent(key)}`, {
       method: "DELETE",
     });
     await refresh();
@@ -55,7 +57,7 @@ async function addSecret() {
   }
   adding.value = true;
   try {
-    await $fetch(`/api/projects/${slug.value}/secrets`, {
+    await $fetch(`${apiBase.value}/secrets`, {
       method: "POST",
       body: { key: newKey.value.trim(), value: newValue.value },
     });
@@ -71,7 +73,7 @@ async function addSecret() {
 </script>
 
 <template>
-  <ProjectsProjectShell :slug="slug">
+  <ProjectsProjectShell :org-slug="orgSlug" :proj-slug="projSlug">
     <div class="p-6 max-w-2xl space-y-6">
       <div>
         <h2 class="text-lg font-semibold flex items-center gap-2">

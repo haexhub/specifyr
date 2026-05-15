@@ -19,12 +19,39 @@ const refreshProjects = inject<() => Promise<void>>("refreshProjects", async () 
 
 const { me, isDevAuth, logout, devLogin } = useMe();
 
-const activeSlug = computed(() => {
-  if (typeof route.params.slug === "string") {
-    return route.params.slug;
-  }
+const activeProjSlug = computed(() => {
+  const projSlug = route.params.projSlug;
+  if (typeof projSlug === "string") return projSlug;
   return null;
 });
+const activeOrgSlug = computed(() => {
+  const orgSlug = route.params.orgSlug;
+  if (typeof orgSlug === "string") return orgSlug;
+  return null;
+});
+
+function isActive(project: ProjectListItem): boolean {
+  return (
+    project.slug === activeProjSlug.value &&
+    project.orgSlug === activeOrgSlug.value
+  );
+}
+
+// Group projects by org so the sidebar shows one section per org. Only
+// rendered when the user belongs to more than one org with projects;
+// otherwise the flat list reads cleaner.
+const groupedProjects = computed(() => {
+  const map = new Map<string, { orgSlug: string; items: ProjectListItem[] }>();
+  for (const p of props.projects) {
+    const key = p.orgSlug ?? "";
+    const entry = map.get(key) ?? { orgSlug: p.orgSlug ?? "", items: [] };
+    entry.items.push(p);
+    map.set(key, entry);
+  }
+  return [...map.values()].sort((a, b) => a.orgSlug.localeCompare(b.orgSlug));
+});
+
+const showOrgHeaders = computed(() => groupedProjects.value.length > 1);
 
 function formatRelative(iso?: string): string {
   if (!iso) return "";
@@ -60,10 +87,13 @@ async function confirmDelete() {
   if (!target || deleting.value) return;
   deleting.value = true;
   try {
-    await $fetch(`/api/projects/${target.slug}`, { method: "DELETE" });
+    await $fetch(
+      `/api/orgs/${target.orgSlug}/projects/${target.slug}`,
+      { method: "DELETE" },
+    );
     deleteTarget.value = null;
     await refreshProjects();
-    if (activeSlug.value === target.slug) {
+    if (isActive(target)) {
       await router.push("/");
     }
   } catch (error) {
@@ -122,11 +152,11 @@ async function confirmDelete() {
       </button>
       <NuxtLink
         v-for="project in projects"
-        :key="project.slug"
-        :to="`/specs/${project.slug}`"
+        :key="`${project.orgSlug}/${project.slug}`"
+        :to="`/specs/${project.orgSlug}/${project.slug}`"
         class="group relative flex size-10 w-full items-center justify-center rounded-md text-xs font-semibold uppercase tracking-wide transition"
-        :class="project.slug === activeSlug ? 'bg-primary/90 text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground'"
-        :title="project.title"
+        :class="isActive(project) ? 'bg-primary/90 text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-accent hover:text-foreground'"
+        :title="`${project.orgSlug} / ${project.title}`"
       >
         {{ projectInitial(project.title) }}
         <button
@@ -140,33 +170,51 @@ async function confirmDelete() {
       </NuxtLink>
     </nav>
 
-    <!-- Expanded: full list -->
+    <!-- Expanded: full list, grouped by org when the user has >1 org -->
     <nav v-else class="flex-1 overflow-y-auto px-2">
-      <ul v-if="projects.length" class="flex flex-col gap-0.5">
-        <li v-for="project in projects" :key="project.slug" class="group relative">
-          <NuxtLink
-            :to="`/specs/${project.slug}`"
-            class="flex items-center justify-between gap-2 rounded-md px-2 py-2 pr-8 text-sm transition"
-            :class="project.slug === activeSlug ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'"
+      <template v-if="projects.length">
+        <div
+          v-for="group in groupedProjects"
+          :key="group.orgSlug || 'no-org'"
+          class="mb-2"
+        >
+          <p
+            v-if="showOrgHeaders"
+            class="px-2 pb-1 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground"
           >
-            <span class="flex min-w-0 items-center gap-2">
-              <FolderOpen class="size-4 shrink-0 opacity-70" />
-              <span class="truncate">{{ project.title }}</span>
-            </span>
-            <span class="text-[10px] uppercase tracking-wider opacity-60">
-              {{ formatRelative(project.updatedAt) }}
-            </span>
-          </NuxtLink>
-          <button
-            type="button"
-            class="absolute right-1.5 top-1/2 hidden size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition group-hover:flex group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
-            :title="$t('sidebar.deleteProject')"
-            @click="openDeleteDialog(project, $event)"
-          >
-            <Trash2 class="size-3.5" />
-          </button>
-        </li>
-      </ul>
+            {{ group.orgSlug }}
+          </p>
+          <ul class="flex flex-col gap-0.5">
+            <li
+              v-for="project in group.items"
+              :key="`${project.orgSlug}/${project.slug}`"
+              class="group relative"
+            >
+              <NuxtLink
+                :to="`/specs/${project.orgSlug}/${project.slug}`"
+                class="flex items-center justify-between gap-2 rounded-md px-2 py-2 pr-8 text-sm transition"
+                :class="isActive(project) ? 'bg-accent text-accent-foreground' : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'"
+              >
+                <span class="flex min-w-0 items-center gap-2">
+                  <FolderOpen class="size-4 shrink-0 opacity-70" />
+                  <span class="truncate">{{ project.title }}</span>
+                </span>
+                <span class="text-[10px] uppercase tracking-wider opacity-60">
+                  {{ formatRelative(project.updatedAt) }}
+                </span>
+              </NuxtLink>
+              <button
+                type="button"
+                class="absolute right-1.5 top-1/2 hidden size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition group-hover:flex group-hover:opacity-100 hover:bg-destructive/10 hover:text-destructive"
+                :title="$t('sidebar.deleteProject')"
+                @click="openDeleteDialog(project, $event)"
+              >
+                <Trash2 class="size-3.5" />
+              </button>
+            </li>
+          </ul>
+        </div>
+      </template>
       <p v-else class="px-3 py-6 text-xs text-muted-foreground">
         {{ $t("sidebar.noProjects") }}
       </p>

@@ -14,13 +14,16 @@ import type { StepState } from "~/types/types";
 const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
-const slug = computed(() => route.params.slug as string);
+const orgSlug = computed(() => route.params.orgSlug as string);
+const projSlug = computed(() => route.params.projSlug as string);
+const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
+const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
 
 const { data: project } = await useFetch<{
   workflow?: string;
   workflowDefinition?: Workflow;
   title?: string;
-}>(() => `/api/projects/${slug.value}`, { key: () => `project-${slug.value}` });
+}>(() => apiBase.value, { key: () => `project-${orgSlug.value}-${projSlug.value}` });
 
 const workflow = computed(() =>
   resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null)
@@ -34,8 +37,8 @@ const tasksStep = computed(() => {
 });
 
 const { data: stepStates } = await useFetch<StepState[]>(
-  () => `/api/projects/${slug.value}/steps`,
-  { default: () => [], key: () => `steps-${slug.value}` }
+  () => `${apiBase.value}/steps`,
+  { default: () => [], key: () => `steps-${orgSlug.value}-${projSlug.value}` }
 );
 
 const statusMap = computed(() => {
@@ -105,7 +108,7 @@ const taskLogs = ref<Record<string, TaskLogEntry[]>>({});
 
 async function refreshStatus() {
   try {
-    status.value = await $fetch<RunStatusResponse>(`/api/projects/${slug.value}/run/status`);
+    status.value = await $fetch<RunStatusResponse>(`${apiBase.value}/run/status`);
   } catch (err) {
     startError.value = err instanceof Error ? err.message : String(err);
   }
@@ -114,7 +117,7 @@ async function refreshStatus() {
 async function loadTaskLog(taskId: string) {
   try {
     const res = await $fetch<{ entries: TaskLogEntry[] }>(
-      `/api/projects/${slug.value}/run/tasks/${taskId}/log`
+      `${apiBase.value}/run/tasks/${taskId}/log`
     );
     taskLogs.value[taskId] = res.entries ?? [];
   } catch {
@@ -125,7 +128,7 @@ async function loadTaskLog(taskId: string) {
 onMounted(async () => {
   if (runStep.value.runAction) {
     try {
-      const s = await $fetch<{ status: string }>(`/api/projects/${slug.value}/${runStep.value.runAction.replace("/start", "/status")}`);
+      const s = await $fetch<{ status: string }>(`${apiBase.value}/${runStep.value.runAction.replace("/start", "/status")}`);
       if (s.status === "running") {
         companyAlreadyRunning.value = true;
         return;
@@ -199,7 +202,7 @@ async function startRun() {
     abortCtrl.value = ctrl;
     streaming.value = true;
     try {
-      await openSse(`/api/projects/${slug.value}/${runStep.value.runAction}`, {
+      await openSse(`${apiBase.value}/${runStep.value.runAction}`, {
         method: "POST",
         body: {},
         signal: ctrl.signal,
@@ -229,7 +232,7 @@ async function startRun() {
               // Give Vue a tick to render the final "all ready" states before navigating.
               await nextTick();
               await new Promise((r) => setTimeout(r, 1500));
-              await router.push(`/specs/${slug.value}/runtime`);
+              await router.push(`${routeBase.value}/runtime`);
               break;
             case "error":
               startError.value = payload.message ?? t("run.unknownError");
@@ -239,7 +242,7 @@ async function startRun() {
         onError: (err: unknown) => {
           const msg = err instanceof Error ? err.message : String(err);
           if (msg.startsWith("409")) {
-            router.push(`/specs/${slug.value}/runtime`);
+            router.push(`${routeBase.value}/runtime`);
           } else {
             startError.value = msg;
           }
@@ -267,7 +270,7 @@ async function startRun() {
   streaming.value = true;
 
   try {
-    await openSse(`/api/projects/${slug.value}/run/start`, {
+    await openSse(`${apiBase.value}/run/start`, {
       method: "POST",
       body: {},
       signal: ctrl.signal,
@@ -363,7 +366,7 @@ async function cancelRun() {
   if (cancelling.value) return;
   cancelling.value = true;
   try {
-    await $fetch(`/api/projects/${slug.value}/run/cancel`, { method: "POST" });
+    await $fetch(`${apiBase.value}/run/cancel`, { method: "POST" });
     abortCtrl.value?.abort();
   } catch (err) {
     alert(err instanceof Error ? err.message : t("run.cancelFailed"));
@@ -378,7 +381,7 @@ async function retryTask(taskId: string) {
   if (taskBusy.value) return;
   taskBusy.value = true;
   try {
-    await $fetch(`/api/projects/${slug.value}/run/tasks/${taskId}/retry`, { method: "POST" });
+    await $fetch(`${apiBase.value}/run/tasks/${taskId}/retry`, { method: "POST" });
     await refreshStatus();
     taskLogs.value[taskId] = [];
   } catch (err) {
@@ -392,7 +395,7 @@ async function skipTask(taskId: string) {
   if (taskBusy.value) return;
   taskBusy.value = true;
   try {
-    await $fetch(`/api/projects/${slug.value}/run/tasks/${taskId}/skip`, { method: "POST" });
+    await $fetch(`${apiBase.value}/run/tasks/${taskId}/skip`, { method: "POST" });
     await refreshStatus();
   } catch (err) {
     alert(err instanceof Error ? err.message : t("run.skipFailed"));
@@ -409,7 +412,8 @@ onUnmounted(() => {
 <template>
   <div class="flex h-screen">
     <ProjectsProjectStepSidebar
-      :slug="slug"
+      :org-slug="orgSlug"
+      :proj-slug="projSlug"
       :project-title="project?.title"
       :active-step-id="runStep.id"
       :workflow="workflow"
@@ -439,7 +443,7 @@ onUnmounted(() => {
         <div class="flex items-center gap-2">
           <template v-if="companyAlreadyRunning">
             <NuxtLink
-              :to="`/specs/${slug}/runtime`"
+              :to="`${routeBase}/runtime`"
               class="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
             >
               <CheckCircle2 class="size-3.5" />
@@ -490,7 +494,7 @@ onUnmounted(() => {
         <button
           type="button"
           class="shrink-0 underline underline-offset-2 opacity-70 hover:opacity-100"
-          @click="router.push(`/specs/${slug}/steps/${tasksStep.id}`)"
+          @click="router.push(`${routeBase}/steps/${tasksStep.id}`)"
         >
           {{ $t("run.switchTo", { label: tasksStep.label }) }}
         </button>

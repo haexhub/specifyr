@@ -25,7 +25,8 @@ import ProjectViewTabs from "~/components/projects/ProjectViewTabs.vue";
 import type { Workflow } from "~/utils/workflows";
 
 defineProps<{
-  slug: string;
+  orgSlug: string;
+  projSlug: string;
   projectTitle?: string;
   workflow?: Workflow | null;
   showSteps?: boolean;
@@ -35,7 +36,8 @@ defineProps<{
 <template>
   <div class="flex h-screen">
     <ProjectsProjectStepSidebar
-      :slug="slug"
+      :org-slug="orgSlug"
+      :proj-slug="projSlug"
       :project-title="projectTitle"
       :workflow="workflow ?? undefined"
       :show-steps="showSteps ?? true"
@@ -50,7 +52,7 @@ defineProps<{
            viewport width. h-15 mirrors the sidebar header heights so the
            border-b dividers line up horizontally across all columns. -->
       <div class="flex h-15 shrink-0 items-center border-b border-border bg-background/50 px-6 lg:px-10">
-        <ProjectsProjectViewTabs :slug="slug" />
+        <ProjectsProjectViewTabs :org-slug="orgSlug" :proj-slug="projSlug" />
       </div>
 
       <!-- Page body: scrolls independently. Full-width within the padding;

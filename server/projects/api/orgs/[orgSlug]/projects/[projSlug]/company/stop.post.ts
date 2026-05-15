@@ -19,9 +19,10 @@ import {
 } from "@su/company-manager";
 
 export default defineEventHandler(async (event) => {
+  const orgId = event.context.orgId!;
   const slug = event.context.projectSlug!;
 
-  const runtime = getActiveCompany(slug);
+  const runtime = getActiveCompany(orgId, slug);
   if (!runtime) {
     throw createError({
       statusCode: 404,
@@ -30,7 +31,7 @@ export default defineEventHandler(async (event) => {
   }
 
   await runtime.stop();
-  deregisterCompany(slug);
+  deregisterCompany(orgId, slug);
 
   // Tear down the per-company docker network created at start. Best-effort:
   // if cleanup fails (network already gone, peer not connected) the helper

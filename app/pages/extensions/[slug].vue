@@ -109,33 +109,41 @@ const readmeHtml = computed(() => {
 const installedIn = ref<Set<string>>(new Set());
 const installedLoaded = ref(false);
 
+function projectKey(p: { orgSlug: string; slug: string }) {
+  return `${p.orgSlug}/${p.slug}`;
+}
+
 async function refreshInstalledMap() {
   installedLoaded.value = false;
   const entries = await Promise.all(
     (projects.value ?? []).map(async (p) => {
       try {
-        const m = await $fetch<ProjectExtensionsManifest>(`/api/projects/${encodeURIComponent(p.slug)}/extensions`);
+        const m = await $fetch<ProjectExtensionsManifest>(
+          `/api/orgs/${encodeURIComponent(p.orgSlug)}/projects/${encodeURIComponent(p.slug)}/extensions`,
+        );
         const has = m.extensions.some((e) => e.slug === slug.value && e.status === "installed");
-        return [p.slug, has] as const;
+        return [projectKey(p), has] as const;
       } catch {
-        return [p.slug, false] as const;
+        return [projectKey(p), false] as const;
       }
     })
   );
-  installedIn.value = new Set(entries.filter(([, has]) => has).map(([s]) => s));
+  installedIn.value = new Set(entries.filter(([, has]) => has).map(([k]) => k));
   installedLoaded.value = true;
 }
 
 watch([projects, slug], () => refreshInstalledMap(), { immediate: true });
 
 const pickerOpen = ref(false);
-const selectedProjectSlugs = ref<Set<string>>(new Set());
+// Selection set holds `${orgSlug}/${projSlug}` keys so projects with the
+// same slug in different orgs are addressable independently.
+const selectedProjectKeys = ref<Set<string>>(new Set());
 
-function toggleProject(projectSlug: string) {
-  const next = new Set(selectedProjectSlugs.value);
-  if (next.has(projectSlug)) next.delete(projectSlug);
-  else next.add(projectSlug);
-  selectedProjectSlugs.value = next;
+function toggleProject(key: string) {
+  const next = new Set(selectedProjectKeys.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  selectedProjectKeys.value = next;
 }
 
 async function addToStandard() {
@@ -153,19 +161,23 @@ async function addToStandard() {
 }
 
 async function installIntoSelectedProjects() {
-  if (selectedProjectSlugs.value.size === 0) return;
+  if (selectedProjectKeys.value.size === 0) return;
   saving.value = true;
   try {
-    const targets = Array.from(selectedProjectSlugs.value);
+    const targets = Array.from(selectedProjectKeys.value);
     await Promise.all(
-      targets.map((projectSlug) =>
-        $fetch(`/api/projects/${encodeURIComponent(projectSlug)}/extensions`, {
-          method: "POST",
-          body: { slug: slug.value, source: "manual" }
-        })
-      )
+      targets.map((key) => {
+        const [orgSlug, projSlug] = key.split("/");
+        return $fetch(
+          `/api/orgs/${encodeURIComponent(orgSlug!)}/projects/${encodeURIComponent(projSlug!)}/extensions`,
+          {
+            method: "POST",
+            body: { slug: slug.value, source: "manual" },
+          },
+        );
+      }),
     );
-    selectedProjectSlugs.value = new Set();
+    selectedProjectKeys.value = new Set();
     pickerOpen.value = false;
     await refreshInstalledMap();
     await refreshProjects();
@@ -278,31 +290,31 @@ async function installIntoSelectedProjects() {
                     <CommandGroup>
                       <CommandItem
                         v-for="p in projects ?? []"
-                        :key="p.slug"
-                        :value="`${p.slug} ${p.title}`"
-                        :disabled="installedIn.has(p.slug)"
+                        :key="projectKey(p)"
+                        :value="`${p.orgSlug}/${p.slug} ${p.title}`"
+                        :disabled="installedIn.has(projectKey(p))"
                         class="flex items-center gap-2"
-                        @select="toggleProject(p.slug)"
+                        @select="toggleProject(projectKey(p))"
                       >
                         <div
                           class="flex size-4 shrink-0 items-center justify-center rounded border border-input"
                           :class="
-                            installedIn.has(p.slug)
+                            installedIn.has(projectKey(p))
                               ? 'bg-muted'
-                              : selectedProjectSlugs.has(p.slug)
+                              : selectedProjectKeys.has(projectKey(p))
                                 ? 'border-primary bg-primary text-primary-foreground'
                                 : ''
                           "
                         >
                           <Check
-                            v-if="selectedProjectSlugs.has(p.slug) || installedIn.has(p.slug)"
+                            v-if="selectedProjectKeys.has(projectKey(p)) || installedIn.has(projectKey(p))"
                             class="size-3"
                           />
                         </div>
                         <div class="min-w-0 flex-1">
                           <div class="truncate text-sm">{{ p.title || p.slug }}</div>
                           <div class="truncate text-[11px] text-muted-foreground">
-                            {{ installedIn.has(p.slug) ? $t("extensions.detail.alreadyInstalled") : p.slug }}
+                            {{ installedIn.has(projectKey(p)) ? $t("extensions.detail.alreadyInstalled") : `${p.orgSlug} / ${p.slug}` }}
                           </div>
                         </div>
                       </CommandItem>
@@ -310,11 +322,11 @@ async function installIntoSelectedProjects() {
                   </CommandList>
                   <div class="flex items-center justify-between gap-2 border-t border-border/60 px-2 py-2">
                     <span class="text-xs text-muted-foreground">
-                      {{ $t("extensions.detail.selectedCount", { count: selectedProjectSlugs.size }) }}
+                      {{ $t("extensions.detail.selectedCount", { count: selectedProjectKeys.size }) }}
                     </span>
                     <Button
                       size="sm"
-                      :disabled="saving || selectedProjectSlugs.size === 0"
+                      :disabled="saving || selectedProjectKeys.size === 0"
                       @click="installIntoSelectedProjects"
                     >
                       {{ $t("extensions.detail.install") }}

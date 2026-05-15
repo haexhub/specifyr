@@ -27,10 +27,13 @@ interface ArtifactDir {
 }
 
 const props = defineProps<{
-  slug: string;
+  orgSlug: string;
+  projSlug: string;
   candidates: string[];
   reloadToken?: number;
 }>();
+
+const apiBase = computed(() => `/api/orgs/${props.orgSlug}/projects/${props.projSlug}`);
 
 const emit = defineEmits<{
   collapse: [];
@@ -153,7 +156,7 @@ type FsResponse = ArtifactFile | ArtifactDir;
 
 async function fetchPath(p: string): Promise<FsResponse | null> {
   try {
-    return (await $fetch<FsResponse>(`/api/projects/${props.slug}/fs`, {
+    return (await $fetch<FsResponse>(`${apiBase.value}/fs`, {
       params: { path: p }
     }));
   } catch (err) {
@@ -241,7 +244,7 @@ async function resolveCandidate(): Promise<void> {
 }
 
 watch(
-  () => [props.slug, props.candidates.join("|"), props.reloadToken],
+  () => [props.orgSlug, props.projSlug, props.candidates.join("|"), props.reloadToken],
   () => resolveCandidate(),
   { immediate: true }
 );
@@ -249,11 +252,11 @@ watch(
 let watcherSource: EventSource | null = null;
 let watcherDebounce: ReturnType<typeof setTimeout> | null = null;
 
-function openWatcher(forSlug: string) {
+function openWatcher(url: string) {
   closeWatcher();
   if (typeof window === "undefined") return;
   try {
-    watcherSource = new EventSource(`/api/projects/${forSlug}/watch`);
+    watcherSource = new EventSource(url);
     watcherSource.addEventListener("change", () => {
       if (watcherDebounce) clearTimeout(watcherDebounce);
       watcherDebounce = setTimeout(() => {
@@ -276,9 +279,9 @@ function closeWatcher() {
 }
 
 watch(
-  () => props.slug,
-  (nextSlug) => {
-    if (nextSlug) openWatcher(nextSlug);
+  () => [props.orgSlug, props.projSlug] as const,
+  ([nextOrg, nextProj]) => {
+    if (nextOrg && nextProj) openWatcher(`${apiBase.value}/watch`);
   },
   { immediate: true }
 );

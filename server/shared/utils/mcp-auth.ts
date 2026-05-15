@@ -18,7 +18,7 @@
 
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { getActiveCompany } from "./company-manager";
+import { findCompanyBySlugForMcp } from "./company-manager";
 
 // Pure helpers live in src/core/mcp-auth.js so node --test can exercise
 // them without a Nuxt/Nitro harness. Lazy-loaded on first request to
@@ -37,8 +37,13 @@ async function loadMcpAuth() {
 }
 
 export async function requireRuntimeAuth(event: any, slug: string) {
-  const runtime = getActiveCompany(slug);
-  if (!runtime) {
+  // Worker → server callback: the worker only knows its project slug + bearer.
+  // We resolve any runtime that matches the slug, then disambiguate by token.
+  // In practice each (orgId, slug) pair mints a distinct token, so a token
+  // match uniquely identifies the runtime even if two orgs happen to run a
+  // company with the same project slug.
+  const entry = findCompanyBySlugForMcp(slug);
+  if (!entry) {
     throw createError({
       statusCode: 404,
       statusMessage: `No company runtime running for project '${slug}'`,
@@ -54,9 +59,9 @@ export async function requireRuntimeAuth(event: any, slug: string) {
       statusMessage: "Missing or malformed Authorization header (expected 'Bearer <token>')",
     });
   }
-  if (!tokensMatch(provided, runtime.opsToken)) {
+  if (!tokensMatch(provided, entry.runtime.opsToken)) {
     throw createError({ statusCode: 401, statusMessage: "Invalid token" });
   }
 
-  return runtime;
+  return entry.runtime;
 }

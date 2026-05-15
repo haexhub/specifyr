@@ -13,9 +13,10 @@
 import { getActiveCompany } from "@su/company-manager";
 
 export default defineEventHandler(async (event) => {
+  const orgId = event.context.orgId!;
   const slug = event.context.projectSlug!;
 
-  const runtime = getActiveCompany(slug);
+  const runtime = getActiveCompany(orgId, slug);
   if (!runtime) {
     return { status: "idle", slug };
   }

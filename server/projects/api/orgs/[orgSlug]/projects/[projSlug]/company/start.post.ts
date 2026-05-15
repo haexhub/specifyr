@@ -95,12 +95,13 @@ async function buildApprovalTransport(): Promise<NotifyTransport | null> {
 
 export default defineEventHandler(async (event) => {
   const orgId = event.context.orgId!;
+  const orgSlug = event.context.orgSlug!;
   const slug = event.context.projectSlug!;
   const config = useRuntimeConfig(event);
 
   await assertProjectExists(orgId, slug);
 
-  if (getActiveCompany(slug) || isCompanyStarting(slug)) {
+  if (getActiveCompany(orgId, slug) || isCompanyStarting(orgId, slug)) {
     throw createError({
       statusCode: 409,
       statusMessage: `Company runtime already running for project '${slug}'`,
@@ -127,7 +128,7 @@ export default defineEventHandler(async (event) => {
     try { await stream.push({ event: name, data: JSON.stringify(payload) }); } catch { /* closed */ }
   };
 
-  markCompanyStarting(slug);
+  markCompanyStarting(orgId, slug);
   let networkOwnedButUnregistered = false;
   let networkPeersForCleanup: string[] = [];
   (async () => {
@@ -428,7 +429,7 @@ export default defineEventHandler(async (event) => {
         return;
       }
 
-      registerCompany(slug, runtime);
+      registerCompany({ orgId, orgSlug, slug }, runtime);
       networkOwnedButUnregistered = false;
       const agents = runtime.listAgents();
 
@@ -451,7 +452,7 @@ export default defineEventHandler(async (event) => {
     } catch (err) {
       await push("error", { message: err instanceof Error ? err.message : "Unexpected error" });
     } finally {
-      clearCompanyStarting(slug);
+      clearCompanyStarting(orgId, slug);
       // If we created the per-company network but never reached
       // registerCompany, stop.post.ts will never clean it up. Tear it
       // down here so we don't leak docker networks on failed starts.

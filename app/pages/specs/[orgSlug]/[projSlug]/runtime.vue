@@ -10,7 +10,10 @@ import { resolveWorkflow, type Workflow } from "~/utils/workflows";
 
 const route = useRoute();
 const router = useRouter();
-const slug = computed(() => route.params.slug as string);
+const orgSlug = computed(() => route.params.orgSlug as string);
+const projSlug = computed(() => route.params.projSlug as string);
+const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
+const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
 
 const selectedRole = computed(() => {
   const v = route.query.agent;
@@ -67,8 +70,8 @@ const { data: project } = await useFetch<{
   workflowDefinition?: Workflow;
   title?: string;
   [k: string]: unknown;
-}>(() => `/api/projects/${slug.value}`, {
-  key: () => `project-${slug.value}`,
+}>(() => apiBase.value, {
+  key: () => `project-${orgSlug.value}-${projSlug.value}`,
 });
 
 const workflow = computed(() =>
@@ -81,10 +84,10 @@ const runStep = computed(() => {
 });
 
 const { data: companyStatus, refresh: refreshStatus } = await useFetch<CompanyStatus>(
-  () => `/api/projects/${slug.value}/company/status`,
+  () => `${apiBase.value}/company/status`,
   {
-    default: () => ({ slug: slug.value, status: "idle" } as CompanyStatus),
-    key: () => `cstatus-${slug.value}`,
+    default: () => ({ slug: projSlug.value, status: "idle" } as CompanyStatus),
+    key: () => `cstatus-${orgSlug.value}-${projSlug.value}`,
   },
 );
 
@@ -100,7 +103,7 @@ async function fetchEvents() {
   }
   try {
     const data = await $fetch<{ events: EventRow[] }>(
-      `/api/projects/${slug.value}/company/events?limit=50`,
+      `${apiBase.value}/company/events?limit=50`,
     );
     events.value = data.events;
     eventsError.value = null;
@@ -204,7 +207,7 @@ async function stopCompany() {
   if (!confirm(t("runtime.stopConfirm"))) return;
   stopLoading.value = true;
   try {
-    await $fetch(`/api/projects/${slug.value}/company/stop`, { method: "POST" });
+    await $fetch(`${apiBase.value}/company/stop`, { method: "POST" });
     await refreshStatus();
     events.value = [];
   } catch (err: unknown) {
@@ -220,7 +223,7 @@ async function submitDispatch() {
   dispatchLoading.value = true;
   dispatchFeedback.value = null;
   try {
-    await $fetch(`/api/projects/${slug.value}/company/dispatch`, {
+    await $fetch(`${apiBase.value}/company/dispatch`, {
       method: "POST",
       body: { goal: dispatchGoal.value, title: dispatchTitle.value || undefined },
     });
@@ -244,7 +247,8 @@ function closeDispatch() {
 
 <template>
   <ProjectsProjectShell
-    :slug="slug"
+    :org-slug="orgSlug"
+    :proj-slug="projSlug"
     :project-title="project?.title"
     :workflow="workflow"
     :show-steps="false"
@@ -275,7 +279,7 @@ function closeDispatch() {
 
     <header class="flex flex-wrap items-center justify-end gap-3">
       <NuxtLink
-        :to="`/specs/${slug}/history`"
+        :to="`${routeBase}/history`"
         class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted/40"
       >
         <History class="size-3.5" />
@@ -380,17 +384,17 @@ function closeDispatch() {
             </p>
           </CardHeader>
           <CardContent>
-            <AgentsCompanyAgentLlmGrid :slug="slug" />
+            <AgentsCompanyAgentLlmGrid :org-slug="orgSlug" :proj-slug="projSlug" />
           </CardContent>
         </Card>
 
         <Card v-if="!isRunning">
           <CardContent class="py-10 text-center text-sm text-muted-foreground">
             <p>{{ $t("runtime.idlePre") }}
-            <NuxtLink :to="`/specs/${slug}`" class="text-primary hover:underline">{{ $t("runtime.speckit") }}</NuxtLink>{{ $t("runtime.idlePost") }}</p>
+            <NuxtLink :to="routeBase" class="text-primary hover:underline">{{ $t("runtime.speckit") }}</NuxtLink>{{ $t("runtime.idlePost") }}</p>
             <div class="mt-4">
               <NuxtLink
-                :to="`/specs/${slug}/run`"
+                :to="`${routeBase}/run`"
                 class="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 {{ $t("runtime.startNow") }}

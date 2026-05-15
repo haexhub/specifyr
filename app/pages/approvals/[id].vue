@@ -9,6 +9,7 @@ import { Badge } from "~/components/shadcn/badge";
 interface ApprovalDetail {
   requestId: string;
   slug: string;
+  orgSlug: string;
   agent: string;
   capability: string;
 }
@@ -91,7 +92,7 @@ async function decide(decision: Decision) {
             {{ t('approvals.for') }} <code>{{ approval.agent }}</code> · <code>{{ approval.capability }}</code>
           </p>
           <NuxtLink
-            :to="`/specs/${approval.slug}/runtime`"
+            :to="`/specs/${approval.orgSlug}/${approval.slug}/runtime`"
             class="inline-flex items-center gap-1 text-sm text-primary hover:underline"
           >
             {{ $t("approvals.toRuntime") }} <ArrowUpRight class="size-3.5" />

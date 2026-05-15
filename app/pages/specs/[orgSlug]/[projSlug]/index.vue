@@ -17,7 +17,10 @@ const route = useRoute();
 const router = useRouter();
 const refreshProjects = inject<() => Promise<void>>("refreshProjects", async () => {});
 
-const slug = computed(() => route.params.slug as string);
+const orgSlug = computed(() => route.params.orgSlug as string);
+const projSlug = computed(() => route.params.projSlug as string);
+const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
+const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
 const deleteDialogOpen = ref(false);
 const deleting = ref(false);
 const notificationDrawerOpen = ref(false);
@@ -27,8 +30,8 @@ const { data: project, error } = await useFetch<{
   workflowDefinition?: Workflow;
   title?: string;
   [k: string]: unknown;
-}>(() => `/api/projects/${slug.value}`, {
-  key: () => `project-${slug.value}`
+}>(() => apiBase.value, {
+  key: () => `project-${orgSlug.value}-${projSlug.value}`
 });
 
 const workflow = computed(() =>
@@ -37,18 +40,18 @@ const workflow = computed(() =>
 const workflowSteps = computed(() => workflow.value.steps);
 
 const { data: availableWorkflows } = await useFetch<Workflow[]>(
-  () => `/api/projects/${slug.value}/workflows`,
-  { default: () => [], key: () => `workflows-${slug.value}` }
+  () => `${apiBase.value}/workflows`,
+  { default: () => [], key: () => `workflows-${orgSlug.value}-${projSlug.value}` }
 );
 
 const { data: stepStates } = await useFetch<StepState[]>(
-  () => `/api/projects/${slug.value}/steps`,
-  { default: () => [], key: () => `steps-${slug.value}` }
+  () => `${apiBase.value}/steps`,
+  { default: () => [], key: () => `steps-${orgSlug.value}-${projSlug.value}` }
 );
 
 const { data: events, pending: eventsLoading } = await useFetch<NotificationEvent[]>(
-  () => `/api/projects/${slug.value}/events`,
-  { default: () => [], key: () => `events-${slug.value}` }
+  () => `${apiBase.value}/events`,
+  { default: () => [], key: () => `events-${orgSlug.value}-${projSlug.value}` }
 );
 
 const statusMap = computed(() => {
@@ -66,8 +69,8 @@ const completionStats = computed(() => {
 });
 
 function stepRoute(step: { id: string; isRun?: boolean }) {
-  if (step.isRun) return `/specs/${slug.value}/run`;
-  return `/specs/${slug.value}/steps/${step.id}`;
+  if (step.isRun) return `${routeBase.value}/run`;
+  return `${routeBase.value}/steps/${step.id}`;
 }
 
 function stepStatus(id: StepId): StepStatus | undefined {
@@ -86,7 +89,7 @@ async function switchWorkflow(event: Event) {
   }
   switchingWorkflow.value = true;
   try {
-    await $fetch(`/api/projects/${slug.value}/workflow`, {
+    await $fetch(`${apiBase.value}/workflow`, {
       method: "POST",
       body: { workflow: nextId }
     });
@@ -104,7 +107,7 @@ async function deleteProject() {
   if (deleting.value) return;
   deleting.value = true;
   try {
-    await $fetch(`/api/projects/${slug.value}`, { method: "DELETE" });
+    await $fetch(apiBase.value, { method: "DELETE" });
     deleteDialogOpen.value = false;
     await refreshProjects();
     await router.push("/");
@@ -124,14 +127,15 @@ async function deleteProject() {
         <CardTitle>{{ $t("specIndex.notFound") }}</CardTitle>
       </CardHeader>
       <CardContent class="text-sm text-muted-foreground">
-        {{ $t("specIndex.notFoundDesc", { slug }) }}
+        {{ $t("specIndex.notFoundDesc", { slug: projSlug }) }}
       </CardContent>
     </Card>
   </div>
 
   <ProjectsProjectShell
     v-else-if="project"
-    :slug="slug"
+    :org-slug="orgSlug"
+    :proj-slug="projSlug"
     :project-title="project.title"
     :workflow="workflow"
   >
@@ -235,7 +239,7 @@ async function deleteProject() {
         :loading="eventsLoading"
         @open-drawer="notificationDrawerOpen = true"
       />
-      <SettingsInstalledExtensionsWidget :slug="slug" />
+      <SettingsInstalledExtensionsWidget :org-slug="orgSlug" :proj-slug="projSlug" />
     </div>
 
     <UiNotificationDrawer

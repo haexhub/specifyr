@@ -5,13 +5,16 @@ import ChatMessage from "~/components/ui/ChatMessage.vue";
 import type { ChatMessage as ChatMessageType, SessionMetadata } from "~/types/types";
 
 const props = defineProps<{
-  slug: string;
+  orgSlug: string;
+  projSlug: string;
   stepId: string;
   session: SessionMetadata | null;
   stepDescription?: string;
   stepOutput?: string;
   nextStepLabel?: string;
 }>();
+
+const apiBase = computed(() => `/api/orgs/${props.orgSlug}/projects/${props.projSlug}`);
 
 const emit = defineEmits<{
   turnCompleted: [];
@@ -47,7 +50,7 @@ async function loadSession(sid: string) {
   streamError.value = null;
   try {
     const data = await $fetch<SessionDetail>(
-      `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}`
+      `${apiBase.value}/steps/${props.stepId}/sessions/${sid}`
     );
     sessionView.value = data;
     messages.value = data.messages ?? [];
@@ -178,7 +181,7 @@ function openStream(sid: string, since: number) {
   waitingForFirstToken.value = true;
   streamError.value = null;
 
-  const url = `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}/turn/stream?since=${since}`;
+  const url = `${apiBase.value}/steps/${props.stepId}/sessions/${sid}/turn/stream?since=${since}`;
   const es = new EventSource(url);
   eventSource = es;
 
@@ -259,7 +262,7 @@ async function send() {
 
   try {
     const resp = await $fetch<{ accepted: boolean; startSeq: number; userMessage: ChatMessageType }>(
-      `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}/turn`,
+      `${apiBase.value}/steps/${props.stepId}/sessions/${sid}/turn`,
       { method: "POST", body: { content } }
     );
     messages.value = messages.value.map((m: ChatMessageType) => (m.id === optimistic.id ? resp.userMessage : m));
@@ -288,7 +291,7 @@ async function retryInterruptedTurn() {
   try {
     streamError.value = null;
     const resp = await $fetch<{ accepted: boolean; startSeq: number }>(
-      `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}/turn`,
+      `${apiBase.value}/steps/${props.stepId}/sessions/${sid}/turn`,
       { method: "POST", body: { content: lastUser.content } }
     );
     draft.value = "";
@@ -307,7 +310,7 @@ async function stopTurn() {
   closeStream();
   try {
     await $fetch(
-      `/api/projects/${props.slug}/steps/${props.stepId}/sessions/${sid}/turn`,
+      `${apiBase.value}/steps/${props.stepId}/sessions/${sid}/turn`,
       { method: "DELETE" }
     );
   } catch {

@@ -6,7 +6,8 @@ import type { StepState } from "~/types/types";
 
 const props = withDefaults(
   defineProps<{
-    slug: string;
+    orgSlug: string;
+    projSlug: string;
     projectTitle?: string;
     activeStepId?: StepId;
     // Parent passes the full workflow definition (from the project snapshot's workflowDefinition).
@@ -21,11 +22,13 @@ const props = withDefaults(
 
 const workflow = computed(() => resolveWorkflow(props.workflow?.id, props.workflow ?? null));
 const steps = computed(() => workflow.value.steps);
+const apiBase = computed(() => `/api/orgs/${props.orgSlug}/projects/${props.projSlug}`);
+const routeBase = computed(() => `/specs/${props.orgSlug}/${props.projSlug}`);
 
 // Fetch step states so we can show status badges + gate downstream steps.
-const { data: stepStates } = await useFetch<StepState[]>(() => `/api/projects/${props.slug}/steps`, {
+const { data: stepStates } = await useFetch<StepState[]>(() => `${apiBase.value}/steps`, {
   default: () => [],
-  key: () => `steps-${props.slug}`
+  key: () => `steps-${props.orgSlug}-${props.projSlug}`
 });
 
 const statusMap = computed(() => {
@@ -41,8 +44,8 @@ function stateFor(id: StepId) {
 
 function stepRoute(step: { id: StepId; isRun?: boolean }) {
   // Runner-style steps (the last execution step of a workflow) get a dedicated /run route.
-  if (step.isRun) return `/specs/${props.slug}/run`;
-  return `/specs/${props.slug}/steps/${step.id}`;
+  if (step.isRun) return `${routeBase.value}/run`;
+  return `${routeBase.value}/steps/${step.id}`;
 }
 </script>
 
@@ -57,11 +60,11 @@ function stepRoute(step: { id: StepId; isRun?: boolean }) {
         {{ $t("common.allProjects") }}
       </NuxtLink>
       <NuxtLink
-        :to="`/specs/${slug}`"
+        :to="routeBase"
         class="mt-1 block truncate text-sm font-semibold tracking-tight transition hover:text-primary"
-        :title="projectTitle ?? slug"
+        :title="projectTitle ?? projSlug"
       >
-        {{ projectTitle ?? slug }}
+        {{ projectTitle ?? projSlug }}
       </NuxtLink>
     </div>
 

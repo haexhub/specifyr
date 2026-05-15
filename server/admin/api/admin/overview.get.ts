@@ -89,38 +89,32 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Running companies live in-process (CompanyRuntime registry). The
-  // slug also doubles as project slug; resolve the owning org for
-  // display so the operator can see who's running what.
+  // Running companies live in-process (CompanyRuntime registry).
+  // Each entry already carries its org context, so we only need to
+  // fetch the org's display name from the DB for the operator view.
   const activeEntries = listActiveCompanies();
-  const projectRows = activeEntries.length
+  const orgRows = activeEntries.length
     ? await db
-        .select({
-          slug: projects.slug,
-          ownerOrgId: projects.ownerOrgId,
-          orgSlug: orgs.slug,
-          orgName: orgs.name,
-        })
-        .from(projects)
-        .leftJoin(orgs, eq(orgs.id, projects.ownerOrgId))
-        .where(inArray(projects.slug, activeEntries.map(([s]) => s)))
+        .select({ id: orgs.id, slug: orgs.slug, name: orgs.name })
+        .from(orgs)
+        .where(inArray(orgs.id, [...new Set(activeEntries.map((e) => e.orgId))]))
     : [];
-  const projectBySlug = new Map(projectRows.map((p) => [p.slug, p]));
+  const orgById = new Map(orgRows.map((o) => [o.id, o]));
 
-  const runningCompanies = activeEntries.map(([slug, runtime]) => {
-    const owner = projectBySlug.get(slug);
+  const runningCompanies = activeEntries.map((entry) => {
+    const org = orgById.get(entry.orgId);
     let agentCount = 0;
     try {
-      agentCount = runtime.listAgents().length;
+      agentCount = entry.runtime.listAgents().length;
     } catch {
       agentCount = 0;
     }
     return {
-      slug,
-      ceoRole: runtime.ceoRole,
+      slug: entry.slug,
+      ceoRole: entry.runtime.ceoRole,
       agentCount,
-      orgSlug: owner?.orgSlug ?? null,
-      orgName: owner?.orgName ?? null,
+      orgSlug: org?.slug ?? entry.orgSlug,
+      orgName: org?.name ?? null,
     };
   });
 

@@ -16,7 +16,9 @@ const { t } = useI18n();
 const route = useRoute();
 const router = useRouter();
 
-const slug = computed(() => route.params.slug as string);
+const orgSlug = computed(() => route.params.orgSlug as string);
+const projSlug = computed(() => route.params.projSlug as string);
+const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
 const stepIdParam = computed(() => route.params.stepId as string);
 const activeSessionId = computed(() => {
   const q = route.query.session;
@@ -27,7 +29,7 @@ const { data: project } = await useFetch<{
   workflow?: string;
   workflowDefinition?: Workflow;
   title?: string;
-}>(() => `/api/projects/${slug.value}`, { key: () => `project-${slug.value}` });
+}>(() => apiBase.value, { key: () => `project-${orgSlug.value}-${projSlug.value}` });
 
 const workflow = computed(() =>
   resolveWorkflow(project.value?.workflow, project.value?.workflowDefinition ?? null)
@@ -102,8 +104,8 @@ interface ExtensionRecord {
 }
 
 const { data: extensionsManifest } = await useFetch<{ extensions: ExtensionRecord[] }>(
-  () => `/api/projects/${slug.value}/extensions`,
-  { default: () => ({ extensions: [] }), key: () => `ext-${slug.value}` }
+  () => `${apiBase.value}/extensions`,
+  { default: () => ({ extensions: [] }), key: () => `ext-${orgSlug.value}-${projSlug.value}` }
 );
 
 const installedSlugs = computed(() =>
@@ -134,39 +136,39 @@ const activeSession = computed(() =>
 );
 
 async function loadStepStates() {
-  stepStates.value = await $fetch<StepState[]>(`/api/projects/${slug.value}/steps`);
-  await refreshNuxtData(`steps-${slug.value}`);
+  stepStates.value = await $fetch<StepState[]>(`${apiBase.value}/steps`);
+  await refreshNuxtData(`steps-${orgSlug.value}-${projSlug.value}`);
 }
 
 async function loadSessions() {
-  if (!slug.value || !stepIdParam.value) return;
+  if (!projSlug.value || !stepIdParam.value) return;
   sessionsLoading.value = true;
   try {
     sessions.value = await $fetch<SessionMetadata[]>(
-      `/api/projects/${slug.value}/steps/${stepIdParam.value}/sessions`
+      `${apiBase.value}/steps/${stepIdParam.value}/sessions`
     );
   } finally {
     sessionsLoading.value = false;
   }
 }
 
-function sessionStorageKey(slugVal: string, stepIdVal: string) {
-  return `specifyr:last-session:${slugVal}:${stepIdVal}`;
+function sessionStorageKey(orgSlugVal: string, projSlugVal: string, stepIdVal: string) {
+  return `specifyr:last-session:${orgSlugVal}:${projSlugVal}:${stepIdVal}`;
 }
 
-function getStoredSessionId(slugVal: string, stepIdVal: string): string | null {
+function getStoredSessionId(orgSlugVal: string, projSlugVal: string, stepIdVal: string): string | null {
   if (typeof window === "undefined") return null;
-  return localStorage.getItem(sessionStorageKey(slugVal, stepIdVal));
+  return localStorage.getItem(sessionStorageKey(orgSlugVal, projSlugVal, stepIdVal));
 }
 
-function storeSessionId(slugVal: string, stepIdVal: string, sessionId: string) {
+function storeSessionId(orgSlugVal: string, projSlugVal: string, stepIdVal: string, sessionId: string) {
   if (typeof window === "undefined") return;
-  localStorage.setItem(sessionStorageKey(slugVal, stepIdVal), sessionId);
+  localStorage.setItem(sessionStorageKey(orgSlugVal, projSlugVal, stepIdVal), sessionId);
 }
 
 async function ensureActiveSession() {
   if (activeSessionId.value) return;
-  const stored = getStoredSessionId(slug.value, stepIdParam.value);
+  const stored = getStoredSessionId(orgSlug.value, projSlug.value, stepIdParam.value);
   if (stored) {
     const found = sessions.value.find((s: SessionMetadata) => s.id === stored);
     if (found) {
@@ -187,11 +189,11 @@ async function createSession() {
   creatingSession.value = true;
   try {
     const created = await $fetch<SessionMetadata>(
-      `/api/projects/${slug.value}/steps/${stepIdParam.value}/sessions`,
+      `${apiBase.value}/steps/${stepIdParam.value}/sessions`,
       { method: "POST", body: {} }
     );
     sessions.value = [created, ...sessions.value];
-    storeSessionId(slug.value, stepIdParam.value, created.id);
+    storeSessionId(orgSlug.value, projSlug.value, stepIdParam.value, created.id);
     await router.replace({
       path: route.path,
       query: { ...route.query, session: created.id }
@@ -204,7 +206,7 @@ async function createSession() {
 }
 
 async function selectSession(sessionId: string) {
-  storeSessionId(slug.value, stepIdParam.value, sessionId);
+  storeSessionId(orgSlug.value, projSlug.value, stepIdParam.value, sessionId);
   await router.replace({
     path: route.path,
     query: { ...route.query, session: sessionId }
@@ -223,7 +225,7 @@ async function confirmDeleteSession() {
   deletingSession.value = true;
   try {
     await $fetch(
-      `/api/projects/${slug.value}/steps/${stepIdParam.value}/sessions/${target.id}`,
+      `${apiBase.value}/steps/${stepIdParam.value}/sessions/${target.id}`,
       { method: "DELETE" }
     );
     sessions.value = sessions.value.filter((s) => s.id !== target.id);
@@ -256,7 +258,7 @@ async function runStepAction() {
   runningAction.value = true;
   runActionError.value = null;
   try {
-    await $fetch(`/api/projects/${slug.value}/${step.value.runAction}`, { method: "POST" });
+    await $fetch(`${apiBase.value}/${step.value.runAction}`, { method: "POST" });
     artifactReloadToken.value += 1;
   } catch (err) {
     const msg = (err as { data?: { statusMessage?: string }; message?: string })?.data?.statusMessage
@@ -268,7 +270,7 @@ async function runStepAction() {
 }
 
 watch(
-  [slug, stepIdParam],
+  [orgSlug, projSlug, stepIdParam],
   async () => {
     await loadStepStates();
     await loadSessions();
@@ -292,14 +294,16 @@ const nextStep = computed(() => {
 
   <div v-else class="flex h-screen">
     <ProjectsProjectStepSidebar
-      :slug="slug"
+      :org-slug="orgSlug"
+      :proj-slug="projSlug"
       :project-title="project?.title"
       :active-step-id="step.id"
       :workflow="workflow"
     >
       <ClientOnly>
         <UiSessionList
-          :slug="slug"
+          :org-slug="orgSlug"
+          :proj-slug="projSlug"
           :step-id="step.id"
           :sessions="sessions"
           :active-session-id="activeSessionId"
@@ -360,7 +364,8 @@ const nextStep = computed(() => {
       <div class="flex flex-1 flex-col overflow-hidden">
         <UiChatStream
           ref="chatStreamRef"
-          :slug="slug"
+          :org-slug="orgSlug"
+          :proj-slug="projSlug"
           :step-id="step.id"
           :session="activeSession"
           :step-description="step.description"
@@ -407,7 +412,8 @@ const nextStep = computed(() => {
         />
       </div>
       <UiArtifactViewer
-        :slug="slug"
+        :org-slug="orgSlug"
+        :proj-slug="projSlug"
         :candidates="artifactCandidates"
         :reload-token="artifactReloadToken"
         @collapse="artifactOpen = false"

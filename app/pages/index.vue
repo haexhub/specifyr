@@ -41,7 +41,7 @@ async function handleCreated() {
         <Button size="lg" @click="dialogOpen = true">
           <Plus class="mr-2 size-4" /> {{ $t("index.newProject") }}
         </Button>
-        <NuxtLink v-if="firstProject" :to="`/specs/${firstProject.slug}`">
+        <NuxtLink v-if="firstProject" :to="`/specs/${firstProject.orgSlug}/${firstProject.slug}`">
           <Button size="lg" variant="outline">
             <FolderOpen class="mr-2 size-4" />
             {{ $t("index.openLast") }}

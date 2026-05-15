@@ -26,9 +26,10 @@ const querySchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
+  const orgId = event.context.orgId!;
   const slug = event.context.projectSlug!;
 
-  const runtime = getActiveCompany(slug);
+  const runtime = getActiveCompany(orgId, slug);
   if (!runtime) {
     throw createError({ statusCode: 404, statusMessage: "Company not running" });
   }

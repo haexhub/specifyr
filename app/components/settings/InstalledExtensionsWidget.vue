@@ -14,18 +14,21 @@ interface ExtensionInstallRecord {
 }
 
 const props = defineProps<{
-  slug: string;
+  orgSlug: string;
+  projSlug: string;
 }>();
 
 const { t } = useI18n();
+
+const apiBase = computed(() => `/api/orgs/${props.orgSlug}/projects/${props.projSlug}`);
 
 const { data: manifest, refresh, pending } = await useFetch<{
   slug: string;
   extensions: ExtensionInstallRecord[];
   updatedAt: string | null;
-}>(() => `/api/projects/${props.slug}/extensions`, {
+}>(() => `${apiBase.value}/extensions`, {
   default: () => ({ slug: "", extensions: [], updatedAt: null }),
-  key: () => `extensions-${props.slug}`
+  key: () => `extensions-${props.orgSlug}-${props.projSlug}`
 });
 
 const { data: standards, refresh: refreshStandards } = await useFetch<{ extensions: string[] }>(
@@ -49,7 +52,7 @@ async function syncStandards() {
   if (syncing.value || missingStandards.value.length === 0) return;
   syncing.value = true;
   try {
-    await $fetch(`/api/projects/${props.slug}/extensions`, {
+    await $fetch(`${apiBase.value}/extensions`, {
       method: "POST",
       body: { slugs: missingStandards.value, source: "auto" }
     });
@@ -66,7 +69,7 @@ async function confirmRemove() {
   if (!target || removing.value) return;
   removing.value = true;
   try {
-    await $fetch(`/api/projects/${props.slug}/extensions/${encodeURIComponent(target.slug)}`, {
+    await $fetch(`${apiBase.value}/extensions/${encodeURIComponent(target.slug)}`, {
       method: "DELETE"
     });
     removeTarget.value = null;

@@ -3,7 +3,8 @@ import { MessageSquarePlus, Loader2, CheckCircle2, AlertCircle, Trash2 } from "l
 import type { SessionMetadata } from "~/types/types";
 
 const props = defineProps<{
-  slug: string;
+  orgSlug: string;
+  projSlug: string;
   stepId: string;
   activeSessionId: string | null;
   sessions: SessionMetadata[];

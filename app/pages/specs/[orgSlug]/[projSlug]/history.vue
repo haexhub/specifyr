@@ -5,7 +5,10 @@ import ProjectShell from "~/components/projects/ProjectShell.vue";
 import { resolveWorkflow, type Workflow } from "~/utils/workflows";
 
 const route = useRoute();
-const slug = computed(() => route.params.slug as string);
+const orgSlug = computed(() => route.params.orgSlug as string);
+const projSlug = computed(() => route.params.projSlug as string);
+const apiBase = computed(() => `/api/orgs/${orgSlug.value}/projects/${projSlug.value}`);
+const routeBase = computed(() => `/specs/${orgSlug.value}/${projSlug.value}`);
 
 interface EventRow {
   id: string;
@@ -28,8 +31,8 @@ const { data: project } = await useFetch<{
   workflowDefinition?: Workflow;
   title?: string;
   [k: string]: unknown;
-}>(() => `/api/projects/${slug.value}`, {
-  key: () => `project-${slug.value}`,
+}>(() => apiBase.value, {
+  key: () => `project-${orgSlug.value}-${projSlug.value}`,
 });
 
 const workflow = computed(() =>
@@ -48,7 +51,7 @@ async function fetchEvents() {
   errorMsg.value = null;
   try {
     const data = await $fetch<{ events: EventRow[] }>(
-      `/api/projects/${slug.value}/company/events?limit=${limit.value}`,
+      `${apiBase.value}/company/events?limit=${limit.value}`,
     );
     events.value = data.events;
   } catch (err: unknown) {
@@ -102,7 +105,8 @@ function shortPath(p: string | null): string {
 
 <template>
   <ProjectsProjectShell
-    :slug="slug"
+    :org-slug="orgSlug"
+    :proj-slug="projSlug"
     :project-title="project?.title"
     :workflow="workflow"
     :show-steps="false"
@@ -113,7 +117,7 @@ function shortPath(p: string | null): string {
         <p class="text-xs text-muted-foreground">{{ $t("history.subtitle") }}</p>
       </div>
       <NuxtLink
-        :to="`/specs/${slug}/runtime`"
+        :to="`${routeBase}/runtime`"
         class="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted/40"
       >
         <ArrowLeft class="size-3.5" />
