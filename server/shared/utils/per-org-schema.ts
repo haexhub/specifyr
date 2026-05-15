@@ -124,6 +124,36 @@ export async function createOrgSchema(
       ip inet,
       occurred_at timestamptz NOT NULL DEFAULT now()
     );
+
+    -- User-defined secrets injected into agent containers at start.
+    -- Encrypted with AES-256-GCM using SPECIFYR_SECRET_KEY (same master
+    -- key as llm_credentials / org_extensions). The (iv, tag, ciphertext)
+    -- triple matches the format produced by secrets-store.ts so the
+    -- encrypted blob is a verbatim copy of the legacy on-disk format.
+    -- Org-scope: key is unique within the org.
+    CREATE TABLE IF NOT EXISTS "${schema}".org_secrets (
+      key text PRIMARY KEY,
+      iv text NOT NULL,
+      tag text NOT NULL,
+      encrypted_value text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    -- Project-scope: same shape, keyed by (project_slug, key). The slug
+    -- (not the project UUID) matches the on-disk artifact directory and
+    -- avoids a cross-schema FK to the global projects table — cleanup
+    -- on project-delete is handled at the application layer.
+    CREATE TABLE IF NOT EXISTS "${schema}".project_secrets (
+      project_slug text NOT NULL,
+      key text NOT NULL,
+      iv text NOT NULL,
+      tag text NOT NULL,
+      encrypted_value text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (project_slug, key)
+    );
   `;
   await tx.execute(sql.raw(tablesDdl));
 
@@ -152,6 +182,9 @@ export async function createOrgSchema(
     -- needs USAGE on it to INSERT.
     GRANT SELECT, INSERT ON "${schema}".secret_access_log TO "${role}";
     GRANT USAGE ON SEQUENCE "${schema}".secret_access_log_id_seq TO "${role}";
+
+    GRANT SELECT, INSERT, UPDATE, DELETE ON "${schema}".org_secrets TO "${role}";
+    GRANT SELECT, INSERT, UPDATE, DELETE ON "${schema}".project_secrets TO "${role}";
   `;
   await tx.execute(sql.raw(roleDdl));
 }

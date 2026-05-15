@@ -285,7 +285,8 @@ async function writeMultiAgentOrg(projectRoot, opsUrl, opsToken) {
       "tools:",
       "  builtin: [Read, Bash]",
       "  mcp: []",
-      "capabilities: [filesystem:read, shell:execute, network:http, secrets:read_env]",
+      "capabilities: [filesystem:read, shell:execute, network:http]",
+      "secrets: [ANTHROPIC_API_KEY, COMPANY_OPS_TOKEN]",
       "status: active",
       "---",
       "",
@@ -320,7 +321,8 @@ async function writeMultiAgentOrg(projectRoot, opsUrl, opsToken) {
       "tools:",
       "  builtin: [Read, Write]",
       "  mcp: []",
-      "capabilities: [filesystem:read, filesystem:write, shell:execute, secrets:read_env]",
+      "capabilities: [filesystem:read, filesystem:write, shell:execute]",
+      "secrets: [ANTHROPIC_API_KEY, COMPANY_OPS_TOKEN]",
       "status: active",
       "---",
       "",
@@ -389,11 +391,16 @@ test("E2E: CEO delegates to dev via dispatch endpoint (live LLM)", { skip: skipE
       // No `network` — use the default bridge so containers can hit
       // 172.17.0.1 (host gateway) where the test server listens.
       secretsResolver: (agent) => {
-        if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
-        const env = {
+        const declared = agent?.secrets ?? [];
+        if (declared.length === 0) return undefined;
+        const available = {
           ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY,
           COMPANY_OPS_TOKEN: opsToken,
         };
+        const env = {};
+        for (const key of declared) {
+          if (available[key] !== undefined) env[key] = available[key];
+        }
         return env;
       },
     }),

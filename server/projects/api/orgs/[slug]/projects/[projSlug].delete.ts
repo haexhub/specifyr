@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import { projectArtifactsDir, projectDir } from "@su/data-dirs";
 import { deleteProjectFromDb } from "@su/project-store";
+import { deleteAllProjectSecrets } from "@su/secrets-store";
 
 export default defineEventHandler(async (event) => {
   const orgId = event.context.orgId!;
@@ -19,6 +20,15 @@ export default defineEventHandler(async (event) => {
     } catch (error) {
       failures.push(`${target}: ${error instanceof Error ? error.message : String(error)}`);
     }
+  }
+
+  // Project secrets live in the per-org schema keyed by project_slug — no
+  // cross-schema FK to cascade for us, so the application owns cleanup.
+  try {
+    await deleteAllProjectSecrets(orgId, slug);
+    removed.push("db:project_secrets");
+  } catch (error) {
+    failures.push(`db:project_secrets: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   try {

@@ -87,9 +87,10 @@ async function addSecret() {
           Project Secrets
         </h2>
         <p class="text-sm text-muted-foreground mt-1">
-          Secrets are encrypted at rest and injected as environment variables into agent
-          containers at runtime. Values are never shown after saving. Org-level secrets
-          are inherited automatically; defining a key here overrides the org value.
+          Secrets are stored encrypted and injected as environment variables only into
+          agent containers that explicitly declare them in their <code>secrets:</code>
+          list. Values are never shown after saving. Org-level secrets are inherited
+          automatically; defining a key here overrides the org value.
         </p>
       </div>
 

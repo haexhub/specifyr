@@ -81,7 +81,8 @@ async function writeMinimalOrg(projectRoot) {
       "tools:",
       "  builtin: [Read, Write]",
       "  mcp: []",
-      "capabilities: [filesystem:read, filesystem:write, shell:execute, network:http, secrets:read_env]",
+      "capabilities: [filesystem:read, filesystem:write, shell:execute, network:http]",
+      "secrets: [ANTHROPIC_API_KEY]",
       "status: active",
       "---",
       "",
@@ -146,13 +147,13 @@ test("E2E: task → CEO container → result.md", { skip, timeout: 120_000 }, as
     queueDirs: { ceo: ceoQueueDir },
     runnerFactory: dockerRunnerFactory({
       projectRoot,
-      // CEO needs the LLM key to actually reason. capability-to-docker
-      // throws if we pass secrets without secrets:read_env on the agent —
-      // the spec above grants it.
-      secretsResolver: (agent) =>
-        agent?.capabilities?.includes("secrets:read_env")
-          ? { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY }
-          : undefined,
+      // CEO needs the LLM key to actually reason. The per-agent
+      // `secrets:` list on the spec drives the allowlist.
+      secretsResolver: (agent) => {
+        const declared = agent?.secrets ?? [];
+        if (!declared.includes("ANTHROPIC_API_KEY")) return undefined;
+        return { ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY };
+      },
     }),
   });
 

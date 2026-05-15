@@ -19,9 +19,11 @@
  *   (no filesystem cap)     →  no project mount; only profile volume
  *   network:http            →  joins named network or default bridge
  *   (no network cap)        →  --network=none
- *   secrets:read_env        →  -e KEY=value for each entry in `secrets` arg
- *                              (the caller supplies the KV map; this module
- *                              does NOT read process.env itself, to stay pure)
+ *   secrets KV arg          →  -e KEY=value for each entry. The caller
+ *                              resolves which secrets reach a given agent
+ *                              (per-agent `secrets:` allowlist in the spec);
+ *                              this module does NOT gate on a capability —
+ *                              what reaches it is what gets injected.
  *   tools.binaries: [...]   →  -e BINARY_WHITELIST=<csv> (consumed by the
  *                              hermes-agent entrypoint; the image holds
  *                              every catalog binary in quarantine)
@@ -101,9 +103,8 @@ const DEFAULT_RESOURCE_LIMITS = Object.freeze({
  * @param {Object<string,string>} [input.secrets]
  *                                     KV map of env vars to inject. Caller
  *                                     resolves the values (e.g. from
- *                                     process.env or a vault). Throws if
- *                                     given without a `secrets:read_env`
- *                                     grant.
+ *                                     process.env or a vault) using the
+ *                                     agent's per-spec `secrets:` allowlist.
  * @param {string} [input.image]       container image tag (default: hermes-agent:dev)
  * @param {string} [input.network]     compose network name agents join (e.g. "companies")
  * @param {string} [input.containerName]  optional --name value
@@ -275,26 +276,15 @@ export function capabilityFlags({
     flags.push("-e", `BINARY_WHITELIST=${binaryWhitelist.join(",")}`);
   }
 
-  // Secrets → -e KEY=value, gated on secrets:read_env. Hard-fail if the
-  // caller passes secrets without the matching capability (otherwise a
-  // typo in the agent spec would silently strip credentials from the
-  // container — looks like the agent works in tests but fails in prod).
+  // Secrets → -e KEY=value. Per-agent allowlisting is the caller's job
+  // (start.post.ts filters by `agent.secrets`); this module just emits
+  // flags for whatever the caller decided to pass.
   if (secrets !== undefined && secrets !== null) {
     if (typeof secrets !== "object" || Array.isArray(secrets)) {
       throw new Error("capabilityFlags: secrets must be a KV object {KEY: value}");
     }
-    const entries = Object.entries(secrets);
-    if (entries.length > 0) {
-      if (!caps.has("secrets:read_env")) {
-        throw new Error(
-          `capabilityFlags: agent '${agent.role}' lacks secrets:read_env but caller passed secrets [${entries
-            .map(([k]) => k)
-            .join(", ")}]`
-        );
-      }
-      for (const [key, value] of entries) {
-        flags.push("-e", `${key}=${value}`);
-      }
+    for (const [key, value] of Object.entries(secrets)) {
+      flags.push("-e", `${key}=${value}`);
     }
   }
 

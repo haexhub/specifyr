@@ -8,7 +8,6 @@ env_keys:
   - GITHUB_TOKEN
 description: "Read/write GitHub repos, issues, pull requests, file contents, comments."
 required_capabilities:
-  - secrets:read_env
   - network:http
   - account:github
 tags:

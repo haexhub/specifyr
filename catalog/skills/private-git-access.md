@@ -5,8 +5,8 @@ description: >
   Teaches an agent how to authenticate against private GitHub or GitLab
   repositories using a token injected via environment variable. Add this
   skill to any agent that needs to clone, fetch, or push to private repos.
-  Requires secrets:read_env capability and GITHUB_TOKEN or GITLAB_TOKEN
-  set as a project secret.
+  Requires GITHUB_TOKEN or GITLAB_TOKEN defined as an org/project secret
+  and declared in the agent's `secrets:` allowlist.
 tags:
   - vcs
   - credentials

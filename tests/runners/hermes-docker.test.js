@@ -394,29 +394,13 @@ test("capability-mapping error THROWS instead of silently falling back", async (
   );
 });
 
-test("secrets without secrets:read_env grant THROWS (config drift)", async () => {
-  const { fakeCommandRunner } = makeFakeRunner();
-  const runner = new HermesDockerRunner({
-    ...baseRunnerOptions({
-      agent: { role: "ceo", capabilities: ["filesystem:read", "shell:execute"] },
-    }),
-    secrets: { GH_TOKEN: "ghp_xxx" },
-    commandRunner: fakeCommandRunner,
-  });
-
-  await assert.rejects(
-    () => runner.execute(fakeWorkItem(), fakeContext()),
-    /lacks secrets:read_env/
-  );
-});
-
-test("secrets WITH secrets:read_env grant emit -e KEY=value", async () => {
+test("secrets KV emits -e KEY=value (caller-resolved allowlist)", async () => {
   const { fakeCommandRunner, calls } = makeFakeRunner();
   const runner = new HermesDockerRunner({
     ...baseRunnerOptions({
       agent: {
         role: "ceo",
-        capabilities: ["filesystem:read", "shell:execute", "secrets:read_env"],
+        capabilities: ["filesystem:read", "shell:execute"],
       },
     }),
     secrets: { GH_TOKEN: "ghp_xxx" },
@@ -575,7 +559,7 @@ test("dockerRunnerFactory: secretsResolver is called per agent", () => {
       return a.role === "ceo" ? { GH_TOKEN: "ghp_x" } : {};
     },
   });
-  const ceo = factory({ role: "ceo", capabilities: ["secrets:read_env"] });
+  const ceo = factory({ role: "ceo", capabilities: [], secrets: ["GH_TOKEN"] });
   const dev = factory({ role: "dev", capabilities: [] });
   assert.deepEqual(seen, ["ceo", "dev"]);
   assert.deepEqual(ceo.secrets, { GH_TOKEN: "ghp_x" });

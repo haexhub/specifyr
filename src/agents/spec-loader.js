@@ -73,6 +73,10 @@ export async function loadAgents(orgDir, { includeRetired = false } = {}) {
     fm.capabilities = fm.capabilities ?? [];
     fm.skills = fm.skills ?? [];
     fm.delivers_to = Array.isArray(fm.delivers_to) ? fm.delivers_to : [];
+    // Per-agent secret allowlist. Each entry is the env-var name (matching
+    // an org- or project-level secret key) the agent will receive at
+    // container start. An empty/missing list means no secrets injected.
+    fm.secrets = normaliseSecretsList(fm.secrets, fm.role, filePath);
     agents.set(fm.role, fm);
   }
   return agents;
@@ -143,6 +147,49 @@ export function validateReportingDag(agents) {
     }
     for (const n of onPath) settled.add(n);
   }
+}
+
+/**
+ * Validate and normalise the `secrets:` frontmatter field.
+ *
+ * Accepted shape: array of POSIX env-var names. Anything else is a hard
+ * error — silent coercion would hide a typo that ends up stripping the
+ * agent's credentials at runtime.
+ *
+ * Rules:
+ *   - missing / null → []
+ *   - not an array → E_SECRETS_NOT_ARRAY
+ *   - entry not a string → E_SECRETS_ENTRY_TYPE
+ *   - entry not a valid POSIX env-var name → E_SECRETS_ENTRY_NAME
+ *   - duplicate entries → E_SECRETS_DUPLICATE
+ */
+function normaliseSecretsList(value, role, filePath) {
+  if (value == null) return [];
+  if (!Array.isArray(value)) {
+    throw new Error(
+      `E_SECRETS_NOT_ARRAY: agent '${role}' (${filePath}) — 'secrets' must be a YAML list, got ${typeof value}`,
+    );
+  }
+  const seen = new Set();
+  for (const entry of value) {
+    if (typeof entry !== "string") {
+      throw new Error(
+        `E_SECRETS_ENTRY_TYPE: agent '${role}' (${filePath}) — every 'secrets' entry must be a string, got ${typeof entry}`,
+      );
+    }
+    if (!/^[A-Z_][A-Z0-9_]*$/.test(entry)) {
+      throw new Error(
+        `E_SECRETS_ENTRY_NAME: agent '${role}' (${filePath}) — '${entry}' is not a valid env-var name (uppercase letters, digits, underscores; no leading digit)`,
+      );
+    }
+    if (seen.has(entry)) {
+      throw new Error(
+        `E_SECRETS_DUPLICATE: agent '${role}' (${filePath}) — '${entry}' listed twice in 'secrets'`,
+      );
+    }
+    seen.add(entry);
+  }
+  return [...value];
 }
 
 function parseFrontmatter(raw) {

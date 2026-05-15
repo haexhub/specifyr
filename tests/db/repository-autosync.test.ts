@@ -3,6 +3,10 @@
  * single push; no-op when no repository is configured; errors are
  * logged but never thrown (background task must not crash the
  * triggering request).
+ *
+ * Setup is hybrid: project metadata + repository config live on the
+ * filesystem (a tmp SPECIFYR_DATA_DIR); the git remote token lives in
+ * Postgres (per-org schema). Both must be wired up before each test.
  */
 
 import { test, before, after, beforeEach } from "node:test";
@@ -11,6 +15,8 @@ import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { skipIfNoDb, withDb } from "../helpers/db.ts";
+import { createOrgSchema } from "../../server/shared/utils/per-org-schema.ts";
 
 const TEST_ORG_ID = "00000000-0000-0000-0000-000000000001";
 
@@ -61,105 +67,123 @@ test("triggerAutoPush is a no-op when repository is not configured", async () =>
   assert.equal(calls, 0);
 });
 
-test("triggerAutoPushImmediate calls the injected push when repository is configured", async () => {
-  const { setProjectRepository } = await import(
-    "../../server/shared/utils/project-repository.ts"
-  );
-  const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
-    "../../server/shared/utils/secrets-store.ts"
-  );
-  await setProjectRepository(TEST_ORG_ID, "autosync-test", {
-    url: "https://github.com/x/y.git",
-    branch: "main",
-    username: "u",
-  });
-  await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
+test(
+  "triggerAutoPushImmediate calls the injected push when repository is configured",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      await db.transaction((tx) => createOrgSchema(tx, TEST_ORG_ID));
+      const { setProjectRepository } = await import(
+        "../../server/shared/utils/project-repository.ts"
+      );
+      const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
+        "../../server/shared/utils/secrets-store.ts"
+      );
+      await setProjectRepository(TEST_ORG_ID, "autosync-test", {
+        url: "https://github.com/x/y.git",
+        branch: "main",
+        username: "u",
+      });
+      await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
 
-  const mod = await import(
-    "../../server/shared/utils/repository-autosync.ts"
-  );
-  let calls = 0;
-  const result = await mod.triggerAutoPushImmediate(TEST_ORG_ID, "autosync-test", {
-    push: async () => {
-      calls++;
-      return { ok: true, pushed: true, stderr: "" };
-    },
-  });
-  assert.equal(result.skipped, false);
-  assert.equal(result.ok, true);
-  assert.equal(result.pushed, true);
-  assert.equal(calls, 1);
-});
+      const mod = await import(
+        "../../server/shared/utils/repository-autosync.ts"
+      );
+      let calls = 0;
+      const result = await mod.triggerAutoPushImmediate(TEST_ORG_ID, "autosync-test", {
+        push: async () => {
+          calls++;
+          return { ok: true, pushed: true, stderr: "" };
+        },
+      });
+      assert.equal(result.skipped, false);
+      assert.equal(result.ok, true);
+      assert.equal(result.pushed, true);
+      assert.equal(calls, 1);
+    });
+  },
+);
 
-test("triggerAutoPushImmediate swallows errors from the push (logs only)", async () => {
-  const { setProjectRepository } = await import(
-    "../../server/shared/utils/project-repository.ts"
-  );
-  const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
-    "../../server/shared/utils/secrets-store.ts"
-  );
-  await setProjectRepository(TEST_ORG_ID, "autosync-test", {
-    url: "https://github.com/x/y.git",
-    branch: "main",
-    username: "u",
-  });
-  await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
+test(
+  "triggerAutoPushImmediate swallows errors from the push (logs only)",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      await db.transaction((tx) => createOrgSchema(tx, TEST_ORG_ID));
+      const { setProjectRepository } = await import(
+        "../../server/shared/utils/project-repository.ts"
+      );
+      const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
+        "../../server/shared/utils/secrets-store.ts"
+      );
+      await setProjectRepository(TEST_ORG_ID, "autosync-test", {
+        url: "https://github.com/x/y.git",
+        branch: "main",
+        username: "u",
+      });
+      await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
 
-  const mod = await import(
-    "../../server/shared/utils/repository-autosync.ts"
-  );
-  // Must not throw despite the push throwing.
-  const result = await mod.triggerAutoPushImmediate(TEST_ORG_ID, "autosync-test", {
-    push: async () => {
-      throw new Error("boom");
-    },
-  });
-  assert.equal(result.skipped, false);
-  assert.equal(result.ok, false);
-  assert.match(result.stderr, /boom/);
-});
+      const mod = await import(
+        "../../server/shared/utils/repository-autosync.ts"
+      );
+      const result = await mod.triggerAutoPushImmediate(TEST_ORG_ID, "autosync-test", {
+        push: async () => {
+          throw new Error("boom");
+        },
+      });
+      assert.equal(result.skipped, false);
+      assert.equal(result.ok, false);
+      assert.match(result.stderr, /boom/);
+    });
+  },
+);
 
-test("triggerAutoPush debounces multiple rapid calls", async () => {
-  const { setProjectRepository } = await import(
-    "../../server/shared/utils/project-repository.ts"
-  );
-  const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
-    "../../server/shared/utils/secrets-store.ts"
-  );
-  await setProjectRepository(TEST_ORG_ID, "autosync-test", {
-    url: "https://github.com/x/y.git",
-    branch: "main",
-    username: "u",
-  });
-  await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
+test(
+  "triggerAutoPush debounces multiple rapid calls",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      await db.transaction((tx) => createOrgSchema(tx, TEST_ORG_ID));
+      const { setProjectRepository } = await import(
+        "../../server/shared/utils/project-repository.ts"
+      );
+      const { setSecret, GIT_REMOTE_TOKEN_KEY } = await import(
+        "../../server/shared/utils/secrets-store.ts"
+      );
+      await setProjectRepository(TEST_ORG_ID, "autosync-test", {
+        url: "https://github.com/x/y.git",
+        branch: "main",
+        username: "u",
+      });
+      await setSecret(TEST_ORG_ID, "autosync-test", GIT_REMOTE_TOKEN_KEY, "t");
 
-  const mod = await import(
-    "../../server/shared/utils/repository-autosync.ts"
-  );
-  let calls = 0;
-  // Use a tiny debounce window for the test so we don't wait 5s.
-  mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
-    debounceMs: 60,
-    push: async () => {
-      calls++;
-      return { ok: true, pushed: true, stderr: "" };
-    },
-  });
-  mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
-    debounceMs: 60,
-    push: async () => {
-      calls++;
-      return { ok: true, pushed: true, stderr: "" };
-    },
-  });
-  mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
-    debounceMs: 60,
-    push: async () => {
-      calls++;
-      return { ok: true, pushed: true, stderr: "" };
-    },
-  });
-  // Wait for debounce + a small margin for the async push to settle.
-  await new Promise((r) => setTimeout(r, 180));
-  assert.equal(calls, 1, `expected exactly one push, got ${calls}`);
-});
+      const mod = await import(
+        "../../server/shared/utils/repository-autosync.ts"
+      );
+      let calls = 0;
+      mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
+        debounceMs: 60,
+        push: async () => {
+          calls++;
+          return { ok: true, pushed: true, stderr: "" };
+        },
+      });
+      mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
+        debounceMs: 60,
+        push: async () => {
+          calls++;
+          return { ok: true, pushed: true, stderr: "" };
+        },
+      });
+      mod.triggerAutoPush(TEST_ORG_ID, "autosync-test", {
+        debounceMs: 60,
+        push: async () => {
+          calls++;
+          return { ok: true, pushed: true, stderr: "" };
+        },
+      });
+      await new Promise((r) => setTimeout(r, 180));
+      assert.equal(calls, 1, `expected exactly one push, got ${calls}`);
+    });
+  },
+);

@@ -76,7 +76,8 @@ async function addSecret() {
         Org secrets
       </h1>
       <p class="mt-1 text-sm text-muted-foreground">
-        Available as environment variables to every agent run in any project of this org.
+        Stored encrypted; available as environment variables only to agents that
+        explicitly declare the key in their <code>secrets:</code> list.
         Project-level secrets with the same key override values defined here.
         <template v-if="readOnly">Only org admins can edit these.</template>
       </p>

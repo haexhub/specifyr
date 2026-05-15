@@ -6,8 +6,8 @@ version_check: "glab --version"
 description: |
   Official GitLab command-line tool. Read-only ops (glab repo view, glab mr list)
   need network:http and account:gitlab. Mutating ops (glab mr create, glab issue create)
-  additionally need network:http. Authentication uses secrets:read_env with
-  GITLAB_TOKEN set as a project secret.
+  additionally need network:http. Authentication needs GITLAB_TOKEN declared
+  in the agent's `secrets:` allowlist and defined as an org/project secret.
 env_keys:
   - GITLAB_TOKEN   # Personal Access Token for gitlab.com or self-hosted GitLab
 nix_package: glab

@@ -310,6 +310,31 @@ export default defineEventHandler(async (event) => {
       const mergedSecrets: Record<string, string> = { ...orgSecrets, ...projectSecrets };
       const proxyUrl = config.companyClaudeProxyUrl || undefined;
 
+      // Fail-fast: every secret an agent declares in its `secrets:` list
+      // must be defined at org- or project-level. Catching this BEFORE we
+      // burn time on image builds gives the operator a clear punch list
+      // ("agent X needs Y, Y is missing") instead of an opaque runtime
+      // env-var-undefined failure inside the container.
+      const missingSecretsByRole: Record<string, string[]> = {};
+      for (const [role, agent] of agentMap) {
+        const declared: string[] = (agent as { secrets?: string[] }).secrets ?? [];
+        const missing = declared.filter((key) => !(key in mergedSecrets));
+        if (missing.length > 0) missingSecretsByRole[role] = missing;
+      }
+      if (Object.keys(missingSecretsByRole).length > 0) {
+        const detail = Object.entries(missingSecretsByRole)
+          .map(([role, keys]) => `${role}: [${keys.join(", ")}]`)
+          .join("; ");
+        await push("error", {
+          message:
+            `Missing project/org secrets — ${detail}. ` +
+            `Open the project's Secrets page and define the keys, ` +
+            `or remove them from the agent's 'secrets:' list.`,
+          missingSecretsByRole,
+        });
+        return;
+      }
+
       // Inject per-provider env for an agent that has its own profile.
       // Hermes reads the standard provider env vars (ANTHROPIC_API_KEY,
       // OPENAI_API_KEY, GOOGLE_API_KEY/GEMINI_API_KEY); OpenRouter reuses
@@ -388,15 +413,15 @@ export default defineEventHandler(async (event) => {
           return { provider: profile.provider, model: profile.model };
         },
         secretsResolver: (agent: any) => {
-          if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
+          // Every agent gets ops-token + LLM env. The LLM-profile env vars
+          // (ANTHROPIC_*, OPENAI_*, …) are infrastructure managed by the
+          // platform, not user secrets — they don't go through the
+          // `agent.secrets:` allowlist.
           const env: Record<string, string> = {
             COMPANY_OPS_TOKEN: opsToken,
             COMPANY_OPS_URL: `${opsUrl}/${slug}`,
           };
 
-          // Per-agent profile is mandatory — the upfront validation
-          // above guarantees `profilesByRole` covers every role with a
-          // `secrets:read_env` capability that reaches this point.
           const profile = profilesByRole.get(agent?.role);
           if (!profile) {
             throw new Error(
@@ -409,13 +434,16 @@ export default defineEventHandler(async (event) => {
             buildEnvForProfile(profile, agentSessionTokens.get(agent.role)),
           );
 
-          // Pass through any other project secrets that don't collide
-          // with the provider-specific keys the profile just set.
-          const reservedPrefixes = ["ANTHROPIC_", "OPENAI_", "GOOGLE_", "GEMINI_"];
-          for (const [k, v] of Object.entries(mergedSecrets)) {
-            if (!v) continue;
-            if (reservedPrefixes.some((p) => k.startsWith(p))) continue;
-            env[k] = v;
+          // Per-agent allowlist: only the keys the agent declared in its
+          // `secrets:` frontmatter list get injected. Missing keys were
+          // already caught by the fail-fast check above, so a non-string
+          // value here means the secret was empty/blank — skip it.
+          const declared: string[] = agent?.secrets ?? [];
+          for (const key of declared) {
+            const value = mergedSecrets[key];
+            if (typeof value === "string" && value.length > 0) {
+              env[key] = value;
+            }
           }
           return env;
         },

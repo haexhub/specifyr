@@ -187,28 +187,18 @@ test("refuses 'privileged' capability tokens entirely", () => {
   assert.throws(() => capabilityFlags(input), /privileged/);
 });
 
-test("secrets with secrets:read_env grant → -e KEY=value emitted per entry", () => {
+test("secrets KV → -e KEY=value emitted per entry (no capability gate)", () => {
   const input = baseInput();
-  input.agent.capabilities = ["secrets:read_env"];
   input.secrets = { GH_TOKEN: "ghp_abc", API_KEY: "sk-xyz" };
   const args = capabilityFlags(input);
   assert.ok(args.includes("GH_TOKEN=ghp_abc"));
   assert.ok(args.includes("API_KEY=sk-xyz"));
 });
 
-test("secrets without secrets:read_env grant → throws (config drift guard)", () => {
+test("empty secrets object emits no extra -e flags", () => {
   const input = baseInput();
-  input.agent.capabilities = ["shell:execute"];
-  input.secrets = { GH_TOKEN: "ghp_abc" };
-  assert.throws(() => capabilityFlags(input), /lacks secrets:read_env/);
-});
-
-test("empty secrets object is treated as no secrets (no throw, no flags)", () => {
-  const input = baseInput();
-  input.agent.capabilities = ["shell:execute"];
   input.secrets = {};
   const args = capabilityFlags(input);
-  // No KEY=value secrets beyond the always-emitted runtime env vars.
   const envFlags = args.filter((a, i) => args[i - 1] === "-e");
   assert.deepEqual(envFlags.sort(), [
     "HERMES_HOME=/profile",
@@ -219,7 +209,6 @@ test("empty secrets object is treated as no secrets (no throw, no flags)", () =>
 
 test("secrets array (not object) → throws", () => {
   const input = baseInput();
-  input.agent.capabilities = ["secrets:read_env"];
   input.secrets = ["GH_TOKEN"];
   assert.throws(() => capabilityFlags(input), /must be a KV object/);
 });

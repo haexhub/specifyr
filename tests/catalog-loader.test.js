@@ -60,7 +60,6 @@ test("loadTools reads YAML files and returns Map<id, ToolSpec>", async () => {
   assert.ok(tools.has("company-ops"));
   assert.equal(tools.get("github").type, "mcp");
   assert.deepEqual(tools.get("github").required_capabilities, [
-    "secrets:read_env",
     "network:http",
     "account:github",
   ]);
@@ -271,7 +270,7 @@ test("wildcard ['*'] in tools.mcp expands to all catalog tools", async () => {
   const agent = {
     role: "x",
     tools: { mcp: ["*"] },
-    capabilities: ["filesystem:read", "shell:execute", "network:http", "secrets:read_env", "account:github", "account:slack"],
+    capabilities: ["filesystem:read", "shell:execute", "network:http", "account:github", "account:slack"],
   };
   const resolved = resolveToolsForAgent(agent, c);
   assert.equal(resolved.length, c.tools.size);

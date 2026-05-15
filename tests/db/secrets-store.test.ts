@@ -1,41 +1,23 @@
 /**
  * secrets-store covers two things: a pure encryption pair
  * (encryptString/decryptString, used by llm-credentials-store) and a
- * project-scoped file store (setSecret/getProjectSecrets, used by the
- * runner). Tests:
+ * per-org Postgres-backed store (setSecret/getProjectSecrets,
+ * setOrgSecret/getOrgSecrets) used by the runner.
+ *
+ * Tests:
  *   - encrypt → decrypt roundtrip with stable plaintext
  *   - tampered ciphertext is rejected (auth tag check)
  *   - SPECIFYR_SECRET_KEY length is validated
- *   - file store roundtrip in an isolated SPECIFYR_DATA_DIR
+ *   - DB store roundtrip in a per-test isolated org_schema
  *   - deleteSecret is idempotent
+ *   - org + project precedence at the call sites
  */
 
-import { test, before, after } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import fs from "node:fs/promises";
-import os from "node:os";
-import path from "node:path";
-
-let tmpDataDir: string;
-let originalDataDir: string | undefined;
-let originalSecretKey: string | undefined;
-
-before(async () => {
-  tmpDataDir = await fs.mkdtemp(path.join(os.tmpdir(), "specifyr-secrets-"));
-  originalDataDir = process.env.SPECIFYR_DATA_DIR;
-  originalSecretKey = process.env.SPECIFYR_SECRET_KEY;
-  process.env.SPECIFYR_DATA_DIR = tmpDataDir;
-  process.env.SPECIFYR_SECRET_KEY = crypto.randomBytes(32).toString("hex");
-});
-
-after(async () => {
-  if (originalDataDir === undefined) delete process.env.SPECIFYR_DATA_DIR;
-  else process.env.SPECIFYR_DATA_DIR = originalDataDir;
-  if (originalSecretKey === undefined) delete process.env.SPECIFYR_SECRET_KEY;
-  else process.env.SPECIFYR_SECRET_KEY = originalSecretKey;
-  await fs.rm(tmpDataDir, { recursive: true, force: true });
-});
+import { skipIfNoDb, withDb } from "../helpers/db.ts";
+import { createOrgSchema } from "../../server/shared/utils/per-org-schema.ts";
 
 test("encryptString/decryptString roundtrip preserves plaintext", async () => {
   const { encryptString, decryptString } = await import(
@@ -64,7 +46,6 @@ test("decryptString rejects a tampered ciphertext", async () => {
     "../../server/shared/utils/secrets-store.ts"
   );
   const enc = await encryptString("plaintext");
-  // Flip a byte in the data — auth tag check must fail.
   const tampered = {
     ...enc,
     data: (enc.data[0] === "a" ? "b" : "a") + enc.data.slice(1),
@@ -76,8 +57,6 @@ test("masterKey rejects a malformed SPECIFYR_SECRET_KEY", async () => {
   const previous = process.env.SPECIFYR_SECRET_KEY;
   process.env.SPECIFYR_SECRET_KEY = "tooshort";
   try {
-    // Re-import to re-read the env (the module reads on each call so
-    // this works without esm cache busting, but be explicit).
     const { encryptString } = await import(
       "../../server/shared/utils/secrets-store.ts"
     );
@@ -87,39 +66,109 @@ test("masterKey rejects a malformed SPECIFYR_SECRET_KEY", async () => {
   }
 });
 
-test("setSecret / getProjectSecrets / deleteSecret roundtrip", async () => {
-  const { setSecret, getProjectSecrets, deleteSecret, listSecretKeys } =
-    await import("../../server/shared/utils/secrets-store.ts");
-  const orgId = "00000000-0000-0000-0000-000000000001";
-  const slug = "test-project-roundtrip";
-  await setSecret(orgId, slug, "FOO", "bar");
-  await setSecret(orgId, slug, "BAZ", "qux");
-  assert.deepEqual(
-    (await listSecretKeys(orgId, slug)).sort(),
-    ["BAZ", "FOO"],
-  );
-  assert.deepEqual(await getProjectSecrets(orgId, slug), { FOO: "bar", BAZ: "qux" });
+test(
+  "setSecret / getProjectSecrets / deleteSecret roundtrip",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      const orgId = crypto.randomUUID();
+      await db.transaction((tx) => createOrgSchema(tx, orgId));
 
-  assert.equal(await deleteSecret(orgId, slug, "FOO"), true);
-  assert.equal(await deleteSecret(orgId, slug, "FOO"), false, "second delete is idempotent");
-  assert.deepEqual(await getProjectSecrets(orgId, slug), { BAZ: "qux" });
-});
+      const { setSecret, getProjectSecrets, deleteSecret, listSecretKeys } =
+        await import("../../server/shared/utils/secrets-store.ts");
+      const slug = "test-project-roundtrip";
+      await setSecret(orgId, slug, "FOO", "bar");
+      await setSecret(orgId, slug, "BAZ", "qux");
+      assert.deepEqual(
+        (await listSecretKeys(orgId, slug)).sort(),
+        ["BAZ", "FOO"],
+      );
+      assert.deepEqual(await getProjectSecrets(orgId, slug), {
+        FOO: "bar",
+        BAZ: "qux",
+      });
 
-test("getProjectSecrets returns {} for an unknown slug", async () => {
-  const { getProjectSecrets } = await import(
-    "../../server/shared/utils/secrets-store.ts"
-  );
-  const orgId = "00000000-0000-0000-0000-000000000002";
-  assert.deepEqual(await getProjectSecrets(orgId, "never-seen-before"), {});
-});
+      assert.equal(await deleteSecret(orgId, slug, "FOO"), true);
+      assert.equal(
+        await deleteSecret(orgId, slug, "FOO"),
+        false,
+        "second delete is idempotent",
+      );
+      assert.deepEqual(await getProjectSecrets(orgId, slug), { BAZ: "qux" });
+    });
+  },
+);
 
-test("setSecret/getSecret roundtrip for git remote token", async () => {
-  const mod = await import("../../server/shared/utils/secrets-store.ts");
-  const key = (mod as { GIT_REMOTE_TOKEN_KEY?: string }).GIT_REMOTE_TOKEN_KEY;
-  assert.equal(typeof key, "string", "GIT_REMOTE_TOKEN_KEY must be exported");
-  assert.match(key!, /^__/, "reserved keys are prefixed with __");
-  const orgId = "00000000-0000-0000-0000-000000000003";
-  await mod.setSecret(orgId, "git-token-test", key!, "ghp_testtoken123");
-  const secrets = await mod.getProjectSecrets(orgId, "git-token-test");
-  assert.equal(secrets[key!], "ghp_testtoken123");
-});
+test(
+  "getProjectSecrets returns {} for an unknown slug",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      const orgId = crypto.randomUUID();
+      await db.transaction((tx) => createOrgSchema(tx, orgId));
+      const { getProjectSecrets } = await import(
+        "../../server/shared/utils/secrets-store.ts"
+      );
+      assert.deepEqual(await getProjectSecrets(orgId, "never-seen-before"), {});
+    });
+  },
+);
+
+test(
+  "setSecret/getSecret roundtrip for git remote token",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      const orgId = crypto.randomUUID();
+      await db.transaction((tx) => createOrgSchema(tx, orgId));
+
+      const mod = await import("../../server/shared/utils/secrets-store.ts");
+      const key = mod.GIT_REMOTE_TOKEN_KEY;
+      assert.match(key, /^__/, "reserved keys are prefixed with __");
+      await mod.setSecret(orgId, "git-token-test", key, "ghp_testtoken123");
+      const secrets = await mod.getProjectSecrets(orgId, "git-token-test");
+      assert.equal(secrets[key], "ghp_testtoken123");
+    });
+  },
+);
+
+test(
+  "org and project secrets share encryption format but live in separate tables",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      const orgId = crypto.randomUUID();
+      await db.transaction((tx) => createOrgSchema(tx, orgId));
+
+      const mod = await import("../../server/shared/utils/secrets-store.ts");
+      await mod.setOrgSecret(orgId, "SHARED", "org-value");
+      await mod.setSecret(orgId, "proj-a", "SHARED", "project-value");
+
+      assert.deepEqual(await mod.getOrgSecrets(orgId), { SHARED: "org-value" });
+      assert.deepEqual(await mod.getProjectSecrets(orgId, "proj-a"), {
+        SHARED: "project-value",
+      });
+      assert.deepEqual(await mod.getProjectSecrets(orgId, "proj-b"), {});
+    });
+  },
+);
+
+test(
+  "deleteAllProjectSecrets removes every row for a slug",
+  { skip: skipIfNoDb },
+  async () => {
+    await withDb(async (db) => {
+      const orgId = crypto.randomUUID();
+      await db.transaction((tx) => createOrgSchema(tx, orgId));
+
+      const mod = await import("../../server/shared/utils/secrets-store.ts");
+      await mod.setSecret(orgId, "doomed", "A", "1");
+      await mod.setSecret(orgId, "doomed", "B", "2");
+      await mod.setSecret(orgId, "kept", "C", "3");
+
+      await mod.deleteAllProjectSecrets(orgId, "doomed");
+      assert.deepEqual(await mod.getProjectSecrets(orgId, "doomed"), {});
+      assert.deepEqual(await mod.getProjectSecrets(orgId, "kept"), { C: "3" });
+    });
+  },
+);
