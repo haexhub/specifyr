@@ -1,0 +1,76 @@
+# Run the Node test suite against a real Postgres so DB-backed tests
+# (per-org-schema DDL, secrets-store roundtrip, RLS policies, drizzle
+# migrations) actually execute. Without DATABASE_URL the suite skips
+# ~100 tests, which is how the per-org-schema assertions silently
+# rotted out of sync with the secrets feature.
+#
+# Mirrors the dev compose setup:
+#   - postgres:17-alpine, postgres/devpw, db `specifyr`
+#   - haex_claude_proxy role is provisioned by tests/helpers/db.ts via
+#     docker/postgres-init/03-create-haex-claude-proxy-role.sql, so the
+#     workflow doesn't need to replay it manually.
+
+name: tests
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+# Cancel in-flight runs for the same ref; the latest push is the only
+# one that matters.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: devpw
+          POSTGRES_DB: specifyr
+        ports:
+          - 5432:5432
+        # `pg_isready` against the `specifyr` DB matches the compose
+        # healthcheck. Without `-d specifyr` it would green-light before
+        # the DB is actually created on first boot.
+        options: >-
+          --health-cmd "pg_isready -U postgres -d specifyr"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgres://postgres:devpw@localhost:5432/specifyr
+      # CI-only fixed key: deterministic across runs, 64 hex chars (32
+      # bytes) as enforced by secrets-store.masterKey(). The data it
+      # encrypts is per-run throwaway, so the value being public is fine.
+      SPECIFYR_SECRET_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.0.9
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run tests
+        run: pnpm test
