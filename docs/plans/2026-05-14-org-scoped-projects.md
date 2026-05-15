@@ -17,9 +17,10 @@ https://github.com/haexhub/specifyr/pull/70
 | Phase 3 — Project-Store + Access Middleware | ✅ done | |
 | Phase 4 — API Route Restructuring | ✅ done | Plus per-project membership (extension of original plan, see below) |
 | Phase 5 — UI | ✅ done | Plus 3 composables (`useProjectContext`, `useProject`, `useStepStates`) |
-| Phase 6.3 — Test fixture updates | ✅ done | secrets-store + orchestrator + turn-broker-acp now thread orgId; 370/370 unit, 32/32 e2e |
-| Phase 6.1 — Wipe demo data | ⏳ user-initiated | Destructive — see Task 6.1 |
-| Phase 6.2 — Manual smoke test | ⏳ user-driven | Browser walkthrough — see Task 6.2 |
+| Phase 6.3 — Test fixture updates | ✅ done | secrets-store + orchestrator + turn-broker-acp thread orgId; 391/391 unit, 38/38 e2e after main merge |
+| Phase 6.1 — Wipe demo data | ✅ done | FS + `projects` table (cascades to `project_memberships`) wiped |
+| Phase 6.2 — Manual smoke test | ✅ done | Browser walkthrough OK incl. cross-org access, orphan recovery, Repository tab, mobile drawer |
+| Phase 6.4 — PR | ⏳ ready to merge | PR #70 description updated; awaiting human merge |
 
 ### Extension to original plan: per-project membership
 
@@ -60,22 +61,10 @@ All spec pages (`index`, `run`, `runtime`, `history`, `secrets`, `steps/[stepId]
    - `tests/orchestrator.test.js` — threads `orgId` through `SpecOrchestrator` methods and the legacy `createUiHandler` URL (now `/api/orgs/<orgId>/projects/<slug>`).
    - `tests/core/turn-broker-acp.test.js` — threads `orgId` through `SessionStore.createSession`, `TurnBroker.startTurn`, and the `running` Map key (`${orgId}|${slug}|${stepId}|${sid}`).
 
-### Handoff — what's left for the next session
+### Open follow-ups (not blocking this PR)
 
-1. **Phase 6.1 — wipe demo data** (destructive; user-initiated):
-   ```bash
-   rm -rf ~/.specifyr/.specifyr ~/.specifyr/projects
-   docker exec -i specifyr-postgres-dev psql -U postgres -d specifyr -c "TRUNCATE TABLE projects CASCADE;"
-   ```
-2. **Phase 6.2 — manual smoke test in the browser** (test plan in Task 6.2 below). Pay special attention to:
-   - Two orgs with a project of the same slug → both work, FS shows two `<orgId>/` dirs.
-   - Org-admin vs org-member access to `/specs/<orgSlug>/<projSlug>/...` URLs.
-   - Member-management UI (does not yet exist in the UI — endpoints are there, frontend is TODO).
-   - Approval deep-link goes to the right project.
-3. **Open work — not blocking this PR:**
-   - Member-management UI: list/add/remove project members in the project's settings tab. Endpoints already wired (`/api/orgs/<orgSlug>/projects/<projSlug>/members` GET/POST/DELETE).
-   - Migration journal robustness: I had to manually re-insert a journal row when drizzle-kit migrate appeared to silently fail mid-apply on a fresh DB. Worth investigating whether the dev startup migrator is enough or if drizzle-kit migrate has a real bug here.
-   - Org-scoping for the new git-remote-sync feature (PR #68, merged from main): `project-repository.ts` writes meta.json under the old slug-only path; routes + tests still use the single-slug API. Already retrofitted as part of the merge — see commits after the merge.
+Member-management UI and the drizzle-kit-migrate flakiness investigation
+have been handled separately. Nothing else is open for this plan.
 
 ---
 
