@@ -37,7 +37,7 @@ import {
   markCompanyStarting,
   clearCompanyStarting,
 } from "@su/company-manager";
-import { getProjectSecrets } from "@su/secrets-store";
+import { getOrgSecrets, getProjectSecrets } from "@su/secrets-store";
 import {
   resolveAgentProfileForRequest,
   type ResolvedAgentProfile,
@@ -301,7 +301,13 @@ export default defineEventHandler(async (event) => {
 
       const opsToken = randomBytes(32).toString("hex");
       const opsUrl = config.companyOpsUrlBase;
-      const projectSecrets = await getProjectSecrets(orgId, slug);
+      // Org-level secrets first, project-level second — project keys
+      // override org keys on collision (standard env-var precedence).
+      const [orgSecrets, projectSecrets] = await Promise.all([
+        getOrgSecrets(orgId),
+        getProjectSecrets(orgId, slug),
+      ]);
+      const mergedSecrets: Record<string, string> = { ...orgSecrets, ...projectSecrets };
       const proxyUrl = config.companyClaudeProxyUrl || undefined;
 
       // Inject per-provider env for an agent that has its own profile.
@@ -406,7 +412,7 @@ export default defineEventHandler(async (event) => {
           // Pass through any other project secrets that don't collide
           // with the provider-specific keys the profile just set.
           const reservedPrefixes = ["ANTHROPIC_", "OPENAI_", "GOOGLE_", "GEMINI_"];
-          for (const [k, v] of Object.entries(projectSecrets)) {
+          for (const [k, v] of Object.entries(mergedSecrets)) {
             if (!v) continue;
             if (reservedPrefixes.some((p) => k.startsWith(p))) continue;
             env[k] = v;

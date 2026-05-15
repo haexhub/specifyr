@@ -179,12 +179,20 @@ async function copyLink() {
         <span class="font-medium">{{ data.myRole }}</span>
       </p>
 
-      <NuxtLink
-        :to="`/settings/orgs/${data.org.slug}/llm`"
-        class="mt-3 inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs hover:bg-muted/60"
-      >
-        <KeyRound class="size-3.5" /> LLM credentials
-      </NuxtLink>
+      <div class="mt-3 flex flex-wrap gap-2">
+        <NuxtLink
+          :to="`/settings/orgs/${data.org.slug}/llm`"
+          class="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs hover:bg-muted/60"
+        >
+          <KeyRound class="size-3.5" /> LLM credentials
+        </NuxtLink>
+        <NuxtLink
+          :to="`/settings/orgs/${data.org.slug}/secrets`"
+          class="inline-flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-1.5 text-xs hover:bg-muted/60"
+        >
+          <KeyRound class="size-3.5" /> Org secrets
+        </NuxtLink>
+      </div>
 
       <section class="mt-8">
         <h2 class="text-sm font-semibold uppercase tracking-wide text-muted-foreground">

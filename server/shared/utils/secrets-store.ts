@@ -1,8 +1,11 @@
 /**
- * Per-project encrypted secrets store.
+ * Encrypted secrets store, two scopes:
+ *   - org-level:     <dataDir>/.specifyr/<orgId>/secrets.json
+ *   - project-level: <dataDir>/.specifyr/<orgId>/<projSlug>/secrets.json
  *
- * Secrets are AES-256-GCM encrypted and stored in
- * <dataDir>/.specifyr/<slug>/secrets.json. The master key is read from
+ * Project secrets override org secrets on key collision at injection time.
+ *
+ * Secrets are AES-256-GCM encrypted. The master key is read from
  * SPECIFYR_SECRET_KEY (64-char hex = 32 bytes). If unset, a random key is
  * auto-generated and persisted in <dataDir>/master.key on first use.
  *
@@ -13,7 +16,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { dataDir, projectArtifactsDir } from "./data-dirs";
+import { dataDir, orgArtifactsDir, projectArtifactsDir } from "./data-dirs";
 
 /**
  * Reserved secret keys are managed by dedicated endpoints, not by the
@@ -25,16 +28,11 @@ export const GIT_REMOTE_TOKEN_KEY = "__git_remote_token";
 
 const writeQueues = new Map<string, Promise<void>>();
 
-function queueKey(orgId: string, slug: string): string {
-  return `${orgId}/${slug}`;
-}
-
-function enqueueWrite(orgId: string, slug: string, op: () => Promise<void>): Promise<void> {
-  const k = queueKey(orgId, slug);
-  const prev = writeQueues.get(k) ?? Promise.resolve();
+function enqueueWrite(queueKey: string, op: () => Promise<void>): Promise<void> {
+  const prev = writeQueues.get(queueKey) ?? Promise.resolve();
   const next = prev.then(op, op);
-  writeQueues.set(k, next.finally(() => {
-    if (writeQueues.get(k) === next) writeQueues.delete(k);
+  writeQueues.set(queueKey, next.finally(() => {
+    if (writeQueues.get(queueKey) === next) writeQueues.delete(queueKey);
   }));
   return next;
 }
@@ -42,8 +40,12 @@ function enqueueWrite(orgId: string, slug: string, op: () => Promise<void>): Pro
 type EncryptedEntry = { iv: string; tag: string; data: string };
 type SecretsFile = Record<string, EncryptedEntry>;
 
-function secretsFilePath(orgId: string, slug: string): string {
+function projectSecretsFilePath(orgId: string, slug: string): string {
   return path.join(projectArtifactsDir(orgId, slug), "secrets.json");
+}
+
+function orgSecretsFilePath(orgId: string): string {
+  return path.join(orgArtifactsDir(orgId), "secrets.json");
 }
 
 async function masterKey(): Promise<Buffer> {
@@ -69,19 +71,18 @@ async function masterKey(): Promise<Buffer> {
   }
 }
 
-async function readFile(orgId: string, slug: string): Promise<SecretsFile> {
+async function readSecretsFile(filePath: string): Promise<SecretsFile> {
   try {
-    return JSON.parse(await fs.readFile(secretsFilePath(orgId, slug), "utf8"));
+    return JSON.parse(await fs.readFile(filePath, "utf8"));
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") return {};
     throw err;
   }
 }
 
-async function writeFile(orgId: string, slug: string, data: SecretsFile): Promise<void> {
-  const p = secretsFilePath(orgId, slug);
-  await fs.mkdir(path.dirname(p), { recursive: true });
-  await fs.writeFile(p, JSON.stringify(data, null, 2), { mode: 0o600 });
+async function writeSecretsFile(filePath: string, data: SecretsFile): Promise<void> {
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(data, null, 2), { mode: 0o600 });
 }
 
 function encrypt(plaintext: string, key: Buffer): EncryptedEntry {
@@ -113,30 +114,75 @@ export async function decryptString(entry: EncryptedEntry): Promise<string> {
 export type { EncryptedEntry };
 
 export async function listSecretKeys(orgId: string, slug: string): Promise<string[]> {
-  return Object.keys(await readFile(orgId, slug));
+  return Object.keys(await readSecretsFile(projectSecretsFilePath(orgId, slug)));
 }
 
 export function setSecret(orgId: string, slug: string, key: string, value: string): Promise<void> {
-  return enqueueWrite(orgId, slug, async () => {
-    const [file, mkey] = await Promise.all([readFile(orgId, slug), masterKey()]);
+  const filePath = projectSecretsFilePath(orgId, slug);
+  return enqueueWrite(filePath, async () => {
+    const [file, mkey] = await Promise.all([readSecretsFile(filePath), masterKey()]);
     file[key] = encrypt(value, mkey);
-    await writeFile(orgId, slug, file);
+    await writeSecretsFile(filePath, file);
   });
 }
 
 export function deleteSecret(orgId: string, slug: string, key: string): Promise<boolean> {
   let existed = false;
-  return enqueueWrite(orgId, slug, async () => {
-    const file = await readFile(orgId, slug);
+  const filePath = projectSecretsFilePath(orgId, slug);
+  return enqueueWrite(filePath, async () => {
+    const file = await readSecretsFile(filePath);
     if (!(key in file)) return;
     existed = true;
     delete file[key];
-    await writeFile(orgId, slug, file);
+    await writeSecretsFile(filePath, file);
   }).then(() => existed);
 }
 
 export async function getProjectSecrets(orgId: string, slug: string): Promise<Record<string, string>> {
-  const [file, mkey] = await Promise.all([readFile(orgId, slug), masterKey()]);
+  const [file, mkey] = await Promise.all([
+    readSecretsFile(projectSecretsFilePath(orgId, slug)),
+    masterKey(),
+  ]);
+  const result: Record<string, string> = {};
+  for (const [k, entry] of Object.entries(file)) {
+    result[k] = decrypt(entry, mkey);
+  }
+  return result;
+}
+
+// Org-level secrets — shared across every project in the org. Project
+// secrets with the same key override org secrets at injection time.
+
+export async function listOrgSecretKeys(orgId: string): Promise<string[]> {
+  return Object.keys(await readSecretsFile(orgSecretsFilePath(orgId)));
+}
+
+export function setOrgSecret(orgId: string, key: string, value: string): Promise<void> {
+  const filePath = orgSecretsFilePath(orgId);
+  return enqueueWrite(filePath, async () => {
+    const [file, mkey] = await Promise.all([readSecretsFile(filePath), masterKey()]);
+    file[key] = encrypt(value, mkey);
+    await writeSecretsFile(filePath, file);
+  });
+}
+
+export function deleteOrgSecret(orgId: string, key: string): Promise<boolean> {
+  let existed = false;
+  const filePath = orgSecretsFilePath(orgId);
+  return enqueueWrite(filePath, async () => {
+    const file = await readSecretsFile(filePath);
+    if (!(key in file)) return;
+    existed = true;
+    delete file[key];
+    await writeSecretsFile(filePath, file);
+  }).then(() => existed);
+}
+
+export async function getOrgSecrets(orgId: string): Promise<Record<string, string>> {
+  const [file, mkey] = await Promise.all([
+    readSecretsFile(orgSecretsFilePath(orgId)),
+    masterKey(),
+  ]);
   const result: Record<string, string> = {};
   for (const [k, entry] of Object.entries(file)) {
     result[k] = decrypt(entry, mkey);

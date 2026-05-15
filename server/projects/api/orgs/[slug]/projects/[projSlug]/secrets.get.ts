@@ -1,9 +1,13 @@
 import { assertProjectExists } from "@su/specifyr-stores";
-import { listSecretKeys } from "@su/secrets-store";
+import { listOrgSecretKeys, listSecretKeys } from "@su/secrets-store";
 
 export default defineEventHandler(async (event) => {
   const orgId = event.context.orgId!;
   const slug = event.context.projectSlug!;
   await assertProjectExists(orgId, slug);
-  return { keys: await listSecretKeys(orgId, slug) };
+  const [keys, inheritedKeys] = await Promise.all([
+    listSecretKeys(orgId, slug),
+    listOrgSecretKeys(orgId),
+  ]);
+  return { keys, inheritedKeys };
 });
