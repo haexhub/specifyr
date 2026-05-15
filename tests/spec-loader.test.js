@@ -1,7 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
+import fs from "node:fs/promises";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
+import { stringify as yamlStringify } from "yaml";
 
 import {
   loadAgents,
@@ -12,6 +15,28 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const fixture = path.join(__dirname, "fixtures", "spec-loader", "valid");
+
+// Write a single-agent fixture into a tmpdir; `frontmatter` is merged onto
+// a minimal valid base. Returns the org dir (parent of agents/).
+async function mkSecretsFixture(label, frontmatter) {
+  const orgDir = await fs.mkdtemp(path.join(os.tmpdir(), `spec-loader-${label}-`));
+  const agentsDir = path.join(orgDir, "agents");
+  await fs.mkdir(agentsDir, { recursive: true });
+  const fm = {
+    schema_version: "1.0",
+    role: "x",
+    runner: "hermes",
+    runner_type: "ephemeral",
+    capabilities: [],
+    status: "active",
+    ...frontmatter,
+  };
+  await fs.writeFile(
+    path.join(agentsDir, "x.md"),
+    `---\n${yamlStringify(fm)}---\n\n# X\n`,
+  );
+  return orgDir;
+}
 
 test("loadConstitution parses frontmatter", async () => {
   const c = await loadConstitution(fixture);
@@ -76,6 +101,38 @@ test("agent.resources passes through nested YAML object verbatim", async () => {
   const agents = await loadAgents(fixture);
   const dev = agents.get("dev");
   assert.deepEqual(dev.resources, { cpus: "1.0", memory: "512m" });
+});
+
+test("agent.secrets parses to string[] of env-var names", async () => {
+  const agents = await loadAgents(fixture);
+  const dev = agents.get("dev");
+  assert.deepEqual(dev.secrets, ["GH_TOKEN", "NPM_TOKEN"]);
+});
+
+test("agent.secrets defaults to [] when frontmatter omits the field", async () => {
+  const agents = await loadAgents(fixture);
+  const ceo = agents.get("ceo");
+  assert.deepEqual(ceo.secrets, []);
+});
+
+test("agent.secrets rejects non-array value", async () => {
+  const dir = await mkSecretsFixture("not-array", { secrets: "GH_TOKEN" });
+  await assert.rejects(() => loadAgents(dir), /E_SECRETS_NOT_ARRAY/);
+});
+
+test("agent.secrets rejects non-string entry", async () => {
+  const dir = await mkSecretsFixture("non-string", { secrets: ["GH_TOKEN", 42] });
+  await assert.rejects(() => loadAgents(dir), /E_SECRETS_ENTRY_TYPE/);
+});
+
+test("agent.secrets rejects invalid env-var name", async () => {
+  const dir = await mkSecretsFixture("bad-name", { secrets: ["gh-token"] });
+  await assert.rejects(() => loadAgents(dir), /E_SECRETS_ENTRY_NAME/);
+});
+
+test("agent.secrets rejects duplicate entries", async () => {
+  const dir = await mkSecretsFixture("dup", { secrets: ["GH_TOKEN", "GH_TOKEN"] });
+  await assert.rejects(() => loadAgents(dir), /E_SECRETS_DUPLICATE/);
 });
 
 // ---------------------------------------------------------------------------

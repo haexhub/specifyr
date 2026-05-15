@@ -73,8 +73,23 @@ export default defineNuxtConfig({
       devAuthAvailable: !!process.env.SPECIFYR_DEV_USER_EMAIL,
     },
   },
-  i18n: {
-    locales: [{ code: "de", language: "de-DE", file: "de.json" }],
-    defaultLocale: "de",
-  },
+  // English is bootstrap-only: en.json contains the small set of
+  // user-facing labels that have been translated. Untranslated keys
+  // fall back to German via `fallbackLocale` so the UI stays usable
+  // while the translation effort catches up.
+  //
+  // `code as LocaleCode` widens the inferred literal so adding additional
+  // locales doesn't break the LocaleObject<T> array element type, and
+  // matches the union expected by `defaultLocale`/`fallbackLocale`.
+  i18n: (() => {
+    type LocaleCode = "de" | "en";
+    return {
+      locales: [
+        { code: "de" as LocaleCode, language: "de-DE", file: "de.json", name: "Deutsch" },
+        { code: "en" as LocaleCode, language: "en-US", file: "en.json", name: "English" },
+      ],
+      defaultLocale: "de" as LocaleCode,
+      fallbackLocale: "de" as LocaleCode,
+    };
+  })(),
 });

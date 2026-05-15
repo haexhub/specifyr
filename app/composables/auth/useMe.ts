@@ -11,6 +11,7 @@ interface Me {
   email: string;
   displayName: string | null;
   isPlatformAdmin: boolean;
+  preferredLocale: string | null;
   createdAt: string;
   memberships: MeMembership[];
 }

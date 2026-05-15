@@ -9,7 +9,6 @@ env_keys:
   - SLACK_TEAM_ID
 description: "Post and read messages in Slack channels, list users, react to messages."
 required_capabilities:
-  - secrets:read_env
   - network:http
   - account:slack
 tags:

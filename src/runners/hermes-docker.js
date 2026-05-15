@@ -11,9 +11,9 @@
  * is per-agent via the profileDir HERMES_HOME). The CompanyRuntime factory
  * creates one runner per agent at start().
  *
- * Capability-mapping errors (e.g. agent grants `docker:privileged` or caller
- * passes secrets without secrets:read_env) THROW rather than silently
- * falling back — those are config errors, not transient runtime failures.
+ * Capability-mapping errors (e.g. agent grants `docker:privileged`) THROW
+ * rather than silently falling back — those are config errors, not
+ * transient runtime failures.
  * Genuine runtime failures (docker daemon down, hermes crashes) DO fall back
  * to the parent HermesAgentRunner stub.
  */
@@ -127,7 +127,8 @@ export class HermesDockerRunner extends HermesAgentRunner {
    * @param {string} [options.image]         container image tag, default 'hermes-agent:dev'
    * @param {string} [options.network]       compose network name
    * @param {Object<string,string>} [options.secrets]
-   *                                         KV env vars; requires secrets:read_env grant
+   *                                         KV env vars, filtered by the agent's
+   *                                         per-spec `secrets:` allowlist upstream.
    * @param {string} [options.dockerCommand] docker binary, default 'docker'
    * @param {Function} [options.commandRunner]  DI for tests
    * @param {AgentRunner} [options.fallback]

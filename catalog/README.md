@@ -24,7 +24,6 @@ args: ["mcp-server-mything"]
 env_keys: [MY_TOKEN]
 description: "What this tool does in one sentence."
 required_capabilities:
-  - secrets:read_env
   - network:http
 tags: [domain, category]
 ```

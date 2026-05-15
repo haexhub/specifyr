@@ -8,16 +8,24 @@ import ProjectShell from "~/components/projects/ProjectShell.vue";
 
 const { orgSlug, projSlug, apiBase } = useProjectContext();
 
-const { data, refresh } = await useFetch<{ keys: string[] }>(
+const { data, refresh } = await useFetch<{ keys: string[]; inheritedKeys: string[] }>(
   () => `${apiBase.value}/secrets`,
 );
 const keys = computed(() => data.value?.keys ?? []);
+const overriddenKeys = computed(() => new Set(keys.value));
+const inheritedKeys = computed(() =>
+  (data.value?.inheritedKeys ?? []).filter((k) => !overriddenKeys.value.has(k)),
+);
 
 const newKey = ref("");
 const newValue = ref("");
 const showValue = ref(false);
 const adding = ref(false);
 const error = ref<string | null>(null);
+
+function sanitizeKey(v: string): string {
+  return v.toUpperCase().replace(/\s+/g, "_").replace(/[^A-Z0-9_]/g, "");
+}
 
 async function removeSecret(key: string) {
   try {
@@ -48,7 +56,8 @@ async function removeSecret(key: string) {
 //   - Should the value field be cleared after success even if you might add more secrets?
 async function addSecret() {
   error.value = null;
-  if (!newKey.value.trim() || !newValue.value) {
+  const key = sanitizeKey(newKey.value.trim());
+  if (!key || !newValue.value) {
     error.value = "Key and value are required.";
     return;
   }
@@ -56,7 +65,7 @@ async function addSecret() {
   try {
     await $fetch(`${apiBase.value}/secrets`, {
       method: "POST",
-      body: { key: newKey.value.trim(), value: newValue.value },
+      body: { key, value: newValue.value },
     });
     newKey.value = "";
     newValue.value = "";
@@ -78,10 +87,41 @@ async function addSecret() {
           Project Secrets
         </h2>
         <p class="text-sm text-muted-foreground mt-1">
-          Secrets are encrypted at rest and injected as environment variables into agent
-          containers at runtime. Values are never shown after saving.
+          Secrets are stored encrypted and injected as environment variables only into
+          agent containers that explicitly declare them in their <code>secrets:</code>
+          list. Values are never shown after saving. Org-level secrets are inherited
+          automatically; defining a key here overrides the org value.
         </p>
       </div>
+
+      <!-- Inherited from org -->
+      <Card v-if="inheritedKeys.length > 0">
+        <CardHeader class="pb-3">
+          <CardTitle class="text-sm font-medium">Inherited from org</CardTitle>
+          <CardDescription>
+            Managed in
+            <NuxtLink
+              :to="`/settings/orgs/${orgSlug}/secrets`"
+              class="underline hover:text-foreground"
+            >
+              org settings
+            </NuxtLink>. Add a key with the same name below to override it for this project.
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-2">
+          <div
+            v-for="key in inheritedKeys"
+            :key="key"
+            class="flex items-center gap-2 rounded-md border border-dashed px-3 py-2"
+          >
+            <Badge variant="outline" class="font-mono text-xs">{{ key }}</Badge>
+            <span class="text-xs text-muted-foreground">••••••••</span>
+            <span class="ml-auto text-[10px] uppercase tracking-wide text-muted-foreground">
+              org
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       <!-- Existing secrets list -->
       <Card>
@@ -121,25 +161,30 @@ async function addSecret() {
             <Input
               v-model="newKey"
               placeholder="KEY_NAME"
-              class="font-mono text-sm uppercase"
-              @input="newKey = (newKey as string).toUpperCase().replace(/[^A-Z0-9_]/g, '')"
+              class="flex-1 font-mono text-sm"
+              @update:model-value="(v) => (newKey = sanitizeKey(String(v)))"
+              @keydown.enter="addSecret"
             />
             <div class="relative flex-1">
               <Input
                 v-model="newValue"
                 :type="showValue ? 'text' : 'password'"
                 placeholder="value"
-                class="pr-9"
+                class="pr-10"
                 @keydown.enter="addSecret"
               />
-              <button
+              <Button
                 type="button"
-                class="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                variant="ghost"
+                size="icon"
+                :aria-label="showValue ? 'Hide secret value' : 'Show secret value'"
+                :aria-pressed="showValue"
+                class="absolute right-1 top-1/2 -translate-y-1/2 size-8 text-muted-foreground hover:text-foreground"
                 @click="showValue = !showValue"
               >
-                <Eye v-if="!showValue" class="size-3.5" />
-                <EyeOff v-else class="size-3.5" />
-              </button>
+                <Eye v-if="!showValue" class="size-5" />
+                <EyeOff v-else class="size-5" />
+              </Button>
             </div>
             <Button :disabled="adding" @click="addSecret">
               <Plus class="size-4" />

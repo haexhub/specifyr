@@ -1,13 +1,13 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb } from "@db/client";
 import { users } from "@db/schema";
 import { listOrgsForUser } from "@su/org-store";
+import { mePatchSchema, parseBody } from "@su/validation";
 
 /**
- * Returns the authenticated user's profile + their org memberships.
- * Mandatory-org model: an empty `memberships[]` triggers the
- * onboarding redirect on the client (force-create-org). The caller's
- * `isPlatformAdmin` flag is used by the admin route guard.
+ * Updates the authenticated user's editable profile fields. Returns the
+ * same shape as GET /api/me so the client can drop the response into
+ * the existing useMe cache.
  */
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId;
@@ -18,6 +18,21 @@ export default defineEventHandler(async (event) => {
   const db = getDb();
   if (!db) {
     throw createError({ statusCode: 503, statusMessage: "DB not configured" });
+  }
+
+  const body = await parseBody(event, mePatchSchema);
+
+  const patch: {
+    displayName?: string | null;
+    preferredLocale?: string | null;
+    updatedAt?: ReturnType<typeof sql>;
+  } = {};
+  if (body.displayName !== undefined) patch.displayName = body.displayName;
+  if (body.preferredLocale !== undefined) patch.preferredLocale = body.preferredLocale;
+
+  if (Object.keys(patch).length > 0) {
+    patch.updatedAt = sql`now()`;
+    await db.update(users).set(patch).where(eq(users.id, userId));
   }
 
   const [user] = await db
@@ -46,8 +61,5 @@ export default defineEventHandler(async (event) => {
     isOwner: o.ownerUserId === userId,
   }));
 
-  return {
-    ...user,
-    memberships,
-  };
+  return { ...user, memberships };
 });

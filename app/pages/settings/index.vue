@@ -66,17 +66,18 @@ const { me, isDevAuth, logout, devLogin } = useMe();
         </NuxtLink>
       </li>
       <li>
-        <div
-          class="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-4 opacity-60"
+        <NuxtLink
+          to="/settings/me/profile"
+          class="flex items-start gap-3 rounded-lg border border-border p-4 transition hover:bg-accent/50"
         >
           <UserIcon class="mt-0.5 size-5 shrink-0 opacity-80" />
           <div>
             <div class="font-medium">Profile</div>
             <div class="mt-0.5 text-sm text-muted-foreground">
-              Display name, language preferences. <span class="italic">Phase 10.</span>
+              Edit your display name shown to org members.
             </div>
           </div>
-        </div>
+        </NuxtLink>
       </li>
       <li v-if="me?.isPlatformAdmin">
         <NuxtLink

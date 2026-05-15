@@ -37,7 +37,7 @@ import {
   markCompanyStarting,
   clearCompanyStarting,
 } from "@su/company-manager";
-import { getProjectSecrets } from "@su/secrets-store";
+import { getOrgSecrets, getProjectSecrets } from "@su/secrets-store";
 import {
   resolveAgentProfileForRequest,
   type ResolvedAgentProfile,
@@ -226,6 +226,43 @@ export default defineEventHandler(async (event) => {
         return;
       }
 
+      // Org-level secrets first, project-level second — project keys
+      // override org keys on collision (standard env-var precedence).
+      // Loaded here (before image builds and network setup) so the
+      // missing-secrets preflight below can short-circuit a doomed run
+      // with a clear punch list instead of an opaque runtime failure
+      // inside the container 30 seconds in.
+      const [orgSecrets, projectSecrets] = await Promise.all([
+        getOrgSecrets(orgId),
+        getProjectSecrets(orgId, slug),
+      ]);
+      const mergedSecrets: Record<string, string> = { ...orgSecrets, ...projectSecrets };
+
+      // Fail-fast: every secret an agent declares in its `secrets:` list
+      // must be defined at org- or project-level. Catching this BEFORE we
+      // burn time on image builds gives the operator a clear punch list
+      // ("agent X needs Y, Y is missing") instead of an opaque runtime
+      // env-var-undefined failure inside the container.
+      const missingSecretsByRole: Record<string, string[]> = {};
+      for (const [role, agent] of agentMap) {
+        const declared: string[] = (agent as { secrets?: string[] }).secrets ?? [];
+        const missing = declared.filter((key) => !(key in mergedSecrets));
+        if (missing.length > 0) missingSecretsByRole[role] = missing;
+      }
+      if (Object.keys(missingSecretsByRole).length > 0) {
+        const detail = Object.entries(missingSecretsByRole)
+          .map(([role, keys]) => `${role}: [${keys.join(", ")}]`)
+          .join("; ");
+        await push("error", {
+          message:
+            `Missing project/org secrets — ${detail}. ` +
+            `Open the project's Secrets page and define the keys, ` +
+            `or remove them from the agent's 'secrets:' list.`,
+          missingSecretsByRole,
+        });
+        return;
+      }
+
       // Purge stale auth.json for every agent. hermes caches the resolved
       // credential (including the token value and auth_type) in auth.json.
       // Without deletion, a prior run's cached OAuth token overrides the
@@ -301,7 +338,6 @@ export default defineEventHandler(async (event) => {
 
       const opsToken = randomBytes(32).toString("hex");
       const opsUrl = config.companyOpsUrlBase;
-      const projectSecrets = await getProjectSecrets(orgId, slug);
       const proxyUrl = config.companyClaudeProxyUrl || undefined;
 
       // Inject per-provider env for an agent that has its own profile.
@@ -382,15 +418,15 @@ export default defineEventHandler(async (event) => {
           return { provider: profile.provider, model: profile.model };
         },
         secretsResolver: (agent: any) => {
-          if (!agent?.capabilities?.includes?.("secrets:read_env")) return undefined;
+          // Every agent gets ops-token + LLM env. The LLM-profile env vars
+          // (ANTHROPIC_*, OPENAI_*, …) are infrastructure managed by the
+          // platform, not user secrets — they don't go through the
+          // `agent.secrets:` allowlist.
           const env: Record<string, string> = {
             COMPANY_OPS_TOKEN: opsToken,
             COMPANY_OPS_URL: `${opsUrl}/${slug}`,
           };
 
-          // Per-agent profile is mandatory — the upfront validation
-          // above guarantees `profilesByRole` covers every role with a
-          // `secrets:read_env` capability that reaches this point.
           const profile = profilesByRole.get(agent?.role);
           if (!profile) {
             throw new Error(
@@ -403,13 +439,16 @@ export default defineEventHandler(async (event) => {
             buildEnvForProfile(profile, agentSessionTokens.get(agent.role)),
           );
 
-          // Pass through any other project secrets that don't collide
-          // with the provider-specific keys the profile just set.
-          const reservedPrefixes = ["ANTHROPIC_", "OPENAI_", "GOOGLE_", "GEMINI_"];
-          for (const [k, v] of Object.entries(projectSecrets)) {
-            if (!v) continue;
-            if (reservedPrefixes.some((p) => k.startsWith(p))) continue;
-            env[k] = v;
+          // Per-agent allowlist: only the keys the agent declared in its
+          // `secrets:` frontmatter list get injected. Missing keys were
+          // already caught by the fail-fast check above, so a non-string
+          // value here means the secret was empty/blank — skip it.
+          const declared: string[] = agent?.secrets ?? [];
+          for (const key of declared) {
+            const value = mergedSecrets[key];
+            if (typeof value === "string" && value.length > 0) {
+              env[key] = value;
+            }
           }
           return env;
         },

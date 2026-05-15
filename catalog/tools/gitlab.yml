@@ -9,7 +9,6 @@ env_keys:
   - GITLAB_API_URL   # optional — defaults to https://gitlab.com/api/v4 for SaaS; set for self-hosted
 description: "Read/write GitLab repos, issues, merge requests, file contents, pipelines."
 required_capabilities:
-  - secrets:read_env
   - network:http
   - account:gitlab
 tags:

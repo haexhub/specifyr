@@ -11,6 +11,7 @@ tools:
   builtin: [Read, Edit, Bash]
   mcp: []
 capabilities: [filesystem:write, shell:execute]
+secrets: [GH_TOKEN, NPM_TOKEN]
 resources:
   cpus: "1.0"
   memory: "512m"

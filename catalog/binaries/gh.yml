@@ -6,9 +6,9 @@ version_check: "gh --version"
 description: |
   Official GitHub command-line tool. Read-only ops (gh repo view, gh pr list)
   need network:http and account:github. Mutating ops (gh pr create, gh
-  release upload) additionally need network:http. Authentication uses
-  secrets:read_env if a GH_TOKEN is provided. Grant the capabilities matching
-  your agent's intended ops.
+  release upload) additionally need network:http. Authentication needs
+  GH_TOKEN declared in the agent's `secrets:` allowlist. Grant the
+  capabilities matching your agent's intended ops.
 env_keys:
   - GH_TOKEN   # Personal Access Token or fine-grained PAT for github.com
 nix_package: gh
