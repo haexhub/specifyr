@@ -101,12 +101,26 @@ export async function cleanDb(): Promise<void> {
     await db.execute(sql.raw(row.stmt));
   }
   const roleDrops = await db.execute(sql`
-    SELECT format('DROP ROLE %I', rolname) AS stmt
+    SELECT format('DROP ROLE %I', rolname) AS stmt, rolname
     FROM pg_roles
     WHERE rolname LIKE 'org\\_%\\_app' ESCAPE '\\'
   `);
-  for (const row of (roleDrops as unknown as { rows: Array<{ stmt: string }> }).rows) {
-    await db.execute(sql.raw(row.stmt));
+  // Roles are cluster-wide but grants are per-database. If the same
+  // Postgres cluster is shared with a dev DB, an `org_<uuid>_app` role
+  // created against the dev DB still appears here and still has grants
+  // there — DROP ROLE will fail with "objects depend on it". CI runs
+  // against a fresh container, so this never bites in CI, but it
+  // breaks local runs. Best-effort: try, log on failure, continue.
+  for (const row of (roleDrops as unknown as {
+    rows: Array<{ stmt: string; rolname: string }>;
+  }).rows) {
+    try {
+      await db.execute(sql.raw(row.stmt));
+    } catch (err) {
+      console.warn(
+        `[test cleanDb] could not drop role ${row.rolname} (likely has grants in another database on this cluster): ${(err as Error).message}`,
+      );
+    }
   }
   // RESTART IDENTITY isn't needed (we use uuid defaults), CASCADE keeps
   // FKs from blocking truncate even if the explicit order missed one.
