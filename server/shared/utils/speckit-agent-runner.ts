@@ -105,6 +105,7 @@ export async function createSpeckitRunnerFactory(input: {
       onEvent?: (e: unknown) => void;
       newSessionMeta?: Record<string, unknown>;
       desiredModel?: string;
+      permissionMode?: "auto-approve" | "auto-deny";
     }) => unknown;
   }>("src/runners/acp.js");
 
@@ -224,6 +225,14 @@ export async function createSpeckitRunnerFactory(input: {
       // its hardcoded default; we override post-session via session/set_model
       // inside AcpRunner.
       desiredModel: profile.runnerKey === "acp:codex" ? profile.model : undefined,
+      // Speckit chat: the agent runs as the authenticated user within the
+      // project's working directory (a bind-mount the user owns). We trust
+      // the user to drive their own writes — Anthropic's tool-permission
+      // model on top of the proxy already enforces what the *credential*
+      // can do. claude-agent-acp 0.33.1 forwards permission requests to
+      // the client regardless of --allow-dangerously-skip-permissions, so
+      // explicit auto-approve is required for Write/Edit/Bash to land.
+      permissionMode: "auto-approve",
     });
   };
 }

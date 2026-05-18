@@ -69,6 +69,14 @@ services:
       - .:/app
       # Laufzeit-Daten (Projekte, Extensions, Stores) außerhalb des Code-Verzeichnisses.
       - ${HOME}/.specifyr:/data
+      # claude-agent-acp persistiert pro Chat-Session ein JSONL unter
+      # ~/.claude/projects/<cwd-hash>/<sessionId>.jsonl. Im dev-Container ist
+      # ~ = /home/node (Dockerfile dev-Stage hat USER node). Ohne diesen Mount
+      # geht der Agent-State bei jedem `docker compose up --build` verloren →
+      # ACP session/load schlägt fehl und Specifyr fällt auf Text-Replay zurück.
+      # Bind-Mount unter ${HOME}/.specifyr/claude hält's konsistent mit den
+      # restlichen dev-Daten.
+      - ${HOME}/.specifyr/claude:/home/node/.claude
       # Anonymous volumes verhindern, dass Host-node_modules/Nuxt-Caches die Container-
       # Versionen überschreiben (Alpine-Binaries vs. glibc-Host-Binaries).
       - /app/node_modules

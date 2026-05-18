@@ -108,37 +108,64 @@ export default defineEventHandler(async (event) => {
     emitter.off("ended", onEnded);
   });
 
-  // (2) Disk replay.
-  const diskEvents = (await sessionStore.readEventsSince(orgId, slug, stepId, sid, since)) as StoredEvent[];
-  for (const e of diskEvents) {
-    await push(e);
-  }
-  replayDone = true;
+  // Disk replay + live-buffer flush + idle-close run in the background.
+  // Doing them in the foreground deadlocks: createEventStream uses a
+  // TransformStream whose readable side is only consumed once stream.send()
+  // returns the stream to h3's sendStream(). Default queuing strategy has
+  // HWM=1, so writer.write() (driven by stream.push) backpressure-blocks on
+  // the second write — and we never reach `return stream.send()` because
+  // we're still awaiting that push. Symptom: SSE connection stays open but
+  // emits zero bytes (curl times out, EventSource never receives anything).
+  void (async () => {
+    try {
+      // (2) Disk replay.
+      const diskEvents = (await sessionStore.readEventsSince(
+        orgId,
+        slug,
+        stepId,
+        sid,
+        since,
+      )) as StoredEvent[];
+      for (const e of diskEvents) {
+        await push(e);
+      }
+      replayDone = true;
 
-  // (3) Flush buffered live events, deduplicated against what disk replay already sent.
-  while (buffer.length > 0) {
-    const e = buffer.shift()!;
-    await push(e);
-    if (e.event === "done" || e.event === "turn_failed") {
+      // (3) Flush buffered live events, deduplicated against what disk replay already sent.
+      while (buffer.length > 0) {
+        const e = buffer.shift()!;
+        await push(e);
+        if (e.event === "done" || e.event === "turn_failed") {
+          closed = true;
+          await stream.close().catch(() => {});
+          return;
+        }
+      }
+
+      // (4) If no turn is running for this session, the disk replay was the entire story.
+      // Push a terminal event if the session is interrupted so the client stops its spinner,
+      // then close. Without the event the client's EventSource reconnects forever.
+      if (!closed && !broker.isRunning(orgId, slug, stepId, sid)) {
+        if (session.status === "interrupted") {
+          await stream.push({
+            event: "turn_failed",
+            data: JSON.stringify({
+              seq: highestSent + 1,
+              data: { message: "interrupted" },
+            }),
+          }).catch(() => {});
+        }
+        closed = true;
+        await stream.close().catch(() => {});
+      }
+    } catch (err) {
+      process.stderr.write(
+        `[turn/stream] background work failed: ${err instanceof Error ? err.message : String(err)}\n`,
+      );
       closed = true;
       await stream.close().catch(() => {});
-      break;
     }
-  }
-
-  // (4) If no turn is running for this session, the disk replay was the entire story.
-  // Push a terminal event if the session is interrupted so the client stops its spinner,
-  // then close. Without the event the client's EventSource reconnects forever.
-  if (!closed && !broker.isRunning(orgId, slug, stepId, sid)) {
-    if (session.status === "interrupted") {
-      await stream.push({
-        event: "turn_failed",
-        data: JSON.stringify({ seq: highestSent + 1, data: { message: "interrupted" } })
-      }).catch(() => {});
-    }
-    closed = true;
-    await stream.close().catch(() => {});
-  }
+  })();
 
   return stream.send();
 });
