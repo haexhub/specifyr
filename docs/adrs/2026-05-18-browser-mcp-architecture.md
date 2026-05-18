@@ -181,12 +181,10 @@ of the same draft is not blocked but is signalled.
 - IndexedDB writes are atomic per-record, so the model is
   last-writer-wins on `files` and `conversation` (not finer-grained
   field-level merging).
-- No CRDT, no operational-transform. The user is editing their own
-  data on their own device; the cost of a richer model far outweighs
-  the realistic incidence of the problem.
 
 **Rationale:** Multi-tab is a footgun, not a feature, in this context.
-Detecting and warning is cheap; resolving is not.
+Detecting and warning is cheap; the IndexedDB record-level atomicity
+gives us all the concurrency primitive a single-user setup needs.
 
 ### 3. System prompt for the Speckit browser agent
 

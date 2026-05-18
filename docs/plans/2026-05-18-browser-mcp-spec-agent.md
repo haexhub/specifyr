@@ -746,7 +746,7 @@ Nach 1–2 Wochen Beta mit Volunteers. Rollback-Switch bleibt für 1 weitere Woc
 Vollständige Begründung in der [ADR](../adrs/2026-05-18-browser-mcp-architecture.md#resolved-phase-0-design-questions).
 
 1. **Discard-Semantik:** Hard-delete für `status="draft"`. `status="published"` ist immutable (Audit-Trail) → 409 bei DELETE.
-2. **Multi-Tab-Concurrency innerhalb eines Users:** Last-write-wins. UI zeigt via `BroadcastChannel` eine Warnung, wenn derselbe Draft in mehreren Tabs offen ist. Kein CRDT, kein OT.
+2. **Multi-Tab-Concurrency innerhalb eines Users:** Last-write-wins auf Basis von IndexedDB's per-record-Atomarität. UI zeigt via `BroadcastChannel` eine Warnung, wenn derselbe Draft in mehreren Tabs offen ist.
 3. **System-Prompt:** v1 als TypeScript-Konstante in [`app/lib/speckit-system-prompt.ts`](../../app/lib/speckit-system-prompt.ts) eingecheckt. Iteration während Phase 2.
 
 ### Out of Scope (separat zu planen)
