@@ -177,25 +177,9 @@ export async function createSpeckitRunnerFactory(input: {
   // ANTHROPIC_MODEL → settings.model → models[0] and overwrites it — which
   // is why ANTHROPIC_MODEL is set in the env above. We keep this in case a
   // future agent version honors the meta hint without the env override.
-  // claude-agent-acp 0.33.1 forwards `_meta.claudeCode.options.*` to the SDK
-  // as `userProvidedOptions` (see acp-agent.js). Pinning permissionMode to
-  // `bypassPermissions` makes the Claude Code SDK auto-accept Write/Edit/Bash
-  // calls WITHOUT routing through ACP's client-side request_permission flow.
-  // Without it, claude-sonnet-4-6 sees the default permission gate and refuses
-  // to actually emit a tool_use — it just text-replies "I have no write
-  // permission". Acceptable in the Speckit chat context because the agent runs
-  // as the authenticated user inside the project's bind-mounted cwd; the same
-  // trust scope as our local AcpRunner permissionMode="auto-approve".
   const newSessionMeta =
     profile.runnerKey === "acp:claude"
-      ? {
-          claudeCode: {
-            options: {
-              model: profile.model,
-              permissionMode: "bypassPermissions",
-            },
-          },
-        }
+      ? { claudeCode: { options: { model: profile.model } } }
       : undefined;
 
   const needsCodexHome =

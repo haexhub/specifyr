@@ -75,6 +75,11 @@ FROM base AS dev
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node . .
 RUN mkdir -p /app/.nuxt /app/.output && chown node:node /app/.nuxt /app/.output
+# Runtime entrypoint shim — see docker/specifyr-entrypoint.sh. Installed under
+# /usr/local/bin so the dev stage's `.:/app` bind mount (which would clobber
+# /app/docker/) doesn't make it disappear.
+COPY --chown=node:node docker/specifyr-entrypoint.sh /usr/local/bin/specifyr-entrypoint
+RUN chmod 0755 /usr/local/bin/specifyr-entrypoint
 # Bundled local extensions: gleiche Logik wie im prod-Stage. Im dev versteckt
 # der `.:/app` Bind-Mount in docker-compose.yml diesen Pfad, deshalb ist
 # `/app/extensions` dort als anonymes Volume markiert — sonst sähe der
@@ -89,7 +94,7 @@ ENV HOST=0.0.0.0 \
     NODE_ENV=development
 EXPOSE 3000
 USER node
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/specifyr-entrypoint"]
 CMD ["pnpm", "dev"]
 
 # ------------------------------------------------------------------------------
@@ -130,10 +135,13 @@ RUN git clone --depth 1 --branch ${SPECKIT_COMPANY_REF} \
     && chown -R node:node /app/extensions
 # Mountpoints für Bind-Volumes vorab als node anlegen, falls der Host-Pfad noch leer ist.
 RUN mkdir -p /app/projects /app/.specifyr && chown -R node:node /app/projects /app/.specifyr
+# Runtime entrypoint shim — see docker/specifyr-entrypoint.sh.
+COPY --chown=node:node docker/specifyr-entrypoint.sh /usr/local/bin/specifyr-entrypoint
+RUN chmod 0755 /usr/local/bin/specifyr-entrypoint
 ENV HOST=0.0.0.0 \
     PORT=3000 \
     NODE_ENV=production
 EXPOSE 3000
 USER node
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/specifyr-entrypoint"]
 CMD ["node", ".output/server/index.mjs"]
