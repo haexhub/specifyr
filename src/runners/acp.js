@@ -172,9 +172,15 @@ export class AcpRunner {
           // `--allow-dangerously-skip-permissions`, so a safe-deny default
           // here causes every tool call to silently fail.
           if (this.permissionMode === "auto-approve") {
+            // Prefer allow_once over allow_always: agents that persist
+            // permission choices (e.g. claude-agent-acp writes them to
+            // ~/.claude) would otherwise turn this per-call bypass into a
+            // session-wide grant, escaping the auto-approve scope on the
+            // very next turn even after the user changes their permission
+            // mode.
             const allow =
-              options.find((o) => o.optionId === "allow_always") ??
               options.find((o) => o.optionId === "allow_once") ??
+              options.find((o) => o.optionId === "allow_always") ??
               options[0];
             return { outcome: { outcome: "selected", optionId: allow.optionId } };
           }
@@ -288,6 +294,16 @@ export class AcpRunner {
     const previousOnEvent = this._currentOnEvent;
     if (onEvent !== undefined) this._currentOnEvent = onEvent;
 
+    // Already-aborted: short-circuit before we send the ACP prompt. In
+    // keep-alive mode session/cancel only applies to an in-flight turn, so
+    // without this we'd still mutate session state and waste a model round-trip.
+    if (signal?.aborted) {
+      this._currentOnEvent = previousOnEvent;
+      const e = new Error("Aborted");
+      e.aborted = true;
+      throw e;
+    }
+
     let onAbort = null;
     if (signal) {
       onAbort = () => {
@@ -303,8 +319,7 @@ export class AcpRunner {
           this.cancel();
         }
       };
-      if (signal.aborted) onAbort();
-      else signal.addEventListener("abort", onAbort, { once: true });
+      signal.addEventListener("abort", onAbort, { once: true });
     }
 
     try {
@@ -354,11 +369,27 @@ export class AcpRunner {
     }
   }
 
-  /** Tear down the child + connection. Idempotent. */
+  /** Tear down the child + connection. Idempotent.
+   *
+   * Awaits the child's exit (bounded to 5s) so shutdown actually drains —
+   * claude-agent-acp persists session state on SIGTERM and a fire-and-forget
+   * close would race the agent's flush, dropping the latest turn from disk.
+   */
   async close() {
     this._closed = true;
-    if (this.child && !this.child.killed) {
-      try { this.child.kill("SIGTERM"); } catch { /* ignore */ }
+    const childExitPromise = this._childExitPromise;
+    const child = this.child;
+    if (child && !child.killed) {
+      try { child.kill("SIGTERM"); } catch { /* ignore */ }
+    }
+    if (childExitPromise && child) {
+      await Promise.race([
+        childExitPromise.catch(() => {}),
+        new Promise((resolve) => setTimeout(resolve, 5000))
+      ]);
+      if (child && !child.killed && child.exitCode === null) {
+        try { child.kill("SIGKILL"); } catch { /* ignore */ }
+      }
     }
     this.child = null;
     this._conn = null;

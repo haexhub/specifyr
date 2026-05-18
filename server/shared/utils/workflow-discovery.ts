@@ -37,12 +37,20 @@ async function resolveExtensionDir(
   }
   // Dynamic import: app-config.js is ESM in src/core/, this file is server-side TS.
   // Inlining the import keeps the type-checker happy and avoids a top-level cycle
-  // (src/core ↔ server/shared/utils).
-  const url = pathToFileURL(path.join(process.cwd(), "src/core/app-config.js")).href;
-  const mod = (await import(url)) as {
-    findLocalExtensionPath: (slug: string, cwd?: string) => Promise<string | null>;
-  };
-  const localPath = await mod.findLocalExtensionPath(extensionSlug, process.cwd());
+  // (src/core ↔ server/shared/utils). Guard against missing/broken app-config —
+  // production bundles may strip src/, and we want workflow loading to keep
+  // working with the project-local path even when the global registry can't
+  // be queried.
+  let localPath: string | null = null;
+  try {
+    const url = pathToFileURL(path.join(process.cwd(), "src/core/app-config.js")).href;
+    const mod = (await import(url)) as {
+      findLocalExtensionPath: (slug: string, cwd?: string) => Promise<string | null>;
+    };
+    localPath = await mod.findLocalExtensionPath(extensionSlug, process.cwd());
+  } catch {
+    return null;
+  }
   if (!localPath) return null;
   try {
     await fs.access(path.join(localPath, "extension.yml"));

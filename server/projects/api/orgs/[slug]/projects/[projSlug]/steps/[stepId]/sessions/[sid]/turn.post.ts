@@ -26,6 +26,12 @@ const turnSchema = z.object({
 // like it remembers the whole conversation. Pathologically long chats are
 // bounded so the recovery prompt stays under Claude's context limit.
 const HISTORY_CONTEXT_LIMIT = 100;
+// Hard char budget for the replayed conversation block. Message count alone
+// can still overflow context when individual messages are huge (e.g. a long
+// tool output the agent quoted back), so we trim oldest-first until we fit.
+// ~40k chars ≈ ~10k tokens, leaving comfortable room for the workflow prefix
+// and the new user message inside a 200k window.
+const HISTORY_RECOVERY_CHAR_BUDGET = 40_000;
 
 /**
  * Build the workflow-context prefix that goes in front of the user's content on
@@ -136,16 +142,31 @@ export default defineEventHandler(async (event) => {
     // instructions apply) and replay the prior conversation. Costs more init
     // tokens but lets users resume after hours/days without the agent having
     // "forgotten" the step.
-    const tail = priorMessages.slice(-HISTORY_CONTEXT_LIMIT) as Array<{
+    const countTail = priorMessages.slice(-HISTORY_CONTEXT_LIMIT) as Array<{
       role: string;
       content: string;
     }>;
-    const history = tail
-      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
-      .join("\n\n");
+    // Trim oldest-first until we're inside the char budget. Render each line
+    // once here so the budget reflects what we'll actually send.
+    const rendered: Array<{ line: string; len: number }> = countTail.map((m) => {
+      const line = `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`;
+      return { line, len: line.length };
+    });
+    const kept: string[] = [];
+    let used = 0;
+    for (let i = rendered.length - 1; i >= 0; i--) {
+      const entry = rendered[i]!;
+      // +2 for the "\n\n" separator each line will contribute (except the first).
+      const cost = entry.len + (kept.length > 0 ? 2 : 0);
+      if (used + cost > HISTORY_RECOVERY_CHAR_BUDGET) break;
+      kept.unshift(entry.line);
+      used += cost;
+    }
+    const history = kept.join("\n\n");
+    const droppedCount = priorMessages.length - kept.length;
     const truncatedNote =
-      priorMessages.length > tail.length
-        ? `\n\n[…${priorMessages.length - tail.length} ältere Nachrichten weggelassen…]`
+      droppedCount > 0
+        ? `\n\n[…${droppedCount} ältere Nachrichten weggelassen…]`
         : "";
     const prefix = await buildWorkflowPrefix(orgId, slug, stepId);
     const parts: string[] = [];

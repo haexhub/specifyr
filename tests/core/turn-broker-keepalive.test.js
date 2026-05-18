@@ -131,8 +131,11 @@ test("TurnBroker idle timeout closes a cached runner after inactivity", async ()
   await broker.running.get(`${orgId}|${slug}|${stepId}|${sid}`)?.promise;
   assert.equal(broker.hasLiveSession(orgId, slug, stepId, sid), true);
 
-  // Wait past the idle window. The timer is unref'd so we have to actively wait.
-  await new Promise((r) => setTimeout(r, 80));
+  // Poll past the idle window. The timer is unref'd; fixed sleeps flake on slow CI.
+  const deadline = Date.now() + 500;
+  while (runner.calls.close === 0 && Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, 10));
+  }
   assert.equal(runner.calls.close, 1, "idle timer closed the runner");
   assert.equal(broker.hasLiveSession(orgId, slug, stepId, sid), false);
 });
