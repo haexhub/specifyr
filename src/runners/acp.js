@@ -21,7 +21,7 @@ import { acpPermissionToCapability, capabilityDecisionToAcpOutcome } from "../ac
  * signals kill the child directly so `run()` rejects promptly.
  */
 export class AcpRunner {
-  constructor({ binary, args = [], cwd = process.cwd(), env, memoryRoot, onEvent, approvalService, slug, agent, newSessionMeta, desiredModel } = {}) {
+  constructor({ binary, args = [], cwd = process.cwd(), env, memoryRoot, onEvent, approvalService, slug, agent, newSessionMeta, desiredModel, permissionMode } = {}) {
     if (!binary) throw new Error("AcpRunner: binary is required");
     this.binary = binary;
     this.args = args;
@@ -31,6 +31,17 @@ export class AcpRunner {
     this.approvalService = approvalService;
     this.slug = slug;
     this.agent = agent;
+    // Controls how ACP `session/request_permission` callbacks are answered:
+    //   "auto-approve" — always return `allow_once`. Use this for Speckit-style
+    //     interactive chat where the agent runs as the authenticated user and
+    //     is expected to write into the project working directory. claude-agent-
+    //     acp 0.33.1 forwards Write/Edit permission requests to the client even
+    //     when launched with `--allow-dangerously-skip-permissions`, so without
+    //     this the agent's tool calls silently get rejected.
+    //   "auto-deny" / undefined — the original safe-deny behavior used when no
+    //     approvalService is wired. Keep it as the default so any caller that
+    //     didn't opt-in stays on the conservative path.
+    this.permissionMode = permissionMode;
     // Forwarded as `_meta` on the ACP session/new request. claude-agent-acp
     // reads `_meta.claudeCode.options.*` (see acp-agent.js: `userProvidedOptions`)
     // to set query options like `model` — there is NO CLI flag for the model
@@ -154,7 +165,19 @@ export class AcpRunner {
           // Identity: TurnBroker speaks ACP natively — no translation here.
           this._currentOnEvent?.(update);
         },
-        async requestPermission({ sessionId, toolCall, options }) {
+        requestPermission: async ({ sessionId, toolCall, options }) => {
+          // permissionMode="auto-approve" — used by the Speckit interactive
+          // chat runner. claude-agent-acp 0.33.1 forwards Write/Edit/Bash
+          // permission requests to the client even with
+          // `--allow-dangerously-skip-permissions`, so a safe-deny default
+          // here causes every tool call to silently fail.
+          if (this.permissionMode === "auto-approve") {
+            const allow =
+              options.find((o) => o.optionId === "allow_always") ??
+              options.find((o) => o.optionId === "allow_once") ??
+              options[0];
+            return { outcome: { outcome: "selected", optionId: allow.optionId } };
+          }
           // No approval service wired (or no agent context) — safe-deny.
           if (!approvalService || !agent) {
             const reject = options.find((o) => o.optionId === "reject_once") ?? options[0];

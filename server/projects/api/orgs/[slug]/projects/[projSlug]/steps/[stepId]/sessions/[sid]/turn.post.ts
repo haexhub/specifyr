@@ -38,10 +38,25 @@ async function buildWorkflowPrefix(
   stepId: string,
 ): Promise<string | null> {
   const workflowId = await getProjectWorkflowId(orgId, slug);
-  const workflow =
-    workflowId === "spec-kit"
-      ? SPEC_KIT_WORKFLOW
-      : (await loadInstalledExtensionWorkflow(orgId, slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
+  // Two layers of fallback when resolving the workflow for this step:
+  //   1. The chosen workflow id may point at an extension that's not on-disk
+  //      anywhere (per-project AND globally). resolveExtensionDir inside
+  //      loadInstalledExtensionWorkflow handles the "globally registered but
+  //      not project-installed" case; if BOTH miss, we fall back to spec-kit.
+  //   2. Even when the extension workflow IS resolved, the step the user is on
+  //      may belong to spec-kit (e.g. project workflow is "speckit-company"
+  //      but the user navigated to `/steps/constitution`, a spec-kit step
+  //      with no equivalent in speckit-company). In that case we also fall
+  //      back to spec-kit so the agent gets the built-in instructions
+  //      instead of an empty prompt prefix.
+  const extensionWorkflow =
+    workflowId !== "spec-kit"
+      ? await loadInstalledExtensionWorkflow(orgId, slug, workflowId)
+      : null;
+  const extensionHasStep =
+    extensionWorkflow?.steps.some((s) => s.id === stepId) === true;
+  const workflow = extensionHasStep ? extensionWorkflow! : SPEC_KIT_WORKFLOW;
+  const usingBuiltInSpecKit = workflow === SPEC_KIT_WORKFLOW;
   const stepDef = workflow.steps.find((s) => s.id === stepId);
   if (!stepDef?.command) return null;
   const stepIndex = workflow.steps.findIndex((s) => s.id === stepId);
@@ -54,10 +69,9 @@ async function buildWorkflowPrefix(
     `Focus exclusively on this step. Do not suggest actions from later steps or start the company runtime.`,
     `If this step's artifacts already exist, confirm what is done and ask what to adjust or finalize for this step.`,
   ].join(" ");
-  const commandBody =
-    workflowId === "spec-kit"
-      ? loadBuiltInSpecKitStepInstructions(stepId)
-      : await loadStepCommandBody(orgId, slug, workflowId, stepId);
+  const commandBody = usingBuiltInSpecKit
+    ? loadBuiltInSpecKitStepInstructions(stepId)
+    : await loadStepCommandBody(orgId, slug, workflowId, stepId);
   const commandLabel = `Workflow command: ${stepDef.command}`;
   return commandBody
     ? `${commandLabel}\n\n${commandBody}\n\n---\n\n${workflowCtx}`

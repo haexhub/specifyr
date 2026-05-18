@@ -1,7 +1,56 @@
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import fs from "node:fs/promises";
 import YAML from "yaml";
 import { projectCwd } from "./specifyr-stores";
+
+// Resolve the on-disk directory for an extension slug. Two locations are
+// considered, in order:
+//   1. `<projectCwd>/.specify/extensions/<slug>/` — the canonical per-project
+//      install path written by `specify extension add`. Empty when the project
+//      was never `specify init`-ed or when the install failed (e.g. the
+//      `specify` CLI was not available at project creation time).
+//   2. The globally-registered local-extension path from the app config — this
+//      covers the BUNDLED_LOCAL_EXTENSIONS list (e.g. speckit-company shipping
+//      with the image) plus any path registered via `specify extension add --dev`.
+// Without the fallback, a project whose meta.json points at a workflow whose
+// extension was only ever registered globally (not installed per-project)
+// silently degrades to spec-kit standard without any of the extension's
+// command-body instructions, so the agent gets the step label but no guidance
+// on what to actually do.
+async function resolveExtensionDir(
+  orgId: string,
+  projectSlug: string,
+  extensionSlug: string,
+): Promise<string | null> {
+  const projectExtDir = path.join(
+    projectCwd(orgId, projectSlug),
+    ".specify",
+    "extensions",
+    extensionSlug,
+  );
+  try {
+    await fs.access(path.join(projectExtDir, "extension.yml"));
+    return projectExtDir;
+  } catch {
+    /* not installed per-project — try the global registry */
+  }
+  // Dynamic import: app-config.js is ESM in src/core/, this file is server-side TS.
+  // Inlining the import keeps the type-checker happy and avoids a top-level cycle
+  // (src/core ↔ server/shared/utils).
+  const url = pathToFileURL(path.join(process.cwd(), "src/core/app-config.js")).href;
+  const mod = (await import(url)) as {
+    findLocalExtensionPath: (slug: string, cwd?: string) => Promise<string | null>;
+  };
+  const localPath = await mod.findLocalExtensionPath(extensionSlug, process.cwd());
+  if (!localPath) return null;
+  try {
+    await fs.access(path.join(localPath, "extension.yml"));
+    return localPath;
+  } catch {
+    return null;
+  }
+}
 
 // Shape of .specify/extensions/.registry (spec-kit CLI's install-state file).
 interface ExtensionRegistryEntry {
@@ -285,35 +334,41 @@ export const SPEC_KIT_WORKFLOW: WorkflowDefinition = {
   ]
 };
 
+// IMPORTANT: every step instruction must explicitly tell the agent to use the
+// Write/Edit tools and write the artifact to disk. Without this, claude-sonnet
+// readily generates the content as inline text in its reply and tells the user
+// "I have no write permission" — even though the ACP runner is launched with
+// `--allow-dangerously-skip-permissions` and the tools are available. The
+// agent's behavior is conservative: it only writes when explicitly instructed.
 const BUILT_IN_SPEC_KIT_STEP_INSTRUCTIONS: Record<string, string> = {
   constitution: [
     "You are running the provider-neutral Spec Kit Constitution step.",
-    "Work inside the current repository. Create or update `.specify/memory/constitution.md`.",
+    "Use the Write tool with the RELATIVE path `.specify/memory/constitution.md` (NOT an absolute path like `/app/...` — your cwd IS the project repository root, paths are resolved against it). If the file already exists, use the Edit/Read tools to refine it instead of replacing useful existing content.",
+    "DO NOT output the constitution content inline as chat text — it MUST land on disk via the Write tool. Your reply should be a short summary of what you wrote plus any open questions.",
     "Capture project principles as concrete, testable rules for code quality, testing, UX, performance, security, and delivery.",
-    "If the file already exists, refine it instead of replacing useful existing content.",
   ].join("\n"),
   specify: [
     "You are running the provider-neutral Spec Kit Specify step.",
-    "Work inside `.specify/specs/`. Create or update the current feature spec as `spec.md`.",
-    "Describe what is being built and why: user stories, scenarios, acceptance criteria, constraints, and out-of-scope items.",
-    "Keep implementation details light unless they are required to disambiguate behavior.",
+    "Use the Write tool to create or update the current feature spec at `.specify/specs/<feature>/spec.md` in the current working directory. Pick a short kebab-case feature folder name if none exists yet.",
+    "DO NOT output the spec content inline as chat text — it MUST land on disk. Your reply should be a short summary of the spec plus any open questions.",
+    "Describe what is being built and why: user stories, scenarios, acceptance criteria, constraints, and out-of-scope items. Keep implementation details light unless they are required to disambiguate behavior.",
   ].join("\n"),
   plan: [
     "You are running the provider-neutral Spec Kit Plan step.",
-    "Read the current feature spec under `.specify/specs/` and create or update `plan.md` in that feature directory.",
-    "Produce an implementation plan covering architecture, data model, interfaces, dependencies, risks, and validation strategy.",
-    "Prefer concrete technical decisions over vague options, while recording meaningful tradeoffs.",
+    "Use the Read tool to load the current feature spec under `.specify/specs/`, then use the Write tool to create or update `plan.md` in that same feature directory.",
+    "DO NOT output the plan inline as chat text — it MUST land on disk. Your reply should be a short summary of the plan plus any open questions.",
+    "Produce an implementation plan covering architecture, data model, interfaces, dependencies, risks, and validation strategy. Prefer concrete technical decisions over vague options, while recording meaningful tradeoffs.",
   ].join("\n"),
   tasks: [
     "You are running the provider-neutral Spec Kit Tasks step.",
-    "Read the current feature `spec.md` and `plan.md`, then create or update `tasks.md` in that feature directory.",
-    "Write executable tasks with stable IDs such as `T001`, clear acceptance criteria, and explicit dependencies when needed.",
-    "Mark tasks that can safely run in parallel with `[P]`.",
+    "Use the Read tool to load the current feature `spec.md` and `plan.md`, then use the Write tool to create or update `tasks.md` in that feature directory.",
+    "DO NOT output the task list inline as chat text — it MUST land on disk. Your reply should be a short summary of the tasks plus any open questions.",
+    "Write executable tasks with stable IDs such as `T001`, clear acceptance criteria, and explicit dependencies when needed. Mark tasks that can safely run in parallel with `[P]`.",
   ].join("\n"),
   implement: [
     "You are running the provider-neutral Spec Kit Implement step.",
-    "Execute the selected implementation task in the current repository. Keep changes scoped and verify them when practical.",
-    "Update files directly, run focused checks, and summarize the completed work.",
+    "Execute the selected implementation task in the current repository. Use the Read/Edit/Write/Bash tools as needed — keep changes scoped and verify them when practical.",
+    "Update files directly with the Edit/Write tools, run focused checks via Bash, and summarize the completed work in your reply.",
   ].join("\n"),
 };
 
@@ -389,7 +444,8 @@ export async function loadInstalledExtensionWorkflow(
   projectSlug: string,
   extensionSlug: string
 ): Promise<WorkflowDefinition | null> {
-  const extDir = path.join(projectCwd(orgId, projectSlug), ".specify", "extensions", extensionSlug);
+  const extDir = await resolveExtensionDir(orgId, projectSlug, extensionSlug);
+  if (!extDir) return null;
   const ymlPath = path.join(extDir, "extension.yml");
 
   let ymlContent: string;
@@ -468,7 +524,8 @@ export async function loadStepCommandBody(
   extensionSlug: string,
   stepId: string
 ): Promise<string | null> {
-  const extDir = path.join(projectCwd(orgId, projectSlug), ".specify", "extensions", extensionSlug);
+  const extDir = await resolveExtensionDir(orgId, projectSlug, extensionSlug);
+  if (!extDir) return null;
   let ymlContent: string;
   try {
     ymlContent = await fs.readFile(path.join(extDir, "extension.yml"), "utf8");
