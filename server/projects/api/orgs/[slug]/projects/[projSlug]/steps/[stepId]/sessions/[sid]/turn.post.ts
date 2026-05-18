@@ -21,6 +21,49 @@ const turnSchema = z.object({
   content: z.string().trim().min(1).max(32_000),
 });
 
+// On idle/restart/crash recovery we replay this many trailing messages. Set
+// generously: users may return after hours or days and need the agent to feel
+// like it remembers the whole conversation. Pathologically long chats are
+// bounded so the recovery prompt stays under Claude's context limit.
+const HISTORY_CONTEXT_LIMIT = 100;
+
+/**
+ * Build the workflow-context prefix that goes in front of the user's content on
+ * turn 1, AND on recovery turns when the keep-alive session was lost. Returns
+ * null when the workflow has no command file for this step.
+ */
+async function buildWorkflowPrefix(
+  orgId: string,
+  slug: string,
+  stepId: string,
+): Promise<string | null> {
+  const workflowId = await getProjectWorkflowId(orgId, slug);
+  const workflow =
+    workflowId === "spec-kit"
+      ? SPEC_KIT_WORKFLOW
+      : (await loadInstalledExtensionWorkflow(orgId, slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
+  const stepDef = workflow.steps.find((s) => s.id === stepId);
+  if (!stepDef?.command) return null;
+  const stepIndex = workflow.steps.findIndex((s) => s.id === stepId);
+  const total = workflow.steps.length;
+  const nextStep = stepIndex + 1 < total ? workflow.steps[stepIndex + 1] : null;
+  const workflowCtx = [
+    `SPECIFYR WORKFLOW CONTEXT:`,
+    `You are in step ${stepIndex + 1} of ${total} ("${stepDef.label}") of the "${workflow.label}" workflow.`,
+    nextStep ? `The next step is "${nextStep.label}".` : `This is the final step.`,
+    `Focus exclusively on this step. Do not suggest actions from later steps or start the company runtime.`,
+    `If this step's artifacts already exist, confirm what is done and ask what to adjust or finalize for this step.`,
+  ].join(" ");
+  const commandBody =
+    workflowId === "spec-kit"
+      ? loadBuiltInSpecKitStepInstructions(stepId)
+      : await loadStepCommandBody(orgId, slug, workflowId, stepId);
+  const commandLabel = `Workflow command: ${stepDef.command}`;
+  return commandBody
+    ? `${commandLabel}\n\n${commandBody}\n\n---\n\n${workflowCtx}`
+    : `${commandLabel}\n\n${workflowCtx}`;
+}
+
 /**
  * Kicks off a chat turn. The turn runs in the background under the TurnBroker —
  * this handler returns immediately with `startSeq` so the caller knows what
@@ -62,37 +105,40 @@ export default defineEventHandler(async (event) => {
     (m: { role: string; metadata?: { failed?: boolean } }) =>
       m.role === "assistant" && !m.metadata?.failed,
   );
+  // The broker holds a long-lived ACP child + session per chat (keep-alive),
+  // so follow-up turns can rely on the agent's in-process conversation memory.
+  // If that cache is missing (server restart, idle timeout, child crashed), we
+  // fall back to replaying the recent history as a prefix on this turn's prompt.
+  const hasLiveAgentSession = broker.hasLiveSession(orgId, slug, stepId, sid);
   let promptForAgent = content;
   if (!hasSuccessfulAssistantReply) {
-    const workflowId = await getProjectWorkflowId(orgId, slug);
-    const workflow =
-      workflowId === "spec-kit"
-        ? SPEC_KIT_WORKFLOW
-        : (await loadInstalledExtensionWorkflow(orgId, slug, workflowId)) ?? SPEC_KIT_WORKFLOW;
-    const stepDef = workflow.steps.find((s) => s.id === stepId);
-    if (stepDef?.command) {
-      const stepIndex = workflow.steps.findIndex((s) => s.id === stepId);
-      const total = workflow.steps.length;
-      const nextStep = stepIndex + 1 < total ? workflow.steps[stepIndex + 1] : null;
-      const workflowCtx = [
-        `SPECIFYR WORKFLOW CONTEXT:`,
-        `You are in step ${stepIndex + 1} of ${total} ("${stepDef.label}") of the "${workflow.label}" workflow.`,
-        nextStep ? `The next step is "${nextStep.label}".` : `This is the final step.`,
-        `Focus exclusively on this step. Do not suggest actions from later steps or start the company runtime.`,
-        `If this step's artifacts already exist, confirm what is done and ask what to adjust or finalize for this step.`
-      ].join(" ");
-      // Inject the full command-file body when an extension provides one.
-      const commandBody =
-        workflowId === "spec-kit"
-          ? loadBuiltInSpecKitStepInstructions(stepId)
-          : await loadStepCommandBody(orgId, slug, workflowId, stepId);
-      const commandLabel = `Workflow command: ${stepDef.command}`;
-      if (commandBody) {
-        promptForAgent = `${commandLabel}\n\n${commandBody}\n\n---\n\n${workflowCtx}\n\n${content}`;
-      } else {
-        promptForAgent = `${commandLabel}\n\n${workflowCtx}\n\n${content}`;
-      }
-    }
+    const prefix = await buildWorkflowPrefix(orgId, slug, stepId);
+    if (prefix) promptForAgent = `${prefix}\n\n${content}`;
+  } else if (!hasLiveAgentSession && priorMessages.length > 0) {
+    // No live keep-alive session — the agent process has either never run for
+    // this chat (cache lost on restart), been closed by idle timeout, or its
+    // child crashed. Rebuild the FULL initial context: re-inject the workflow
+    // command body + ctx (so the agent knows what step it's in and what
+    // instructions apply) and replay the prior conversation. Costs more init
+    // tokens but lets users resume after hours/days without the agent having
+    // "forgotten" the step.
+    const tail = priorMessages.slice(-HISTORY_CONTEXT_LIMIT) as Array<{
+      role: string;
+      content: string;
+    }>;
+    const history = tail
+      .map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`)
+      .join("\n\n");
+    const truncatedNote =
+      priorMessages.length > tail.length
+        ? `\n\n[…${priorMessages.length - tail.length} ältere Nachrichten weggelassen…]`
+        : "";
+    const prefix = await buildWorkflowPrefix(orgId, slug, stepId);
+    const parts: string[] = [];
+    if (prefix) parts.push(prefix);
+    parts.push(`[Bisheriger Gesprächsverlauf]${truncatedNote}\n\n${history}`);
+    parts.push(content);
+    promptForAgent = parts.join("\n\n---\n\n");
   }
 
   // Resolve the runner factory FIRST — it can throw 400/401 when no

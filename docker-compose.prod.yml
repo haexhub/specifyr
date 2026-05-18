@@ -43,6 +43,13 @@ services:
     volumes:
       - specifyr_data:/data
       - specifyr_credentials:/credentials
+      # claude-agent-acp persistiert pro Chat-Session ein JSONL unter
+      # ~/.claude/projects/<cwd-hash>/<sessionId>.jsonl. Im prod-Image ist
+      # ~ = /home/node (Dockerfile prod-Stage hat USER node). Ohne diesen
+      # Mount ist der Agent-State nach jedem Container-Recreate weg → ACP
+      # session/load kann nicht greifen. Named volume statt bind-mount, weil
+      # der Inhalt für Operator-Inspektion irrelevant ist.
+      - specifyr_claude:/home/node/.claude
       # Docker-Socket: gleiche Begründung wie in docker-compose.yml — erlaubt
       # `docker run` von innen, um Hermes-Agent-Container zu spawnen. Effektiv
       # Host-root für diesen Container; in Multi-User-Deployments revisiten.
@@ -61,3 +68,4 @@ networks:
 volumes:
   specifyr_data:
   specifyr_credentials:
+  specifyr_claude:

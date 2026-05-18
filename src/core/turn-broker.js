@@ -1,18 +1,27 @@
 import { EventEmitter } from "node:events";
 
 const CONTEXT_MESSAGES_ON_RESET = 10;
+// Default idle window before a cached keep-alive runner is closed. 30 min matches
+// the typical interactive-chat dwell time; subsequent turns within this window
+// reuse the same ACP session (so the agent keeps its in-memory context).
+const DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000;
 
 /**
- * Per-process singleton that owns the lifecycle of in-flight chat turns.
+ * Per-process singleton that owns the lifecycle of in-flight chat turns AND of
+ * the persistent ACP runner that those turns share.
  *
  * Design contract:
- *   - The DISK is the single source of truth. Every event the runner emits is
- *     written to `.specifyr/<slug>/steps/<stepId>/sessions/<sid>.events.jsonl`.
- *   - The broker holds only two things in memory:
- *       1. `running`: a Map of sessionKey → live runner handle (so we can cancel)
- *       2. `emitters`: a Map of sessionKey → EventEmitter (notification only —
- *          the EVENT PAYLOADS themselves never sit in memory beyond the moment
- *          of emission). Subscribers re-read disk for any payload they need.
+ *   - The DISK is the single source of truth for *messages*. Every event the
+ *     runner emits is written to `.specifyr/<slug>/steps/<stepId>/sessions/<sid>.events.jsonl`.
+ *   - In-memory state is exactly:
+ *       1. `running`: sessionKey → live runner handle for the *current turn*
+ *          (so cancel() can reach it).
+ *       2. `emitters`: sessionKey → EventEmitter (notification only — event
+ *          payloads do not sit in memory beyond emission).
+ *       3. `sessions`: sessionKey → { runner, idleTimer } for keep-alive runners
+ *          that survive across turns so the agent retains conversation context
+ *          inside its own process. Closed by idle timeout, on child death, or
+ *          on `closeAll()` (server shutdown).
  *   - `runner.cancel()` is NEVER called from a client-disconnect handler. The
  *     turn runs to completion regardless of whether anyone is watching.
  */
@@ -22,11 +31,13 @@ function keyFor(orgId, slug, stepId, sid) {
 }
 
 export class TurnBroker {
-  constructor({ sessionStore, runnerFactory }) {
+  constructor({ sessionStore, runnerFactory, idleTimeoutMs = DEFAULT_IDLE_TIMEOUT_MS }) {
     this.sessionStore = sessionStore;
     this.runnerFactory = runnerFactory;
     this.running = new Map();
     this.emitters = new Map();
+    this.sessions = new Map();
+    this.idleTimeoutMs = idleTimeoutMs;
   }
 
   /** Get-or-create the EventEmitter for a session. Cheap (just listener list). */
@@ -45,6 +56,91 @@ export class TurnBroker {
 
   isRunning(orgId, slug, stepId, sid) {
     return this.running.has(keyFor(orgId, slug, stepId, sid));
+  }
+
+  /**
+   * True iff a keep-alive runner is currently cached for this session AND its
+   * child process is still alive. Callers use this to decide whether the next
+   * prompt needs to re-inject conversation history (after restart / idle /
+   * crash) or can rely on the agent's in-process memory.
+   */
+  hasLiveSession(orgId, slug, stepId, sid) {
+    const state = this.sessions.get(keyFor(orgId, slug, stepId, sid));
+    return !!(state && typeof state.runner.isAlive === "function" && state.runner.isAlive());
+  }
+
+  _clearIdleTimer(state) {
+    if (state.idleTimer) {
+      clearTimeout(state.idleTimer);
+      state.idleTimer = null;
+    }
+  }
+
+  _armIdleTimer(key) {
+    const state = this.sessions.get(key);
+    if (!state) return;
+    this._clearIdleTimer(state);
+    state.idleTimer = setTimeout(() => {
+      this._closeSession(key).catch(() => {});
+    }, this.idleTimeoutMs);
+    // Don't hold the event loop open just to fire cleanup.
+    state.idleTimer.unref?.();
+  }
+
+  async _closeSession(key) {
+    const state = this.sessions.get(key);
+    if (!state) return;
+    this.sessions.delete(key);
+    this._clearIdleTimer(state);
+    if (typeof state.runner.close === "function") {
+      await state.runner.close().catch(() => {});
+    }
+  }
+
+  /** Drain every cached keep-alive runner. Call from Nitro shutdown hook. */
+  async closeAllSessions() {
+    const keys = [...this.sessions.keys()];
+    await Promise.allSettled(keys.map((k) => this._closeSession(k)));
+  }
+
+  /**
+   * Resolve the runner to use for this turn.
+   *   - If a live keep-alive runner is cached → reuse it (and disarm its idle timer).
+   *   - If a dead one is cached → drop it and create a fresh one.
+   *   - If the factory's runner exposes `start()` → treat as keep-alive: start
+   *     once, cache for follow-up turns.
+   *   - Otherwise (legacy / test fakes with only `run()`) → return uncached, caller
+   *     uses the one-shot `run()` path.
+   */
+  async _resolveRunner({ key, runnerFactory, cwd, onEvent, resumeSessionId }) {
+    const cached = this.sessions.get(key);
+    if (cached) {
+      this._clearIdleTimer(cached);
+      if (typeof cached.runner.isAlive === "function" && cached.runner.isAlive()) {
+        return { runner: cached.runner, keepAlive: true };
+      }
+      this.sessions.delete(key);
+      if (typeof cached.runner.close === "function") {
+        await cached.runner.close().catch(() => {});
+      }
+    }
+
+    const makeRunner = runnerFactory ?? this.runnerFactory;
+    const runner = await makeRunner({ cwd, onEvent });
+    if (typeof runner.start === "function" && typeof runner.prompt === "function") {
+      try {
+        // Pass the persisted session id so the runner can try ACP session/load
+        // before falling back to newSession. The runner is responsible for
+        // detecting capability + handling failure; we just supply the id.
+        await runner.start({ resumeSessionId });
+      } catch (err) {
+        if (typeof runner.close === "function") await runner.close().catch(() => {});
+        throw err;
+      }
+      this.sessions.set(key, { runner, idleTimer: null });
+      return { runner, keepAlive: true };
+    }
+    return { runner, keepAlive: false };
   }
 
   /**
@@ -99,10 +195,13 @@ export class TurnBroker {
       await append("session_update", update);
     };
 
-    // Mutable ref so cancel() always targets the currently-running child process,
-    // even after a session-expiry retry spawns a new runner.
-    const makeRunner = runnerFactory ?? this.runnerFactory;
-    let activeRunner = await makeRunner({ cwd, onEvent });
+    let { runner: activeRunner, keepAlive } = await this._resolveRunner({
+      key,
+      runnerFactory,
+      cwd,
+      onEvent,
+      resumeSessionId: claudeSessionId ?? undefined
+    });
 
     // Mark the boundary between "before this turn" and "this turn's events". Clients
     // reconnecting to a running session use this as the `since` cursor so they replay
@@ -114,20 +213,30 @@ export class TurnBroker {
 
     const promise = (async () => {
       try {
-        let result = await activeRunner.run({
-          prompt,
-          resumeSessionId: claudeSessionId ?? undefined
-        });
+        let result;
+        if (keepAlive) {
+          // Keep-alive: pass the per-turn onEvent to override whatever was
+          // installed at factory time, and DO NOT pass resumeSessionId — the
+          // child already holds the session in process memory.
+          result = await activeRunner.prompt({ prompt, onEvent });
+        } else {
+          result = await activeRunner.run({
+            prompt,
+            resumeSessionId: claudeSessionId ?? undefined
+          });
+        }
 
-        // is_error=true means Claude Code itself reported a failure (e.g. expired --resume
-        // ID, API error). exitCode !== 0 without a result event is also a hard failure.
+        // is_error=true means the agent itself reported a failure (e.g. expired
+        // --resume id, API error). exitCode !== 0 without a result event is also
+        // a hard failure.
         const isError = result.result?.is_error === true || result.exitCode !== 0;
         if (isError && !assistantText.trim()) {
           const errors = result.result?.errors ?? [];
 
-          // "No conversation found" = the --resume target expired (Claude's session cache has
-          // a short TTL). Auto-retry once without --resume so the turn succeeds. The user
-          // sees a notice; Claude loses previous context but the turn completes normally.
+          // "No conversation found" = the resume target expired (some agents have
+          // a short session cache TTL). Auto-retry once without resume so the
+          // turn succeeds; the user sees a notice; the agent loses prior context
+          // but the turn completes normally.
           if (claudeSessionId && errors.some((e) => /no conversation found/i.test(String(e)))) {
             await this.sessionStore.setClaudeSessionId(orgId, slug, stepId, sid, null);
 
@@ -147,8 +256,14 @@ export class TurnBroker {
             assistantText = "";
             toolUseSinceLastText = false;
             toolUses.splice(0);
-            activeRunner = await makeRunner({ cwd, onEvent });
-            result = await activeRunner.run({ prompt: retryPrompt });
+            // Drop the dead cached session so _resolveRunner spawns a fresh child.
+            await this._closeSession(key);
+            const resolved = await this._resolveRunner({ key, runnerFactory, cwd, onEvent });
+            activeRunner = resolved.runner;
+            keepAlive = resolved.keepAlive;
+            result = keepAlive
+              ? await activeRunner.prompt({ prompt: retryPrompt, onEvent })
+              : await activeRunner.run({ prompt: retryPrompt });
           }
         }
 
@@ -210,8 +325,19 @@ export class TurnBroker {
           status: "failed",
           runningSinceSeq: null
         });
+        // If the cached child died mid-turn, drop the entry so the next turn
+        // spawns a fresh one. Live sessions keep their cache so the next turn
+        // reuses them.
+        if (keepAlive && typeof activeRunner.isAlive === "function" && !activeRunner.isAlive()) {
+          await this._closeSession(key);
+        }
       } finally {
         this.running.delete(key);
+        // Arm the idle timer for cached keep-alive runners (only those still
+        // alive after the turn). One-shot runners are already closed by run().
+        if (keepAlive && this.sessions.has(key)) {
+          this._armIdleTimer(key);
+        }
         // 'ended' tells subscribers "no more live events" so they can stop waiting.
         // We keep the emitter around — same key may host another turn later.
         emitter.emit("ended");
