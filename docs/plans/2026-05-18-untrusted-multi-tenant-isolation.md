@@ -1,7 +1,17 @@
 # Untrusted Multi-Tenant Isolation Plan (Stufe 1 + 2)
 
-> **Status:** Design draft, not yet scheduled. No implementation work has started.
-> Owner: tbd. Estimated effort: 2–3 weeks for Stufe 1, additional 1–2 weeks for Stufe 2.
+> **Status:** ⛔ SUPERSEDED (2026-05-18). Wir verfolgen stattdessen den Browser-MCP-Ansatz:
+> der LLM/Agent-Stack läuft im User-Browser, der Specifyr-Server stellt nur eine
+> definierte REST-Tool-Surface bereit und führt selbst keinen Agent-Code mehr aus.
+> Damit entfällt der Container-Isolations-Pfad für den Speckit-Chat komplett.
+> Nachfolge-Plan: siehe `docs/plans/2026-05-18-browser-mcp-spec-agent.md`.
+>
+> Dokument bleibt erhalten, weil es das Server-Side-Threat-Model + Container-Design
+> dokumentiert — falls wir später revertieren müssen (z.B. wenn Browser-Execution
+> sich als untragbar erweist) oder ein Hermes-Runtime-Cluster auf eigener Infrastruktur
+> die gleichen Isolations-Patterns braucht.
+>
+> Owner: tbd. Estimated effort (historisch): 2–3 weeks for Stufe 1, additional 1–2 weeks for Stufe 2.
 
 ## Goal
 
