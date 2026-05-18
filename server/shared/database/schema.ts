@@ -5,6 +5,7 @@ import {
   cidr,
   foreignKey,
   index,
+  integer,
   jsonb,
   pgPolicy,
   pgRole,
@@ -126,6 +127,10 @@ export const projects = pgTable(
       .notNull()
       .references(() => orgs.id, { onDelete: "cascade" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    // Monotonic counter incremented by a successful spec-draft publish.
+    // Browser drafts carry a `base_version` snapshot of this counter at
+    // fork time; publish is a compare-and-swap (see spec_drafts below).
+    specPublicVersion: integer("spec_public_version").notNull().default(0),
   },
   (t) => ({
     ownerOrgIdx: index("projects_owner_org_idx").on(t.ownerOrgId),
@@ -556,3 +561,81 @@ export const jwtSigningKey = specifyrVaultSchema.table(
 
 export type JwtSigningKey = typeof jwtSigningKey.$inferSelect;
 export type NewJwtSigningKey = typeof jwtSigningKey.$inferInsert;
+
+// Per-user private spec drafts. The browser-side spec agent (see
+// docs/plans/2026-05-18-browser-mcp-spec-agent.md) auto-PATCHes a draft
+// after every completed turn — Postgres is the source of truth for
+// drafts and their conversation history. The browser only caches the
+// currently active session.
+//
+// `status='draft'` rows are owner-only; `status='published'` rows are
+// audit-trail entries visible to anyone with project access (handled in
+// the app layer — see project-access middleware + per-endpoint WHEREs;
+// row-level security is not used for user-scoped data elsewhere in this
+// schema, so we stay consistent).
+//
+// `base_version` snapshots `projects.spec_public_version` at fork time;
+// publish is a compare-and-swap that succeeds iff base_version still
+// matches the current public version (see the publish endpoint).
+export const specDrafts = pgTable(
+  "spec_drafts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    ownerUserId: uuid("owner_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    status: text("status", { enum: ["draft", "published"] })
+      .notNull()
+      .default("draft"),
+    baseVersion: integer("base_version").notNull(),
+    // Vercel-AI-SDK message array. Validated at the wire boundary
+    // (Zod in spec-tools-schemas.ts); stored as jsonb so we get
+    // write-time JSON validation without parsing on every read.
+    conversation: jsonb("conversation").notNull().default(sql`'[]'::jsonb`),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+  },
+  (t) => ({
+    byProjectOwner: index("spec_drafts_project_owner_idx").on(
+      t.projectId,
+      t.ownerUserId,
+    ),
+    byProjectStatus: index("spec_drafts_project_status_idx").on(
+      t.projectId,
+      t.status,
+    ),
+  }),
+);
+
+export type SpecDraft = typeof specDrafts.$inferSelect;
+export type NewSpecDraft = typeof specDrafts.$inferInsert;
+
+// Spec file contents per draft. Composite primary key (draft_id, name)
+// lets the publish endpoint diff trivially and treat the bundle as the
+// unit of write — patching files is "replace the set", not "merge in
+// place" (vereinfacht die Conflict-Resolution beim Publish).
+export const specDraftFiles = pgTable(
+  "spec_draft_files",
+  {
+    draftId: uuid("draft_id")
+      .notNull()
+      .references(() => specDrafts.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    content: text("content").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.draftId, t.name] }),
+  }),
+);
+
+export type SpecDraftFile = typeof specDraftFiles.$inferSelect;
+export type NewSpecDraftFile = typeof specDraftFiles.$inferInsert;
