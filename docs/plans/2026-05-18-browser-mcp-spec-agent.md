@@ -9,9 +9,9 @@
 
 **Goal:** Den Speckit-Chat-Agent aus dem Specifyr-Server in den User-Browser verlagern. Der Server stellt nur eine schmale, getypte REST-Tool-Surface bereit und führt selbst keinen LLM- oder Agent-Code mehr aus.
 
-**Architecture:** Browser nutzt Vercel AI SDK gegen einen User-konfigurierten Provider (Anthropic / OpenAI / OpenRouter / Google). Tool-Calls des LLMs landen als REST-Aufrufe gegen ein klar definiertes Specifyr-API-Endpoint-Set oder werden lokal im Browser ausgeführt (Pinia-Store-Writes, persistiert via `pinia-plugin-persistedstate`). Pro Projekt gibt es **einen aktuellen Public-State** (= canonical spec auf disk) sowie pro User N private Drafts. Publish ist eine optimistic-concurrency-Operation (compare-and-swap auf `spec_public_version`): wenn der Public-State sich seit Draft-Erstellung bewegt hat, muss der User den Konflikt manuell auflösen bevor Publish gelingt.
+**Architecture:** Browser nutzt Vercel AI SDK gegen einen User-konfigurierten Provider (Anthropic / OpenAI / OpenRouter / Google). Tool-Calls des LLMs landen als REST-Aufrufe gegen ein klar definiertes Specifyr-API-Endpoint-Set oder werden zunächst lokal in den Active-Session-Store des Browsers geschrieben. Quelle der Wahrheit für Drafts + Conversation-Historie ist Postgres; der Browser auto-PATCHt nach jedem fertigen Agent-Turn (mit Auto-Retry + exponential backoff bei Failure). Pro Projekt gibt es **einen aktuellen Public-State** (= canonical spec auf disk) sowie pro User N private Drafts. Publish ist eine optimistic-concurrency-Operation (compare-and-swap auf `spec_public_version`): wenn der Public-State sich seit Draft-Erstellung bewegt hat, muss der User den Konflikt manuell auflösen bevor Publish gelingt.
 
-**Tech Stack:** Vercel AI SDK (`ai` 4.x) + Provider-Packages (`@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google`), Nuxt 4 / Nitro für REST, Drizzle für DB, Pinia + `pinia-plugin-persistedstate` (persistiert nach `localStorage` — der Plugin verlangt synchrones Storage) im Browser, Zod für Tool-Input-Validation.
+**Tech Stack:** Vercel AI SDK (`ai` 4.x) + Provider-Packages (`@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/google`), Nuxt 4 / Nitro für REST, Drizzle + Postgres für DB (Source of Truth für Drafts + Conversation), Pinia + `pinia-plugin-persistedstate` (persistiert nach `localStorage` — nur Provider-Identities + ephemerer Session-Cache) im Browser, Zod für Tool-Input-Validation.
 
 ---
 
@@ -26,7 +26,7 @@ Aktuell läuft `claude-agent-acp` als Child-Prozess im Specifyr-Container. Das h
 Container-Isolation (siehe superseded Plan) löst (1) und teilweise (2), aber nicht (3) ohne separate Per-User-Worktrees. **Browser-side Execution löst alle drei in einem Schritt**, weil:
 
 - LLM und Tool-Definitions leben im Browser — Server hat keinen Code-Execution-Pfad mehr für LLM-Output.
-- Plan-Drafts sind per-User (Pinia-Store im Browser, persistiert lokal), kein gemeinsamer Server-State.
+- Plan-Drafts sind per-User (Server-side persisted, RLS-enforced), kein gemeinsam-schreibbarer Public-State außerhalb des CAS-Publish.
 - Server-Operationen passieren nur über getypte REST-Endpoints, deren Implementation wir kontrollieren — keine `Bash`-Tool-Surface mehr für das LLM.
 
 Hermes-Runtime-Agents (autonome, langlaufende Workflows) sind **außerhalb dieser Scope** und werden später auf separater Hardware deployt.
@@ -51,9 +51,12 @@ Hermes-Runtime-Agents (autonome, langlaufende Workflows) sind **außerhalb diese
 │  │  └──────────────────────────────────────┘  │    │
 │  │                                             │    │
 │  │  ┌──────────────────────────────────────┐  │    │
-│  │  │ Spec-Draft Pinia Store (localStorage)│  │    │
-│  │  │  - conversation history              │  │    │
-│  │  │  - current draft files               │  │    │
+│  │  │ Active-Session Pinia Store           │  │    │
+│  │  │  - active draftId + fetched state    │  │    │
+│  │  │  - in-flight stream buffer           │  │    │
+│  │  │  - save-queue (auto-retry on fail)   │  │    │
+│  │  │  (localStorage only as ephemeral     │  │    │
+│  │  │   tab-reload cache; truth = server)  │  │    │
 │  │  └──────────────────────────────────────┘  │    │
 │  └────────────────────────────────────────────┘    │
 │                                                     │
@@ -90,15 +93,17 @@ Zwei Klassen:
 | `read_existing_spec` | REST `GET /api/projects/{id}/spec-public-state` | `{ name?: string }` (specific file or all) | `{ files: [{ name, content }], version }` |
 | `list_my_drafts` | REST `GET /api/projects/{id}/spec-drafts/mine` | none | `{ drafts: [{ id, title, base_version, status, updated_at }] }` |
 | `load_draft` | REST `GET /api/projects/{id}/spec-drafts/{draftId}` | `{ draftId }` | `{ title, files, base_version, conversation }` |
-| `update_draft_files` | **lokal** — Pinia-Store-Write (persistiert via persistedstate), kein REST-Call | `{ files: [{ name, content }] }` | `{ ok: true }` |
+| `update_draft_files` | **lokal** — Active-Session-Store-Write; wird nach Turn-Ende automatisch zum Server gePATCHt | `{ files: [{ name, content }] }` | `{ ok: true }` |
 
 **(B) User-Actions** — vom UI ausgelöst, NICHT vom LLM aufrufbar:
 
 | Aktion | Endpoint | Zweck |
 |---|---|---|
-| Save to Server | `POST /api/projects/{id}/spec-drafts` (new) bzw. `PATCH /api/projects/{id}/spec-drafts/{draftId}` (existing) | Snapshot des aktuellen Browser-Drafts auf Server speichern (für Cross-Device + Audit). Owner only. |
 | Publish | `POST /api/projects/{id}/spec-drafts/{draftId}/publish` | Compare-and-swap `base_version` ↔ `spec_public_version`. Bei Match: Files nach disk schreiben, version inkrementieren, draft.status="published". Bei Mismatch: 409 mit Conflict-Diff. |
-| Discard | `DELETE /api/projects/{id}/spec-drafts/{draftId}` | Owner verwirft Draft. Tombstone zur Recovery-Prävention oder Hard-Delete — TBD. |
+| Discard | `DELETE /api/projects/{id}/spec-drafts/{draftId}` | Owner verwirft Draft. Hard-delete für `status="draft"`; `status="published"` → 409 (Audit-Trail immutable). |
+| Retry Save | UI-Button (nur sichtbar wenn Auto-Save final fehlgeschlagen, siehe unten) | PATCH manuell erneut auslösen. |
+
+**(C) Auto-Save (implicit, nicht user-triggered)** — Nach jedem fertigen Agent-Turn `PATCH /api/projects/{id}/spec-drafts/{draftId}` mit `{ conversation, files }`. Bei Failure: 3 Auto-Retries mit exponential backoff (2s / 4s / 8s); danach Banner "Save failed — Retry" mit manuellem Button. Während ausstehender Saves hält der Browser den Turn im Active-Session-Store; bei Tab-Reload wird der Save fortgesetzt.
 
 **Bewusst NICHT in der Surface:** kein `write_arbitrary_file`, kein `execute_command`, kein `git_*`, kein `npm_install`, kein `read_git_log`. Was ein autonomer Hermes-Agent später braucht, ist eine eigene, getrennte Surface auf separater Infra.
 
@@ -149,8 +154,9 @@ type IdentityStoreState = {
 ```
 
 **Storage:**
-- **Browser (primary):** Pinia-Store, persistiert via `pinia-plugin-persistedstate` nach `localStorage`. Kontinuierliche Persistierung jedes Turns inklusive Conversation-History + Tool-Call-Log + Draft-Files. Crash-safety im Browser. Quota-Monitoring als Risk (siehe Risiken-Tabelle); Fallback ist ein separater manueller IndexedDB-Cache für Draft-Inhalte, *kein* Hack mit async-Storage-Adapter (persistedstate verlangt synchrones Storage).
-- **Server (on manual Save):** User klickt "Save to Server" → kompletter Snapshot (Files + Conversation) wird via REST persistiert. Keine Auto-Save, kein Server-Sync auf Per-Turn-Basis.
+- **Server (Source of Truth):** Postgres-Tabellen `spec_drafts` + `spec_draft_files` halten den vollständigen Stand jedes Drafts inkl. `conversation` (JSON-Array, Vercel-AI-SDK-Format). Browser PATCHt nach jedem fertigen Agent-Turn automatisch.
+- **Browser (Active-Session-Cache):** Pinia-Store mit `pinia-plugin-persistedstate` nach `localStorage`. Hält nur die **aktive Session** (gewählter Draft + In-Flight-Stream-Buffer + ausstehende Save-Queue) plus die Provider-Identities. Dient als Crash-Safety zwischen Tab-Reloads während ein Save fliegt — *keine* persistente Quelle. Bei Session-Start (User öffnet Speckit-Page oder wechselt Draft) wird der Cache durch ein fresh `GET /spec-drafts/{id}` ersetzt.
+- **Cross-Device-Continuity:** kommt natürlich aus dem Server-First-Modell. User logged auf Gerät B ein → `GET /spec-drafts/mine` listet seine Drafts → wählt einen → Gerät B mountet Agent mit komplettem History-Kontext.
 
 **Privacy:**
 - `status="draft"` → nur Owner kann lesen (RLS: `owner_user_id = current_user_id`).
@@ -160,7 +166,7 @@ type IdentityStoreState = {
 1. User klickt "Publish" auf seinem Draft (status="draft").
 2. Server: lock project row, vergleiche `draft.base_version === project.spec_public_version`.
 3. **Match:** Files atomisch nach `projects/<org>/<slug>/specs/` schreiben, `project.spec_public_version += 1`, `draft.status = "published"`. 201 Created.
-4. **Mismatch:** 409 Conflict mit Body `{ currentPublicVersion, currentPublicFiles }`. UI zeigt Diff zwischen Draft und neuem Public-State. User reconcilet manuell im Draft (kann die neuen Public-Files lesen via `read_existing_spec`-Tool, eigenen Draft via `update_draft_files`-Tool anpassen), klickt "Save to Server" + "Publish" erneut. Beim erneuten Publish wird `base_version` aus dem aktuellen `spec_public_version` neu abgeleitet.
+4. **Mismatch:** 409 Conflict mit Body `{ currentPublicVersion, currentPublicFiles }`. UI zeigt Diff zwischen Draft und neuem Public-State. User reconcilet manuell im Draft (kann die neuen Public-Files lesen via `read_existing_spec`-Tool, eigenen Draft via `update_draft_files`-Tool anpassen). Der nächste fertige Agent-Turn auto-PATCHt; der User klickt dann nur noch "Publish" erneut. Beim erneuten Publish wird `base_version` aus dem aktuellen `spec_public_version` neu abgeleitet.
 
 **Mehrere Drafts pro User:**
 - Erlaubt. User kann "v1 attempt", "v2 alternative framing", etc. parallel haben.
@@ -186,7 +192,7 @@ type IdentityStoreState = {
 
 - 5 REST-Endpoints für die Tool-Surface.
 - DB-Tabelle `spec_drafts` (Drizzle-Migration via `pnpm drizzle-kit generate`, NIE Migration-SQL hand-editieren).
-- Browser-Bundle für Speckit-Chat: Vercel AI SDK + Tool-Defs + Pinia-Stores (Provider-Identity + Spec-Draft) mit `pinia-plugin-persistedstate` (localStorage für beide) + Streaming-UI.
+- Browser-Bundle für Speckit-Chat: Vercel AI SDK + Tool-Defs + Pinia-Stores (Provider-Identity browser-only via `pinia-plugin-persistedstate`/localStorage + Active-Session als write-through-Cache zum Server) + Streaming-UI mit Auto-Save-Indikator.
 - Provider-Settings-Seite, die den Provider-Identity-Pinia-Store rendert.
 
 ### Was wird entfernt (Phase 4, nach Stabilisierung)
@@ -515,66 +521,89 @@ Persistierung auf `localStorage` ist hier OK (Payload < 10 KB).
 
 **Commit:** `feat(ui): speckit provider identity settings page`
 
-#### Task 2.4: Spec-Draft Pinia Store
+#### Task 2.4: Active-Session Pinia Store
+
+Hält **eine** aktive Draft-Session pro Tab. Server ist Source of Truth; dieser Store ist write-through-Cache + ephemerer Crash-Buffer.
 
 **Files:**
-- Create: `app/stores/spec-draft.ts`
-- Test: `tests/unit/spec-draft-store.test.ts`
+- Create: `app/stores/active-session.ts`
+- Test: `tests/unit/active-session-store.test.ts`
 
 **Datenmodell (im Store):**
 ```ts
-type LocalDraft = {
-  id: string,                        // local UUID
-  serverId: string | null,           // populated nach Save-to-Server
+type ActiveSession = {
+  draftId: string,                   // server draft id
   projectId: string,
   title: string,
   baseVersion: number,
   files: Record<string, string>,     // name → content
   conversation: Message[],           // Vercel-AI-SDK format
   status: "draft" | "published",
-  createdAt: string,
-  updatedAt: string,
-  dirty: boolean,                    // true = changes since last Save-to-Server
+  serverUpdatedAt: string,           // last known server timestamp
 };
+
+type SaveState =
+  | { kind: "idle" }
+  | { kind: "saving"; attempt: 1 | 2 | 3 }
+  | { kind: "retrying"; nextAttemptAt: number; attempt: 1 | 2 | 3 }
+  | { kind: "failed"; reason: string };
 ```
 
 **Store-Skizze:**
 ```ts
-export const useSpecDraftStore = defineStore("speckit-spec-draft", {
+export const useActiveSessionStore = defineStore("speckit-active-session", {
   state: () => ({
-    drafts: {} as Record<string, LocalDraft>,
+    session: null as ActiveSession | null,
+    saveState: { kind: "idle" } as SaveState,
+    pendingSave: false,              // true = changes since last successful PATCH
   }),
-  getters: {
-    listForProject: (s) => (projectId: string) =>
-      Object.values(s.drafts).filter((d) => d.projectId === projectId),
-  },
   actions: {
-    createDraft(projectId, title, baseVersion, files): string { /* ... */ },
-    updateFiles(id, files: Record<string, string>) { /* mark dirty, update updatedAt */ },
-    appendTurn(id, turn: Message) { /* push, update updatedAt */ },
-    deleteDraft(id) { /* delete this.drafts[id] */ },
-    async saveToServer(id) { /* $fetch POST or PATCH, set serverId, clear dirty */ },
-    async fetchFromServer(projectId, serverDraftId) { /* $fetch GET, merge into store */ },
+    // Session lifecycle
+    async openDraft(projectId: string, draftId: string) {
+      // GET /spec-drafts/{draftId} → replace session, reset saveState
+    },
+    closeSession() {
+      // clear session + saveState; keep localStorage cache until next openDraft
+    },
+
+    // Mutations (called by tools / agent loop)
+    updateFiles(files: Record<string, string>) {
+      // mutate session.files, set pendingSave=true
+    },
+    appendTurn(turn: Message) {
+      // mutate session.conversation, set pendingSave=true
+    },
+
+    // Auto-save (called by composable after each completed turn)
+    async commitTurn() {
+      // PATCH /spec-drafts/{draftId} with { conversation, files }
+      // on success: pendingSave=false, saveState=idle, update serverUpdatedAt
+      // on failure: schedule retry (2s, 4s, 8s); after 3 fails → saveState=failed
+    },
+    async retrySaveNow() {
+      // user-triggered retry from the failure banner
+    },
   },
   persist: {
     storage: localStorage,
-    pick: ["drafts"],
+    pick: ["session", "pendingSave"],  // saveState is volatile
   },
 });
 ```
 
-**Quota-Hinweis:** localStorage hat ~5 MB. Realistische Conversation-Größen + 5–10 Drafts liegen darunter, aber Heavy-Use kann das Limit reißen. In Phase 2 instrumentieren wir `localStorage`'s `getItem(...).length` und loggen Warnungen ab z.B. 60 % Auslastung. Falls in der Praxis nötig → separater manueller IndexedDB-Cache (eigene Task, *außerhalb* des persistedstate-Pfads).
+**Begründung Active-Session als ein einzelnes Slot statt Map:** Pro Tab gibt es genau einen aktiven Draft. Mehrere Drafts gleichzeitig zu cachen war im alten Modell sinnvoll (Browser = Truth), ist im Server-First-Modell unnötiger State.
 
-**Tests** (vitest, `@pinia/testing`, gemockter `$fetch`, jsdom-eigenes `localStorage`):
-- createDraft → `listForProject` enthält Eintrag, `dirty=true`
-- appendTurn pushed Message, setzt updatedAt neu
-- updateFiles ersetzt files-Map, setzt dirty=true
-- saveToServer → ruft korrekten Endpoint (POST wenn `!serverId`, PATCH sonst), setzt `serverId`, `dirty=false`
-- fetchFromServer → merged Server-Draft ins lokale State
-- deleteDraft entfernt Eintrag
-- Persistierung: zweite Store-Instanz nach `getActivePinia()`-Reset lädt drafts aus `localStorage` zurück
+**Tests** (vitest, `@pinia/testing`, gemockter `$fetch`, jsdom-eigenes `localStorage`, fake timers für Backoff):
+- `openDraft` → fetched GET, ersetzt session
+- `appendTurn` → conversation wächst, pendingSave=true
+- `updateFiles` → files-Map ersetzt, pendingSave=true
+- `commitTurn` success → PATCH gerufen, pendingSave=false, saveState=idle
+- `commitTurn` fail × 3 → 3 Retries mit Backoff (fake timers), dann saveState=failed
+- `commitTurn` fail × 2, dann success bei Retry 3 → pendingSave=false, saveState=idle
+- `retrySaveNow` reset saveState und ruft PATCH erneut
+- Persistierung: Store-Reset → localStorage-Reload bringt session + pendingSave zurück (saveState bleibt "idle")
 
-**Commit:** `feat(speckit): pinia spec draft store with server sync`
+**Commit:** `feat(speckit): active-session pinia store with auto-save + retry`
 
 #### Task 2.5: Browser Tool Definitions
 
@@ -587,10 +616,10 @@ Definiert die 7 LLM-Tools für Vercel AI SDK (siehe Tool-Surface oben). Input-Sc
 ```ts
 import { tool } from "ai";
 import { listFilesInput, updateDraftFilesInput } from "...spec-tools-schemas";
-import { useSpecDraftStore } from "~/stores/spec-draft";
+import { useActiveSessionStore } from "~/stores/active-session";
 
-export function buildSpeckitTools(ctx: { projectId: string; currentLocalDraftId: string }) {
-  const drafts = useSpecDraftStore();
+export function buildSpeckitTools(ctx: { projectId: string }) {
+  const session = useActiveSessionStore();
   return {
     list_files: tool({
       description: "List files in the current project, optionally filtered by glob",
@@ -602,9 +631,10 @@ export function buildSpeckitTools(ctx: { projectId: string; currentLocalDraftId:
       description: "Update the current draft's files. Replaces the named file's content. Use this to write spec content.",
       inputSchema: updateDraftFilesInput,
       execute: ({ files }) => {
-        // LOCAL only — writes to Pinia store (persisted to localStorage), NO server call
+        // LOCAL only — writes to active-session store. The composable
+        // will commitTurn() to the server after the turn finishes.
         const fileMap = Object.fromEntries(files.map((f) => [f.name, f.content]));
-        drafts.updateFiles(ctx.currentLocalDraftId, fileMap);
+        session.updateFiles(fileMap);
         return { ok: true, files: files.map((f) => f.name) };
       },
     }),
@@ -626,28 +656,32 @@ export function buildSpeckitTools(ctx: { projectId: string; currentLocalDraftId:
 **API:**
 ```ts
 const {
-  localDraft,         // Ref<LocalDraft>
+  session,            // Ref<ActiveSession | null>
+  saveState,          // Ref<SaveState> — drives the save indicator
   isStreaming,        // Ref<boolean>
   currentToolCall,    // Ref<ToolCall | null>
   sendMessage,        // (text: string) => Promise<void>
   cancel,             // () => void
-  saveToServer,       // () => Promise<void>  — User-Action
   publish,            // () => Promise<{ ok } | { conflict: ConflictInfo }>  — User-Action
-} = useSpeckitAgent({ projectId, localDraftId });
+  retrySave,          // () => Promise<void> — wired to "Save failed — Retry" banner
+} = useSpeckitAgent({ projectId, draftId });
 ```
 
 Internally:
-- Lädt aktive Provider-Identity via `useProviderIdentityStore().active`
-- Konstruiert `streamText({ model: providerForIdentity(active), tools: buildSpeckitTools({...}), messages: localDraft.conversation, system: SPECKIT_SYSTEM_PROMPT })`
-- Bei jedem `onChunk`: `useSpecDraftStore().appendTurn(localDraftId, msg)` — Pinia persistedstate übernimmt den Disk-Write.
-- `saveToServer()` ruft `useSpecDraftStore().saveToServer(localDraftId)`.
-- `publish()` ruft erst `saveToServer`, dann `POST /spec-drafts/{serverId}/publish`; bei 409 returnt ConflictInfo (UI rendert Diff).
+- Auf Mount: `useActiveSessionStore().openDraft(projectId, draftId)` (GET /spec-drafts/{id}).
+- Lädt aktive Provider-Identity via `useProviderIdentityStore().active`.
+- Konstruiert `streamText({ model: providerForIdentity(active), tools: buildSpeckitTools({ projectId }), messages: session.conversation, system: SPECKIT_SYSTEM_PROMPT })`.
+- Während des Streams: `appendTurn` auf den Store für jedes Message-Delta (für UI-Reaktivität). pendingSave=true.
+- **Nach Turn-Ende** (Stream onFinish): `useActiveSessionStore().commitTurn()` → PATCH mit `{ conversation, files }`. Failure-Pfad → 3 Auto-Retries mit Backoff (2s/4s/8s) intern im Store; nach final fail `saveState=failed` → UI rendert Banner mit `retrySave`-Button.
+- `publish()` setzt voraus, dass `pendingSave === false` (oder triggert vorher `commitTurn`); dann `POST /spec-drafts/{draftId}/publish`; bei 409 returnt ConflictInfo (UI rendert Diff).
 
 **Tests:** Mock-Provider via Vercel AI SDK's `MockLanguageModelV1`. Verify:
-- Happy path: text + tool_call + result → conversation im Pinia-Store komplett, dirty=true
-- Cancel mid-stream → Store-State konsistent (kein partial turn)
+- Happy path: text + tool_call + result → conversation im Store komplett, nach onFinish PATCH gerufen, saveState=idle
+- Cancel mid-stream → Store-State konsistent (kein partial turn committed)
 - Tool-Error → in Conversation als error-message, Stream geht weiter
+- Network-Fail bei commitTurn → 3 Retries mit Backoff, dann saveState=failed; retrySave triggert PATCH erneut
 - Publish-Conflict → returnt ConflictInfo statt zu throwen
+- Publish bei pendingSave=true → wartet auf commitTurn vorher
 
 **Commit:** `feat(speckit): browser agent composable`
 
@@ -661,11 +695,13 @@ Internally:
 - Create: `app/components/speckit/PublishDialog.vue` (conflict-resolution UI)
 
 **UI-Flow:**
-- Page-Load: load active identity + project's public-state + my server-drafts via REST
-- Sidebar: Liste aller meiner Drafts (local + server-synced), "New Draft"-Button basiert neuer auf aktuellem public-state
-- Center: ChatPanel mit streaming-Messages + Tool-Call-Badges
-- Toolbar: "Save to Server" (disabled wenn `!dirty`), "Publish" (disabled wenn `!serverId`)
-- Conflict-Dialog: Diff-View "your draft vs new public state", User editiert oder cancelt
+- Page-Load: load active identity + project's public-state + my server-drafts via REST.
+- Sidebar: Liste **aller** meiner Server-Drafts in diesem Projekt (kein "local-only"-Konzept mehr — Server ist Truth), "New Draft"-Button basiert neuer auf aktuellem public-state, danach `openDraft` für den neuen Draft.
+- Center: ChatPanel mit streaming-Messages + Tool-Call-Badges. Auf Page-Load: `useActiveSessionStore().openDraft(projectId, draftId)`.
+- Toolbar:
+  - Save-Indikator (read-only): `{ idle: "Saved", saving: "Saving…", retrying: "Retrying in 4s (2/3)…", failed: "Save failed — Retry" }` ← reaktiv auf `saveState`.
+  - "Publish" (disabled wenn `saveState ≠ idle` oder `pendingSave`).
+- Conflict-Dialog: Diff-View "your draft vs new public state", User editiert oder cancelt.
 
 Feature-Flag `useBrowserAgent` toggled zwischen altem Server-Side-Chat und neuem Browser-Agent.
 
@@ -747,8 +783,9 @@ Nach 1–2 Wochen Beta mit Volunteers. Rollback-Switch bleibt für 1 weitere Woc
 | Provider-API-Key landet in `localStorage` → XSS-Vektor | mittel | Strikte CSP-Header (`connect-src` whitelist), Zod-validierte User-Inputs, keine User-HTML-Render-Pfade im Speckit-Bundle. AES-GCM-mit-Passphrase bewusst abgelehnt (siehe ADR). |
 | Tool-Call-Latenz fühlt sich langsam an | mittel | Batch-Tool-Endpoint als Fallback wenn UX-Tests es zeigen. |
 | Spec-Quality schlechter als heute (anderes Tool-Set) | mittel | A/B mit Beta-User für 2 Wochen vor Default-Switch. Detaillierte Tool-Descriptions + System-Prompt-Tuning. |
-| Cross-Device-Continuity gebrochen (Browser-State ist lokal) | niedrig | "Save to Server"-Pfad (Task 2.6) deckt das ab, sofern User die Provider-Identity auf jedem Device setzt. |
-| `localStorage` Quota (~5 MB) bei sehr aktiven Usern überschritten | niedrig–mittel | In Phase 2 instrumentieren wir die Auslastung; ab ~60 % loggen wir Warnung im UI. Falls in der Praxis getroffen: separater manueller IndexedDB-Cache für Draft-Inhalte (außerhalb persistedstate, eigene Task). |
+| Auto-Save schlägt mit allen 3 Retries fehl, User schließt Tab | niedrig | localStorage hält pendingSave-Flag + komplette Session bis next-open; Banner "Save failed — Retry" beim Wiederbetreten desselben Drafts. Datenverlust nur, wenn User den Cache vorher manuell löscht. |
+| Multi-Device-Edit-Race (User A öffnet Draft auf Gerät 1 + Gerät 2, editiert beide) | niedrig | Last-write-wins per PATCH (kein If-Match in v1). Selten genug, dass Coordination-Overhead nicht lohnt; bei realer Häufung später Session-Lock oder updatedAt-Mismatch-Detection. |
+| Conversation-JSON wächst unbeschränkt in Postgres | niedrig | Per `updatedAt`-Pruning oder Per-Turn-Cap (z.B. letzte 200 Turns) in einem späteren Release. Initial unbeschränkt. |
 
 ### Geklärte Entscheidungen (aus Walkthrough mit Stakeholder, 2026-05-18)
 
@@ -757,7 +794,7 @@ Nach 1–2 Wochen Beta mit Volunteers. Rollback-Switch bleibt für 1 weitere Woc
 | Tool-Surface: Cross-Device-Resume | `list_my_drafts` + `load_draft` als Tools beifügen | Sonst wäre Server-Sync sinnlos |
 | Multi-File-Specs: Schema | Draft-Bundle (`spec_drafts` + `spec_draft_files`) | Atomic Publish, klare Gruppierung |
 | `read_git_log`-Tool | Nicht initial, später wenn Bedarf | YAGNI, schmale Surface |
-| Auto-Save zum Server | Nur manuell ("Save to Server"-Button) | Browser-Store reicht für Crash-Safety, weniger Server-Load |
+| Auto-Save zum Server | Automatisch nach jedem fertigen Agent-Turn (PATCH); 3 Auto-Retries mit Backoff bei Failure, dann manueller Retry | Server = Source of Truth ist die Voraussetzung für Cross-Device-Resume. Per-Turn (statt per-Token) hält Server-Load niedrig. |
 | Draft-Sichtbarkeit | Nur Owner sieht Drafts (status="draft") | Klare Privacy-Boundary |
 | Canonical-Merge | Single Public-State + Optimistic-Concurrency Publish | Konflikt-Resolution durch User vor Publish |
 | Post-Publish-Lifecycle | Draft bleibt als published History sichtbar | Audit-Trail |
@@ -765,7 +802,7 @@ Nach 1–2 Wochen Beta mit Volunteers. Rollback-Switch bleibt für 1 weitere Woc
 | Cross-Device-Sync der Identity | Kein Sync, per-Device-Setup | Server sieht Keys nie |
 | Provider-Granularität | Mehrere Identities pro User, eine aktiv | Flexibel ohne pro-Projekt-Konfig |
 | Tool-Call-Telemetrie | Nein, Server-Access-Logs reichen | Nachträglich nachziehbar |
-| Conversation-Server-Storage | Files + Conversation, beides | Cross-Device-Resume inkl. Chat-Kontext |
+| Conversation-Server-Storage | Files + Conversation, beides — auto-PATCH nach jedem Turn | Cross-Device-Resume inkl. Chat-Kontext; Server = Source of Truth (siehe ADR) |
 | `oauth_credentials`-Schicksal | In Phase 4 grep-and-remove falls unbenutzt | Aufgeräumtere Codebase |
 
 ### In Phase 0 geklärte Fragen (2026-05-18)
@@ -773,7 +810,7 @@ Nach 1–2 Wochen Beta mit Volunteers. Rollback-Switch bleibt für 1 weitere Woc
 Vollständige Begründung in der [ADR](../adrs/2026-05-18-browser-mcp-architecture.md#resolved-phase-0-design-questions).
 
 1. **Discard-Semantik:** Hard-delete für `status="draft"`. `status="published"` ist immutable (Audit-Trail) → 409 bei DELETE.
-2. **Multi-Tab-Concurrency innerhalb eines Users:** Last-write-wins auf Basis von `localStorage`'s per-key-Atomarität. UI zeigt via `BroadcastChannel` eine Warnung, wenn derselbe Draft in mehreren Tabs offen ist. Cross-Tab-Auto-Sync ist bewusst nicht v1 — Begründung in der ADR (Streaming-Flicker).
+2. **Multi-Tab/Multi-Device-Concurrency innerhalb eines Users:** Last-write-wins per PATCH. UI zeigt via `BroadcastChannel` eine Warnung, wenn derselbe Draft in mehreren Tabs *desselben* Geräts offen ist (Cross-Device-Detection erst, wenn Telemetrie zeigt, dass es vorkommt). Cross-Tab-Auto-Sync für State ist bewusst nicht v1 — Begründung in der ADR (Streaming-Flicker).
 3. **System-Prompt:** v1 als TypeScript-Konstante in [`app/lib/speckit-system-prompt.ts`](../../app/lib/speckit-system-prompt.ts) eingecheckt. Iteration während Phase 2.
 
 ### Out of Scope (separat zu planen)

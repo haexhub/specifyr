@@ -60,11 +60,15 @@ Concretely:
   Zod-validated: `list_files`, `read_file`, `search_code`,
   `read_existing_spec`, `list_my_drafts`, `load_draft`,
   `update_draft_files`. Six map to REST endpoints (read-only against
-  server state); `update_draft_files` is local IndexedDB only.
-- **Tool surface (user-action, not LLM-callable).** Three: Save to
-  Server (snapshot draft to DB), Publish (compare-and-swap against
-  public version), Discard. Triggered from the chat UI, never from the
-  model.
+  server state); `update_draft_files` writes to the browser's
+  active-session store and is committed to the server by the
+  composable after the turn finishes.
+- **Tool surface (user-action, not LLM-callable).** Two: Publish
+  (compare-and-swap against public version), Discard. Triggered from
+  the chat UI, never from the model. Save-to-Server is *not* a user
+  action; the browser auto-commits the current draft state to
+  Postgres after each completed agent turn (with auto-retry +
+  exponential backoff on failure).
 - **State model.** One canonical "public" spec state per project (files
   on disk + a monotonic `spec_public_version` integer). N private
   drafts per user, each tagged with the `base_version` they were
@@ -79,14 +83,17 @@ Concretely:
   in a Pinia store and persisted plain to the browser (no
   passphrase). Cross-device sync explicitly out of scope: keys must
   be entered per device, and the server must never see them.
-- **Client state.** All Speckit browser state — provider identities,
-  local drafts, conversation history — lives in Pinia stores with
-  `pinia-plugin-persistedstate`, persisted to `localStorage`. The
-  plugin requires synchronous storage, so we do not use IndexedDB as
-  the persistedstate backend; if real usage approaches the ~5 MB
-  quota, the answer is a separate manual IndexedDB cache for draft
-  content (with an in-memory mirror in the store), not a wrapper that
-  pretends `idb-keyval` is sync. Persistedstate does not natively
+- **Where state lives.** Postgres is the source of truth for drafts
+  and conversation history (`spec_drafts` + `spec_draft_files`). The
+  browser holds only an *active-session* Pinia store — the currently
+  open draft + in-flight stream buffer + a pending-save queue —
+  persisted via `pinia-plugin-persistedstate` to `localStorage` as
+  an ephemeral tab-reload cache. Provider identities are the one
+  exception: they remain browser-only because the server promises
+  never to see provider keys. On session start (open Speckit page,
+  switch draft) the browser fetches the draft fresh from the server
+  and overwrites the local cache; the auto-save loop is what keeps
+  the two in sync during a session. Persistedstate does not natively
   sync across tabs; v1 deliberately keeps tabs independent and uses
   a `BroadcastChannel` advisory banner — see "Resolved Phase-0 Design
   Questions / 2".
@@ -106,14 +113,21 @@ Concretely:
   surface fed by LLM output exists for this path. (Hermes-runtime
   autonomous agents are out of scope and will be addressed on
   separate hardware in a future plan.)
-- **Threat (3) eliminated.** Drafts are per-user IndexedDB state on the
-  client. The single shared write — `publish` — is a CAS against
+- **Threat (3) eliminated.** Drafts are per-user rows in Postgres
+  (RLS-enforced: `status='draft'` is visible only to its owner). The
+  single shared write — `publish` — is a CAS against
   `spec_public_version`, so concurrent publishes never silently
-  clobber each other.
+  clobber each other. Same-user multi-device edits land via PATCH
+  with last-write-wins; the user is editing their own private data so
+  there is no cross-tenant damage even in the worst case.
 - **No Docker-in-Docker.** The agent no longer needs `docker.sock`.
   `claude-agent-acp` exits the Specifyr image entirely in Phase 4.
 - **Per-user API quota and billing.** Provider charges land directly
   on the user's account; Specifyr stops being a fan-out for LLM cost.
+- **Cross-device continuity comes for free.** Because the server
+  holds the full draft + conversation, a user signing in on a second
+  device sees the same draft list, can resume the same conversation,
+  and has all history available immediately.
 
 ### Negative
 
@@ -126,11 +140,17 @@ Concretely:
 - **No cross-device key sync.** A user who switches laptops must
   re-enter their provider key. Deliberate: the alternative requires
   the server to hold the key, which defeats the point.
-- **No silent server-side replay of an in-progress session.** If a
-  user's browser tab dies mid-turn, the chat resumes from the last
-  IndexedDB-persisted state, not from a hot in-memory server session.
-  We accept this; in practice Vercel AI SDK persists per chunk and
-  recovery is near-instant.
+- **Partial-turn loss on browser crash.** A turn is only committed to
+  Postgres after the agent finishes streaming. If the browser dies
+  mid-stream the partial output is lost — the localStorage active-
+  session cache holds the *last fully committed* state, not the
+  in-flight chunks. We accept this; in practice turns are short and
+  the next attempt resumes cleanly from the last server state.
+- **Network blip during PATCH = transient "Saving failed" UX.** The
+  composable retries three times with 2s/4s/8s backoff; after that
+  the user sees a banner and a manual retry button. Worst-case
+  data loss is the most recently completed turn, only if the user
+  clears their browser storage before the retry succeeds.
 - **Larger client bundle.** Vercel AI SDK + provider packages add
   roughly 80–120 kB gzipped to the Speckit page. Acceptable; the
   Speckit page is already gated behind authentication and rarely a
@@ -170,28 +190,29 @@ cannot be deleted; the endpoint returns 409 Conflict if attempted.
   asked for.
 - Published drafts are the audit trail. Their immutability is
   load-bearing for "who last published version N of this spec."
-- The IndexedDB-side draft store mirrors the same rule: discard is
-  hard-delete locally. Symmetric server-side semantics keep the
-  mental model simple.
-- If a user accidentally discards and regrets it, the IndexedDB
-  copy on their device is still there until they explicitly clear
-  it; this is sufficient recovery for a non-collaborative artifact.
+- After a successful DELETE the browser drops the active-session
+  cache for that draft. There is no client-side recovery path; if
+  the user wants the work back they have to talk to the agent again.
+  That's the correct cost for a "discard" affordance.
 
-### 2. Same-user multi-tab concurrency on one draft
+### 2. Same-user multi-tab / multi-device concurrency on one draft
 
-**Decision:** Last-write-wins, with a UI indicator. Multi-tab editing
-of the same draft is not blocked but is signalled.
+**Decision:** Last-write-wins via PATCH, with a UI indicator for the
+multi-tab case. Editing the same draft from two tabs or two devices
+is not blocked but is (where detectable) signalled.
 
 **Implementation sketch:**
 
 - Each draft view opens a `BroadcastChannel("speckit-draft:" + draftId)`
-  and posts a heartbeat with a per-tab UUID. If another tab is
-  detected, the UI shows a banner: *"This draft is open in another
-  tab. Edits in either tab may overwrite each other — close the other
-  tab to be safe."*
-- `pinia-plugin-persistedstate` writes to `localStorage` per state
-  change. localStorage writes are atomic per key, so the model is
-  last-writer-wins on a per-draft basis.
+  and posts a heartbeat with a per-tab UUID. If another tab on the
+  same device is detected, the UI shows a banner: *"This draft is
+  open in another tab. Edits in either tab may overwrite each other
+  — close the other tab to be safe."*
+- Cross-device editing is not detected in v1 (would require a
+  server-side "active sessions" endpoint). Server uses LWW on PATCH;
+  a late save from one device overwrites a save from another. The
+  data is the user's own private draft, so the only damage is the
+  user confusing themselves.
 
 **On cross-tab state sync — why we don't do it in v1:** Persistedstate
 ships no built-in cross-tab sync (its `storage` option requires a
