@@ -66,10 +66,10 @@ export const listFilesOutput = z.object({
   files: z.array(
     z.object({
       path: projectRelativePath,
-      size: z.number().int().nonnegative(),
       type: z.enum(["file", "directory"]),
     }),
   ),
+  truncated: z.boolean(),
 });
 
 // ---------------------------------------------------------------------------
