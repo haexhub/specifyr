@@ -2,8 +2,9 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-> **Status:** Architecture draft (2026-05-18), implementation not yet scheduled.
+> **Status:** Phase 0 in progress (2026-05-18); Phases 1–4 not yet scheduled.
 > Supersedes `2026-05-18-untrusted-multi-tenant-isolation.md`.
+> Architecture decision: [`docs/adrs/2026-05-18-browser-mcp-architecture.md`](../adrs/2026-05-18-browser-mcp-architecture.md).
 > Owner: tbd. Estimated effort: ~6–8 weeks across 5 phases.
 
 **Goal:** Den Speckit-Chat-Agent aus dem Specifyr-Server in den User-Browser verlagern. Der Server stellt nur eine schmale, getypte REST-Tool-Surface bereit und führt selbst keinen LLM- oder Agent-Code mehr aus.
@@ -204,16 +205,19 @@ type IdentityStoreState = {
 ### Phase 0: Spec + ADR (1–2 Tage)
 
 **Files:**
-- Create: `docs/adrs/2026-05-XX-browser-mcp-architecture.md`
+- Create: [`docs/adrs/2026-05-18-browser-mcp-architecture.md`](../adrs/2026-05-18-browser-mcp-architecture.md)
+- Create: [`server/shared/utils/spec-tools-schemas.ts`](../../server/shared/utils/spec-tools-schemas.ts) — Zod sketch
+- Create: [`app/lib/speckit-system-prompt.ts`](../../app/lib/speckit-system-prompt.ts) — v1 system prompt
 - Modify: `docs/plans/2026-05-18-browser-mcp-spec-agent.md` (dieses Dokument, mit Review-Feedback)
 
 **Aufgaben:**
 1. ADR schreiben, das die Entscheidung "Browser statt Container" mit Threat-Model + Trade-offs dokumentiert (Bestandteil siehe Diskussions-Threads im PR von diesem Plan).
 2. Tool-Schemas formal als Zod-Schema-Datei skizzieren — vor Implementation, weil das die REST-API-Form festlegt.
+3. v1 System-Prompt für den Speckit-Agent als TypeScript-Konstante festlegen (siehe ADR "Resolved Phase-0 Design Questions / 3").
 
-**Verification:** ADR + Plan-Dokument im Repo, beide referenziert vom alten superseded-Plan.
+**Verification:** ADR + Plan-Dokument + Schema-Sketch + System-Prompt im Repo, beide Pläne (alt + neu) kreuzverlinkt.
 
-**Commit:** `docs: ADR for browser-side spec agent architecture`
+**Commit:** `docs: ADR + zod schema sketch + system prompt for browser-side spec agent`
 
 ---
 
@@ -737,11 +741,13 @@ Nach 1–2 Wochen Beta mit Volunteers. Rollback-Switch bleibt für 1 weitere Woc
 | Conversation-Server-Storage | Files + Conversation, beides | Cross-Device-Resume inkl. Chat-Kontext |
 | `oauth_credentials`-Schicksal | In Phase 4 grep-and-remove falls unbenutzt | Aufgeräumtere Codebase |
 
-### Verbleibende offene Fragen für Phase 0
+### In Phase 0 geklärte Fragen (2026-05-18)
 
-1. **Discard-Semantik:** `DELETE /spec-drafts/{id}` — hard-delete oder soft-tombstone? Bei soft-tombstone: kann der User aus "trash" recovern? Empfehlung: hard-delete für status="draft" (es ist ja sein eigener Müll); status="published" kann nicht gelöscht werden.
-2. **Concurrency innerhalb eines Users:** kann derselbe User parallel im selben Draft auf zwei Browser-Tabs editieren? IndexedDB-Schreibe-Konflikte sind unrealistisch zu lösen ohne CRDT. Empfehlung: einfache Last-Write-Wins, document das im UI ("Don't edit the same draft in two tabs").
-3. **System-Prompt für den Speckit-Agent:** Inhalt und Struktur. Sollte explizit auf das Toolset eingehen und den User dazu anleiten, iterativ über Spec-Sektionen zu sprechen. Phase 0 Output: erster Draft des System-Prompts als Datei.
+Vollständige Begründung in der [ADR](../adrs/2026-05-18-browser-mcp-architecture.md#resolved-phase-0-design-questions).
+
+1. **Discard-Semantik:** Hard-delete für `status="draft"`. `status="published"` ist immutable (Audit-Trail) → 409 bei DELETE.
+2. **Multi-Tab-Concurrency innerhalb eines Users:** Last-write-wins. UI zeigt via `BroadcastChannel` eine Warnung, wenn derselbe Draft in mehreren Tabs offen ist. Kein CRDT, kein OT.
+3. **System-Prompt:** v1 als TypeScript-Konstante in [`app/lib/speckit-system-prompt.ts`](../../app/lib/speckit-system-prompt.ts) eingecheckt. Iteration während Phase 2.
 
 ### Out of Scope (separat zu planen)
 

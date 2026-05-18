@@ -4,7 +4,8 @@
 > der LLM/Agent-Stack läuft im User-Browser, der Specifyr-Server stellt nur eine
 > definierte REST-Tool-Surface bereit und führt selbst keinen Agent-Code mehr aus.
 > Damit entfällt der Container-Isolations-Pfad für den Speckit-Chat komplett.
-> Nachfolge-Plan: siehe `docs/plans/2026-05-18-browser-mcp-spec-agent.md`.
+> Nachfolge-Plan: [`docs/plans/2026-05-18-browser-mcp-spec-agent.md`](2026-05-18-browser-mcp-spec-agent.md).
+> Architektur-Entscheidung: [`docs/adrs/2026-05-18-browser-mcp-architecture.md`](../adrs/2026-05-18-browser-mcp-architecture.md).
 >
 > Dokument bleibt erhalten, weil es das Server-Side-Threat-Model + Container-Design
 > dokumentiert — falls wir später revertieren müssen (z.B. wenn Browser-Execution
