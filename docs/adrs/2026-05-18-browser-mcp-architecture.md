@@ -75,10 +75,21 @@ Concretely:
 - **Privacy.** `status="draft"` rows are visible only to their
   `owner_user_id` (RLS-enforced). `status="published"` rows are
   visible to anyone with project access — they are the audit trail.
-- **Provider identity.** Multi-identity per user, one active. Stored
-  plain in IndexedDB (no passphrase). Cross-device sync explicitly
-  out of scope: keys must be entered per device, and the server
-  must never see them.
+- **Provider identity.** Multi-identity per user, one active. Held
+  in a Pinia store and persisted plain to the browser (no
+  passphrase). Cross-device sync explicitly out of scope: keys must
+  be entered per device, and the server must never see them.
+- **Client state.** All Speckit browser state — provider identities,
+  local drafts, conversation history — lives in Pinia stores with
+  `pinia-plugin-persistedstate`, persisted to `localStorage`. The
+  plugin requires synchronous storage, so we do not use IndexedDB as
+  the persistedstate backend; if real usage approaches the ~5 MB
+  quota, the answer is a separate manual IndexedDB cache for draft
+  content (with an in-memory mirror in the store), not a wrapper that
+  pretends `idb-keyval` is sync. Persistedstate does not natively
+  sync across tabs; v1 deliberately keeps tabs independent and uses
+  a `BroadcastChannel` advisory banner — see "Resolved Phase-0 Design
+  Questions / 2".
 - **CSP.** Strict
   `default-src 'self'; connect-src 'self' <approved-provider-hosts>`
   on the Speckit pages, so an injected script cannot exfiltrate the
@@ -178,13 +189,28 @@ of the same draft is not blocked but is signalled.
   detected, the UI shows a banner: *"This draft is open in another
   tab. Edits in either tab may overwrite each other — close the other
   tab to be safe."*
-- IndexedDB writes are atomic per-record, so the model is
-  last-writer-wins on `files` and `conversation` (not finer-grained
-  field-level merging).
+- `pinia-plugin-persistedstate` writes to `localStorage` per state
+  change. localStorage writes are atomic per key, so the model is
+  last-writer-wins on a per-draft basis.
+
+**On cross-tab state sync — why we don't do it in v1:** Persistedstate
+ships no built-in cross-tab sync (its `storage` option requires a
+synchronous interface and does not subscribe to the browser's
+`storage` event). We *could* layer that on — either by subscribing to
+`window.addEventListener("storage", ...)` and re-hydrating the store,
+or by adopting a companion like `@vueuse/core`'s `useStorage`. We
+deliberately don't, because the agent streams tokens into the
+conversation array many times per second; mirroring those writes into
+a second tab would render visibly flickering partial outputs and
+would race against a turn that the user may also start in the second
+tab. A "this draft is open in another tab" banner is the better UX.
+The hook is preserved: if telemetry later shows multi-tab is common
+and the streaming-flicker concern is overblown, the change is a
+single composable + a flag on the persist option.
 
 **Rationale:** Multi-tab is a footgun, not a feature, in this context.
-Detecting and warning is cheap; the IndexedDB record-level atomicity
-gives us all the concurrency primitive a single-user setup needs.
+Detecting and warning is cheap; full sync would harm the streaming
+UX and add coordination problems we don't have today.
 
 ### 3. System prompt for the Speckit browser agent
 
