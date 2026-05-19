@@ -73,6 +73,31 @@ export async function readPublicSpecFiles(
 }
 
 /**
+ * Validate a spec-bundle file name before it touches the filesystem.
+ * The wire-boundary `specFileName` Zod schema already enforces this
+ * on input, but writePublicSpecFiles receives rows straight from the
+ * DB — and the DB has no flat-filename constraint. Defense in depth:
+ * re-validate at the disk boundary so a malformed row that bypassed
+ * the wire check (a future migration, direct psql, …) cannot traverse
+ * out of `specs/`.
+ */
+function assertFlatSpecFileName(name: string): void {
+  if (!name || name === "." || name === "..") {
+    throw new Error(`invalid spec filename: ${JSON.stringify(name)}`);
+  }
+  if (
+    path.isAbsolute(name) ||
+    name.includes("/") ||
+    name.includes("\\") ||
+    name.includes("\0")
+  ) {
+    throw new Error(
+      `spec filenames must be flat: ${JSON.stringify(name)}`,
+    );
+  }
+}
+
+/**
  * Replace the file set in `<projectRoot>/specs/` with the given files.
  * Files present on disk but not in the new bundle are deleted; files
  * in the new bundle are written verbatim (existing contents overwritten).
@@ -83,6 +108,10 @@ export async function writePublicSpecFiles(
   projectSlug: string,
   files: PublicSpecFile[],
 ): Promise<void> {
+  // Validate every name BEFORE mutating disk so a single bad input
+  // doesn't leave us in a half-written state.
+  for (const f of files) assertFlatSpecFileName(f.name);
+
   const specsDir = path.join(projectDir(orgId, projectSlug), "specs");
   await fs.mkdir(specsDir, { recursive: true });
 

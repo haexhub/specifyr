@@ -903,7 +903,11 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 400 });
       });
 
-      it("404s when publishing another user's draft", async () => {
+      it("403s when publish caller is in a different org", async () => {
+        // Same caveat as the GET-draft cross-org test: same-org non-
+        // owners would also be masked (publishDraft's owner filter
+        // would return not_found → 404), but that path isn't exercised
+        // here because we have no invite flow in test scope.
         const aliceHeaders = authAs("alice@example.com", "Alice");
         const bobHeaders = authAs("bob@example.com", "Bob");
         const { orgSlug, projSlug } = await bootstrapProject(aliceHeaders);
