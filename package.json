@@ -14,7 +14,8 @@
     "dev:docker": "./dev.sh",
     "build": "nuxt build",
     "preview": "nuxt preview",
-    "test": "node --no-warnings=ExperimentalWarning --import tsx tests/_runner.mjs",
+    "test": "pnpm test:unit && pnpm test:node",
+    "test:node": "node --no-warnings=ExperimentalWarning --import tsx tests/_runner.mjs",
     "test:unit": "vitest run --config vitest.unit.config.ts",
     "test:e2e": "vitest run --config vitest.config.ts",
     "ui": "nuxt dev"
@@ -33,7 +34,7 @@
     "@tailwindcss/vite": "^4.2.4",
     "@types/node": "^25.6.0",
     "@vueuse/core": "^14.2.1",
-    "ai": "^6.0.184",
+    "ai": "^6.0.185",
     "chokidar": "^5.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
