@@ -203,5 +203,5 @@ Schmal halten — nur diese vier Endpoints:
   - `cat /run/secrets/*` (sollte leer / org-scoped sein)
   - `curl http://specifyr-runtime:8080/agents` ohne mTLS (sollte 401)
   Jeder dieser Probes wird in CI ausgeführt und MUSS failen (in der Org-A-Perspektive = isoliert sein).
-- Performance: erster Turn-Start in &lt; 3 sec end-to-end (vs heute ~500 ms im Process-Mode).
+- Performance: erster Turn-Start in < 3 sec end-to-end (vs heute ~500 ms im Process-Mode).
 - Specifyr-Server-Compose hat keinen `docker.sock`-Mount mehr.
