@@ -116,7 +116,7 @@ const saveLabel = computed(() => {
     case "idle":
       return props.pendingSave ? "Unsaved" : "Saved";
     case "saving":
-      return `Saving (${props.saveState.attempt}/${4})…`;
+      return `Saving (${props.saveState.attempt}/3)…`;
     case "retrying":
       return `Retrying (${props.saveState.attempt}/3)…`;
     case "failed":
