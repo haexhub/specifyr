@@ -6,7 +6,7 @@
 FROM node:22-alpine AS base
 # `curl` is needed by the Hermes installer below; it is NOT in node:22-alpine
 # by default.
-RUN apk add --no-cache bash git tini docker-cli curl
+RUN apk add --no-cache bash git tini docker-cli curl ripgrep
 ENV PNPM_HOME=/pnpm \
     PATH=/pnpm:$PATH
 RUN corepack enable
