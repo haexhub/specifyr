@@ -370,7 +370,7 @@ it("rejects path traversal in glob param", async () => {
 - Reject Symlinks außerhalb des Projekt-Roots (via `fs.realpath` + Vergleich mit `project-dir`)
 - Reject Pfade die nicht im project-dir sind
 
-**Implementation:** `path.resolve(projectDir, params.path)` → `fs.promises.realpath(...)` (folgt Symlinks) → `path.relative(projectDir, realPath)`; reject wenn das Ergebnis mit `..` startet oder absolut ist. Beide Schritte (resolve + realpath) sind nötig: `path.resolve` allein erkennt keine Symlinks, `realpath` allein keine `..`-Sequenzen die *innerhalb* des Project-Roots in einen Symlink hineinführen.
+**Implementation (as shipped in #80):** `fs.open(absolutePath, O_RDONLY | O_NOFOLLOW)` opens the leaf without following a final symlink and binds size check, realpath check and read to the same `FileHandle` — that closes the TOCTOU window an earlier `lstat → realpath → readFile` sequence would have left open. Realpath of the opened handle is then compared against the project-dir; reject if the relative path starts with `..` or is absolute. (The resolve+realpath+relative sketch above is the original design and is kept for context; the implementation supersedes it.)
 
 **Commit:** `feat(api): read project file endpoint with path-traversal protection`
 
@@ -457,7 +457,7 @@ it("rejects path traversal in glob param", async () => {
 5. UPDATE projects SET spec_public_version = spec_public_version + 1 WHERE id = :projectId;
 6. UPDATE spec_drafts SET status = "published", published_at = NOW() WHERE id = :draftId;
 7. COMMIT.
-// Post-commit (project row lock noch gehalten bis COMMIT):
+// Post-commit (project row lock released — the rename happens outside the tx):
 8. fs.renameSync(specs/.tmp/<publish-id>/*, specs/<name>) — atomarer Move pro File.
 9. Bei Fehler in Schritt 8 (sollte nicht passieren wenn tmp + final auf gleichem FS): rm -rf specs/.tmp/<publish-id>, log + alert; DB ist bereits committed, also Output ist published — Operator-Recovery nötig.
 ```
