@@ -1,4 +1,4 @@
-import { createDraftBody } from "@su/spec-tools-schemas";
+import { createDraftBody } from "#shared/utils/spec-tools-schemas";
 import { createDraft } from "@su/spec-draft-store";
 import { parseBody } from "@su/validation";
 

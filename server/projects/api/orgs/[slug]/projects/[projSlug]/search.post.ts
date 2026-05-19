@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { projectDir } from "@su/data-dirs";
-import { searchCodeInput } from "@su/spec-tools-schemas";
+import { searchCodeInput } from "#shared/utils/spec-tools-schemas";
 import { parseBody } from "@su/validation";
 
 /**

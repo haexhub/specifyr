@@ -1,5 +1,5 @@
 import { getDraftWithFiles } from "@su/spec-draft-store";
-import { draftId as draftIdSchema } from "@su/spec-tools-schemas";
+import { draftId as draftIdSchema } from "#shared/utils/spec-tools-schemas";
 
 /**
  * Read a single draft with its files + conversation.

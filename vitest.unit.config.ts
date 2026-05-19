@@ -21,6 +21,9 @@ export default defineConfig({
     alias: {
       "~": fileURLToPath(new URL("./app", import.meta.url)),
       "@": fileURLToPath(new URL("./app", import.meta.url)),
+      // Nuxt 4 exposes top-level `shared/` as #shared at build time;
+      // unit tests need the same alias since they don't boot Nuxt.
+      "#shared": fileURLToPath(new URL("./shared", import.meta.url)),
     },
   },
 });

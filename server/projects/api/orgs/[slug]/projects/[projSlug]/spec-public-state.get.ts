@@ -2,7 +2,7 @@ import {
   getCurrentPublicVersion,
   readPublicSpecFiles,
 } from "@su/spec-public-state";
-import { readExistingSpecInput } from "@su/spec-tools-schemas";
+import { readExistingSpecInput } from "#shared/utils/spec-tools-schemas";
 import { parseQuery } from "@su/validation";
 
 /**

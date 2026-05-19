@@ -2,7 +2,7 @@ import { patchDraft } from "@su/spec-draft-store";
 import {
   draftId as draftIdSchema,
   patchDraftBody,
-} from "@su/spec-tools-schemas";
+} from "#shared/utils/spec-tools-schemas";
 import { parseBody } from "@su/validation";
 
 /**
