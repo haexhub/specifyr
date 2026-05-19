@@ -66,6 +66,14 @@ export const useProviderIdentityStore = defineStore("speckit-provider-identity",
     },
 
     setActive(id: string | null): void {
+      // Normalise unknown IDs to null so `active` (getter) and
+      // `activeIdentityId` (state) never disagree — otherwise the UI
+      // would show "an identity is active" while the model resolver
+      // sees null.
+      if (id !== null && !this.identities.some((i) => i.id === id)) {
+        this.activeIdentityId = null;
+        return;
+      }
       this.activeIdentityId = id;
     },
   },

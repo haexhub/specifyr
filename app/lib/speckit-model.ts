@@ -51,5 +51,15 @@ export function buildLanguageModel(identity: ProviderIdentity): LanguageModel {
       });
       return provider(identity.model);
     }
+    default: {
+      // Persisted identity is in an unknown shape (corrupted localStorage,
+      // future-provider rollback). Surface immediately rather than
+      // returning undefined and tripping the AI SDK with a confusing
+      // downstream error.
+      const _exhaustive: never = identity.provider;
+      throw new Error(
+        `Unknown provider for identity "${identity.label}": ${_exhaustive}`,
+      );
+    }
   }
 }

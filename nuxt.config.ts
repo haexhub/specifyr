@@ -26,7 +26,12 @@ export default defineNuxtConfig({
       },
     },
     routeRules: {
-      "/projects/**": {
+      // CSP applies origin-wide because localStorage (where provider API
+      // keys are persisted) is shared across all pages on this origin —
+      // an XSS on /settings/speckit-agent or any other page would
+      // otherwise be able to exfiltrate them. The connect-src allowlist
+      // is intentionally narrow: the four LLM provider hosts plus 'self'.
+      "/**": {
         headers: {
           "Content-Security-Policy": [
             "default-src 'self'",

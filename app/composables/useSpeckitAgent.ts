@@ -64,7 +64,12 @@ export function useSpeckitAgent(args: SpeckitAgentArgs): SpeckitAgent {
   let abortController: AbortController | null = null;
 
   onMounted(async () => {
-    if (session.session?.draftId !== args.draftId) {
+    const cur = session.session;
+    const matches =
+      cur?.draftId === args.draftId &&
+      cur?.orgSlug === args.orgSlug &&
+      cur?.projSlug === args.projSlug;
+    if (!matches) {
       await session.openDraft({
         orgSlug: args.orgSlug,
         projSlug: args.projSlug,

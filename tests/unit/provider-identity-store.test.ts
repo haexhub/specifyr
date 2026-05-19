@@ -76,13 +76,14 @@ describe("provider-identity store", () => {
     expect(store.active).toMatchObject({ id, ...sampleAnthropic });
   });
 
-  it("setActive(unknown) leaves active null", () => {
+  it("setActive(unknown) normalises both active and activeIdentityId to null", () => {
     const store = useProviderIdentityStore();
     store.add(sampleAnthropic);
     store.setActive("not-a-real-id");
-    // Per plan: only existing ids can be active. Unknown ids resolve
-    // `active` to null even though `activeIdentityId` may be assigned.
+    // Both must agree — otherwise the UI ("an identity is active") and
+    // the model resolver (sees null) drift apart.
     expect(store.active).toBeNull();
+    expect(store.activeIdentityId).toBeNull();
   });
 
   it("remove(activeId) clears the active selection", () => {

@@ -69,7 +69,7 @@ function submit() {
     label: form.label.trim(),
     provider: form.provider,
     model: form.model.trim(),
-    apiKey: form.apiKey,
+    apiKey: form.apiKey.trim(),
     baseUrl: form.baseUrl.trim() || undefined,
   });
 }

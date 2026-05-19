@@ -196,6 +196,65 @@ describe("active-session store", () => {
       expect(store.pendingSave).toBe(false);
       expect(store.saveState).toEqual({ kind: "idle" });
     });
+
+    it("fails immediately on non-retryable 4xx without burning retry budget", async () => {
+      vi.useFakeTimers();
+      fetchMock.mockRejectedValue(
+        Object.assign(new Error("forbidden"), { statusCode: 403 }),
+      );
+      const store = useActiveSessionStore();
+
+      const promise = store.commitTurn();
+      await vi.advanceTimersByTimeAsync(0);
+      await promise;
+
+      // GET (openDraft) + 1 PATCH only — no retries on 403.
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(store.saveState).toMatchObject({ kind: "failed" });
+      expect(store.pendingSave).toBe(true);
+    });
+
+    it("retries on 503 (transient 5xx)", async () => {
+      vi.useFakeTimers();
+      fetchMock
+        .mockRejectedValueOnce(
+          Object.assign(new Error("unavailable"), { statusCode: 503 }),
+        )
+        .mockResolvedValueOnce({ updatedAt: "2026-05-19T11:00:00.000Z" });
+      const store = useActiveSessionStore();
+
+      const promise = store.commitTurn();
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(2_000);
+      await promise;
+
+      expect(store.saveState).toEqual({ kind: "idle" });
+      expect(store.pendingSave).toBe(false);
+    });
+
+    it("keeps pendingSave true if new edits land during in-flight PATCH", async () => {
+      // Drive the PATCH to a manually controlled resolver so we can land
+      // an extra edit between request-out and response-in.
+      let resolvePatch!: (v: { updatedAt: string }) => void;
+      fetchMock.mockReturnValueOnce(
+        new Promise<{ updatedAt: string }>((r) => {
+          resolvePatch = r;
+        }),
+      );
+      const store = useActiveSessionStore();
+
+      const commit = store.commitTurn();
+      // While the PATCH is in flight, a tool call writes new files.
+      store.updateFiles({ "spec.md": "# After-the-PATCH" });
+      resolvePatch({ updatedAt: "2026-05-19T12:00:00.000Z" });
+      await commit;
+
+      // PATCH itself succeeded → no failed banner.
+      expect(store.saveState).toEqual({ kind: "idle" });
+      // …but the in-flight payload didn't include the new edits, so
+      // pendingSave must stay true to drive the next commitTurn.
+      expect(store.pendingSave).toBe(true);
+    });
   });
 
   describe("retrySaveNow", () => {

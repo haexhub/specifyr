@@ -63,11 +63,27 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function isRetryable(err: unknown): boolean {
+  const e = err as { statusCode?: number; status?: number };
+  const status = e.statusCode ?? e.status;
+  // Network/unknown errors (no status) → retry. 408 (timeout), 429 (rate
+  // limit) and any 5xx → retry. Everything else (4xx auth/validation,
+  // 409 conflicts) is permanent and shouldn't burn retry budget.
+  if (status == null) return true;
+  if (status === 408 || status === 429) return true;
+  return status >= 500 && status < 600;
+}
+
 export const useActiveSessionStore = defineStore("speckit-active-session", {
   state: () => ({
     session: null as ActiveSession | null,
     saveState: { kind: "idle" } as SaveState,
     pendingSave: false,
+    // Bumped on every appendTurn / updateFiles. commitTurn snapshots
+    // this at the start of a save; if it has moved by the time the
+    // PATCH returns, more edits have landed and pendingSave must stay
+    // true to avoid silently losing them.
+    rev: 0,
   }),
 
   actions: {
@@ -87,37 +103,43 @@ export const useActiveSessionStore = defineStore("speckit-active-session", {
       };
       this.saveState = { kind: "idle" };
       this.pendingSave = false;
+      this.rev = 0;
     },
 
     closeSession(): void {
       this.session = null;
       this.saveState = { kind: "idle" };
       this.pendingSave = false;
+      this.rev = 0;
     },
 
     updateFiles(files: Record<string, string>): void {
       if (!this.session) return;
       this.session.files = { ...files };
       this.pendingSave = true;
+      this.rev++;
     },
 
     appendTurn(turn: ConversationMessage): void {
       if (!this.session) return;
       this.session.conversation.push(turn);
       this.pendingSave = true;
+      this.rev++;
     },
 
     /**
-     * PATCH the active draft. On HTTP failure, retries up to MAX_RETRIES
-     * times with exponential backoff. Final failure surfaces as
-     * `saveState: failed` so the UI can render the "Save failed — Retry"
-     * banner; `pendingSave` stays true until a successful PATCH lands so
-     * we don't lose track of unsaved work.
+     * PATCH the active draft. Retries up to MAX_RETRIES times with
+     * exponential backoff on transient failures (network / 408 / 429 /
+     * 5xx); non-retryable errors fail immediately. Final failure
+     * surfaces as `saveState: failed` so the UI can render the
+     * "Save failed — Retry" banner; `pendingSave` stays true until a
+     * successful PATCH lands so we don't lose track of unsaved work.
      */
     async commitTurn(): Promise<void> {
       if (!this.session) return;
       const session = this.session;
       const url = draftUrl(session);
+      const startRev = this.rev;
       const body = {
         files: filesRecordToArray(session.files),
         conversation: session.conversation,
@@ -138,11 +160,18 @@ export const useActiveSessionStore = defineStore("speckit-active-session", {
         try {
           const res = await $fetch<PatchResponse>(url, { method: "PATCH", body });
           if (this.session) this.session.serverUpdatedAt = res.updatedAt;
-          this.pendingSave = false;
+          // Only clear pendingSave if no new edits landed during the
+          // in-flight PATCH. Otherwise the payload we just confirmed
+          // doesn't reflect the current state and a follow-up commit
+          // is needed.
+          if (this.rev === startRev) {
+            this.pendingSave = false;
+          }
           this.saveState = { kind: "idle" };
           return;
         } catch (err) {
-          if (attempt > MAX_RETRIES) {
+          const retryable = isRetryable(err);
+          if (!retryable || attempt > MAX_RETRIES) {
             this.saveState = {
               kind: "failed",
               reason: err instanceof Error ? err.message : "save failed",

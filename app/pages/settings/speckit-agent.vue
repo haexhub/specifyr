@@ -85,8 +85,13 @@ function remove(id: string) {
       @cancel="cancel"
     />
 
+    <!--
+      Edit mode without a resolvable identity (race: identity removed
+      in another tab while edit was open) falls back to the list so the
+      page never renders blank.
+    -->
     <ProviderIdentityList
-      v-if="mode.kind === 'list'"
+      v-if="mode.kind === 'list' || (mode.kind === 'edit' && !editingIdentity)"
       :identities="store.identities"
       :active-identity-id="store.activeIdentityId"
       @edit="openEdit"

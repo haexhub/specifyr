@@ -10,11 +10,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   publish: [];
-  /**
-   * The composable owns its own onMounted; this event lets the parent
-   * know a publish-success has happened so it can refresh the draft list.
-   */
-  publishSuccess: [];
 }>();
 
 const agent = useSpeckitAgent({
