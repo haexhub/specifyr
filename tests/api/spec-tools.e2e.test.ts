@@ -178,5 +178,124 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 403 });
       });
     });
+
+    const readUrl = (orgSlug: string, projSlug: string, relPath: string) =>
+      `/api/orgs/${orgSlug}/projects/${projSlug}/files/${relPath
+        .split("/")
+        .map(encodeURIComponent)
+        .join("/")}`;
+
+    describe("GET /api/orgs/:org/projects/:proj/files/:path", () => {
+      it("returns text content as utf-8", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        await writeProjectFile(projectRoot, "specs/spec.md", "# Hello\n");
+
+        const res = await $fetch<{ content: string; encoding: "utf-8" | "base64" }>(
+          readUrl(orgSlug, projSlug, "specs/spec.md"),
+          { headers },
+        );
+
+        expect(res.encoding).toBe("utf-8");
+        expect(res.content).toBe("# Hello\n");
+      });
+
+      it("encodes binary content as base64", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        const bin = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x01]);
+        const abs = path.join(projectRoot, "logo.png");
+        await fs.mkdir(path.dirname(abs), { recursive: true });
+        await fs.writeFile(abs, bin);
+
+        const res = await $fetch<{ content: string; encoding: "utf-8" | "base64" }>(
+          readUrl(orgSlug, projSlug, "logo.png"),
+          { headers },
+        );
+
+        expect(res.encoding).toBe("base64");
+        expect(Buffer.from(res.content, "base64").equals(bin)).toBe(true);
+      });
+
+      it("rejects a path containing '..'", async () => {
+        // Belt + braces: Nitro's router normalises `..` segments before
+        // dispatch, so an attack URL never reaches the handler — it 404s
+        // at the route layer. Either rejection is fine; we just need to
+        // prove no file content was returned.
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        await expect(
+          $fetch(`/api/orgs/${orgSlug}/projects/${projSlug}/files/..%2Fetc%2Fpasswd`, {
+            headers,
+          }),
+        ).rejects.toMatchObject({
+          statusCode: expect.toSatisfy((code: number) => code === 400 || code === 404),
+        });
+      });
+
+      it("rejects a symlink that escapes the project root", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        // Write a sensitive file OUTSIDE the project, then symlink it from
+        // inside. realpath() should detect the escape.
+        const outsideDir = await fs.mkdtemp(path.join(projectRoot, "..", "escape-"));
+        const outsideFile = path.join(outsideDir, "secret.txt");
+        await fs.writeFile(outsideFile, "TOP SECRET", "utf8");
+        const linkPath = path.join(projectRoot, "secret.txt");
+        await fs.symlink(outsideFile, linkPath);
+
+        await expect(
+          $fetch(readUrl(orgSlug, projSlug, "secret.txt"), { headers }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+      });
+
+      it("404s for a non-existent file", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        await expect(
+          $fetch(readUrl(orgSlug, projSlug, "does-not-exist.md"), { headers }),
+        ).rejects.toMatchObject({ statusCode: 404 });
+      });
+
+      it("rejects a directory path", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        await fs.mkdir(path.join(projectRoot, "subdir"), { recursive: true });
+
+        await expect(
+          $fetch(readUrl(orgSlug, projSlug, "subdir"), { headers }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+      });
+
+      it("413s for files exceeding the size cap", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        // Just over 1 MiB.
+        const big = Buffer.alloc(1_000_001, 0x61);
+        const abs = path.join(projectRoot, "huge.txt");
+        await fs.writeFile(abs, big);
+
+        await expect(
+          $fetch(readUrl(orgSlug, projSlug, "huge.txt"), { headers }),
+        ).rejects.toMatchObject({ statusCode: 413 });
+      });
+
+      it("403s when the caller is not a member of the project's org", async () => {
+        const aliceHeaders = authAs("alice@example.com", "Alice");
+        const bobHeaders = authAs("bob@example.com", "Bob");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(
+          aliceHeaders,
+          `iso-read-${Date.now()}`,
+        );
+        await writeProjectFile(projectRoot, "spec.md", "# alice's spec");
+        await $fetch("/api/me", { headers: bobHeaders });
+
+        await expect(
+          $fetch(readUrl(orgSlug, projSlug, "spec.md"), { headers: bobHeaders }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+      });
+    });
   });
 }
