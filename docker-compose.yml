@@ -1,8 +1,21 @@
 # Development compose — Nuxt dev server with HMR.
 #
 # Usage:
-#   docker compose up --build            # start dev server on http://localhost:4242
+#   docker compose up --build            # start dev server on http://localhost:${SPECIFYR_PORT:-10000}
 #   docker compose exec specifyr sh     # shell inside the running container
+#
+# Host-Port-Schema (alle dev-Services ab PORT_BASE=10000, traefik bleibt auf 80):
+#   PORT_BASE+0 → specifyr            (container 3000)   [SPECIFYR_PORT]
+#   PORT_BASE+1 → postgres            (container 5432)   [POSTGRES_PORT]
+#   PORT_BASE+2 → authentik http      (container 9000)   [AUTHENTIK_HTTP_PORT]
+#   PORT_BASE+3 → authentik https     (container 9443)   [AUTHENTIK_HTTPS_PORT]
+#   PORT_BASE+4 → traefik dashboard   (container 8080)   [TRAEFIK_DASHBOARD_PORT]
+#            80 → traefik web         (Standard-HTTP, nicht umgezogen)
+#
+# Docker-Compose kann in `${VAR}`-Interpolation keine Arithmetik. `dev.sh` leitet
+# die per-service-Vars aus `PORT_BASE` ab und exportiert sie vor `docker compose
+# up`. Wer `docker compose` direkt aufruft, setzt entweder die per-service-Vars
+# in `.env` oder lässt die Defaults stehen.
 #
 # LLM-Credentials und Speckit-Agent/Profile werden in der Settings UI verwaltet.
 
@@ -14,7 +27,7 @@ services:
     image: specifyr:dev
     container_name: specifyr-dev
     ports:
-      - "4242:3000"
+      - "${SPECIFYR_PORT:-10000}:3000"
     environment:
       HOST: 0.0.0.0
       PORT: 3000
@@ -161,9 +174,10 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: devpw
     ports:
-      # Host-Port 5566 für psql/IDEs vom Host. Die App im specifyr-dev-Container
-      # erreicht den Service per Bridge-DNS als `postgres:5432`, nicht über localhost.
-      - "5566:5432"
+      # Host-Port (POSTGRES_PORT, default 10001) für psql/IDEs vom Host. Die App
+      # im specifyr-dev-Container erreicht den Service per Bridge-DNS als
+      # `postgres:5432`, nicht über localhost.
+      - "${POSTGRES_PORT:-10001}:5432"
     volumes:
       - specifyr_postgres_data:/var/lib/postgresql/data
       # Init-Scripts laufen einmalig bei leerem Datenvolume (Postgres-Konvention)
@@ -181,11 +195,12 @@ services:
 
   # ── Authentik (Identity Provider) ────────────────────────────────────────
   # Mirror der Prod-Topologie (roles/authentik): server + worker + redis,
-  # gemeinsam genutzte Postgres-Instanz, eigene `authentik`-DB. UI ist in
-  # dev direkt unter http://localhost:9000 erreichbar (kein traefik dazwischen).
+  # gemeinsam genutzte Postgres-Instanz, eigene `authentik`-DB. UI ist in dev
+  # direkt unter http://localhost:${AUTHENTIK_HTTP_PORT:-10002} erreichbar
+  # (kein traefik dazwischen).
   #
   # Multi-User-Test in dev:
-  #   1. Authentik-Bootstrap-Login: http://localhost:9000  (akadmin / ${AUTHENTIK_BOOTSTRAP_PASSWORD})
+  #   1. Authentik-Bootstrap-Login: http://localhost:${AUTHENTIK_HTTP_PORT:-10002}  (akadmin / ${AUTHENTIK_BOOTSTRAP_PASSWORD})
   #   2. SPECIFYR_DEV_USER_EMAIL in .env leeren, damit auth-middleware NICHT
   #      automatisch einloggt — sonst überstimmt der env-fallback echte Headers.
   #   3. Hinweis: forward-auth (Authentik → specifyr Headers) braucht in Prod
@@ -228,10 +243,11 @@ services:
       # Host (auth.localhost), der Forward-auth-callback setzt sein eigenes
       # Cookie auf specifyr.localhost — beide getrennt, was für SSO ausreicht.
     ports:
-      # UI direkt erreichbar auf localhost:9000 (HTTP). Prod nutzt traefik+TLS;
-      # dev geht direkt, weil wir keinen reverse proxy mitlaufen lassen.
-      - "9000:9000"
-      - "9443:9443"
+      # UI direkt erreichbar auf localhost:${AUTHENTIK_HTTP_PORT:-10002} (HTTP).
+      # Prod nutzt traefik+TLS; dev geht direkt, weil wir keinen reverse proxy
+      # mitlaufen lassen.
+      - "${AUTHENTIK_HTTP_PORT:-10002}:9000"
+      - "${AUTHENTIK_HTTPS_PORT:-10003}:9443"
     healthcheck:
       test: ["CMD", "ak", "healthcheck"]
       interval: 30s
@@ -325,8 +341,9 @@ services:
       - --log.level=INFO
     ports:
       - "80:80"
-      # Traefik-Dashboard auf localhost:8088 (zum Debuggen der Routes/Middlewares).
-      - "8088:8080"
+      # Traefik-Dashboard auf localhost:${TRAEFIK_DASHBOARD_PORT:-10004}
+      # (zum Debuggen der Routes/Middlewares).
+      - "${TRAEFIK_DASHBOARD_PORT:-10004}:8080"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:

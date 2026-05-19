@@ -16,6 +16,16 @@ echo "🐳 Building and starting containers..."
 export USER_UID=$(id -u)
 export USER_GID=$(id -g)
 
+# Host-Port-Schema: alle Services ab PORT_BASE (Default 10000), Traefik bleibt
+# auf 80. Compose-Interpolation kann keine Arithmetik, deshalb leiten wir hier
+# die per-service-Vars aus PORT_BASE ab. Per-service-Override hat Vorrang.
+PORT_BASE=${PORT_BASE:-10000}
+export SPECIFYR_PORT=${SPECIFYR_PORT:-$PORT_BASE}
+export POSTGRES_PORT=${POSTGRES_PORT:-$((PORT_BASE + 1))}
+export AUTHENTIK_HTTP_PORT=${AUTHENTIK_HTTP_PORT:-$((PORT_BASE + 2))}
+export AUTHENTIK_HTTPS_PORT=${AUTHENTIK_HTTPS_PORT:-$((PORT_BASE + 3))}
+export TRAEFIK_DASHBOARD_PORT=${TRAEFIK_DASHBOARD_PORT:-$((PORT_BASE + 4))}
+
 # Set DOCKER_GID if docker group exists
 if getent group docker >/dev/null 2>&1; then
     export DOCKER_GID=$(getent group docker | cut -d: -f3)
@@ -29,7 +39,7 @@ fi
 docker compose up --build -d
 
 echo "✅ Containers started!"
-echo "🌐 Dev server available at: http://localhost:4242"
+echo "🌐 Dev server available at: http://localhost:${SPECIFYR_PORT}"
 echo ""
 echo "📋 Useful commands:"
 echo "  • View logs: docker compose logs -f"
