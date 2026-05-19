@@ -297,5 +297,139 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 403 });
       });
     });
+
+    const searchUrl = (orgSlug: string, projSlug: string) =>
+      `/api/orgs/${orgSlug}/projects/${projSlug}/search`;
+
+    describe("POST /api/orgs/:org/projects/:proj/search", () => {
+      it("returns matches for known content", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        await writeProjectFile(projectRoot, "src/a.ts", "const FOO = 1;\nconst BAR = 2;\n");
+        await writeProjectFile(projectRoot, "src/b.ts", "const FOO = 42;\n");
+        await writeProjectFile(projectRoot, "README.md", "no match here\n");
+
+        const res = await $fetch<{
+          matches: Array<{ path: string; line: number; snippet: string }>;
+          truncated: boolean;
+        }>(searchUrl(orgSlug, projSlug), {
+          method: "POST",
+          headers,
+          body: { query: "FOO" },
+        });
+
+        expect(res.truncated).toBe(false);
+        const paths = res.matches.map((m) => m.path).sort();
+        expect(paths).toEqual(["src/a.ts", "src/b.ts"]);
+        const a = res.matches.find((m) => m.path === "src/a.ts")!;
+        expect(a.line).toBe(1);
+        expect(a.snippet).toContain("FOO");
+      });
+
+      it("honours the glob filter", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        await writeProjectFile(projectRoot, "specs/foo.md", "needle\n");
+        await writeProjectFile(projectRoot, "src/foo.ts", "needle\n");
+
+        const res = await $fetch<{
+          matches: Array<{ path: string }>;
+        }>(searchUrl(orgSlug, projSlug), {
+          method: "POST",
+          headers,
+          body: { query: "needle", glob: "specs/**/*.md" },
+        });
+
+        expect(res.matches.map((m) => m.path)).toEqual(["specs/foo.md"]);
+      });
+
+      it("truncates at the limit and reports truncated=true", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        // Five files each with a single match; cap at 2.
+        for (let i = 0; i < 5; i++) {
+          await writeProjectFile(projectRoot, `f${i}.txt`, "hit\n");
+        }
+
+        const res = await $fetch<{
+          matches: Array<{ path: string }>;
+          truncated: boolean;
+        }>(searchUrl(orgSlug, projSlug), {
+          method: "POST",
+          headers,
+          body: { query: "hit", limit: 2 },
+        });
+
+        expect(res.matches.length).toBe(2);
+        expect(res.truncated).toBe(true);
+      });
+
+      it("returns empty matches when query matches nothing", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        await writeProjectFile(projectRoot, "a.txt", "hello\n");
+
+        const res = await $fetch<{
+          matches: Array<unknown>;
+          truncated: boolean;
+        }>(searchUrl(orgSlug, projSlug), {
+          method: "POST",
+          headers,
+          body: { query: "zzz-nope" },
+        });
+
+        expect(res.matches).toEqual([]);
+        expect(res.truncated).toBe(false);
+      });
+
+      it("treats the query as a literal (no regex interpretation)", async () => {
+        // Documentation test: rg is invoked with -F, so a query like
+        // 'a.b' must NOT match 'aXb'. This is what we want for an LLM
+        // tool — the model shouldn't have to reason about regex escaping.
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(headers);
+        await writeProjectFile(projectRoot, "a.txt", "aXb\n");
+        await writeProjectFile(projectRoot, "b.txt", "a.b\n");
+
+        const res = await $fetch<{ matches: Array<{ path: string }> }>(
+          searchUrl(orgSlug, projSlug),
+          { method: "POST", headers, body: { query: "a.b" } },
+        );
+
+        expect(res.matches.map((m) => m.path)).toEqual(["b.txt"]);
+      });
+
+      it("rejects a glob containing '..'", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        await expect(
+          $fetch(searchUrl(orgSlug, projSlug), {
+            method: "POST",
+            headers,
+            body: { query: "x", glob: "../**" },
+          }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+      });
+
+      it("403s when the caller is not a member of the project's org", async () => {
+        const aliceHeaders = authAs("alice@example.com", "Alice");
+        const bobHeaders = authAs("bob@example.com", "Bob");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(
+          aliceHeaders,
+          `iso-search-${Date.now()}`,
+        );
+        await writeProjectFile(projectRoot, "spec.md", "needle\n");
+        await $fetch("/api/me", { headers: bobHeaders });
+
+        await expect(
+          $fetch(searchUrl(orgSlug, projSlug), {
+            method: "POST",
+            headers: bobHeaders,
+            body: { query: "needle" },
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+      });
+    });
   });
 }
