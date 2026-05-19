@@ -1,6 +1,11 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "../database/client";
-import { specDraftFiles, specDrafts } from "../database/schema";
+import { projects, specDraftFiles, specDrafts } from "../database/schema";
+import {
+  readPublicSpecFiles,
+  writePublicSpecFiles,
+  type PublicSpecFile,
+} from "./spec-public-state";
 
 /**
  * DB-backed store for the browser-side Speckit agent's spec drafts.
@@ -266,4 +271,124 @@ export async function deleteDraft(
     .limit(1);
   if (row?.status === "published") return { error: "published_immutable" };
   return { error: "not_found" };
+}
+
+export type PublishDraftResult =
+  | { ok: true; newPublicVersion: number }
+  | { error: "not_found" }
+  | {
+      error: "conflict";
+      currentPublicVersion: number;
+      currentPublicFiles: PublicSpecFile[];
+    };
+
+/**
+ * Publish a draft via compare-and-swap on `projects.spec_public_version`.
+ *
+ * Sequence inside one tx:
+ *   1. SELECT FOR UPDATE on the projects row — locks out concurrent
+ *      publishes until commit/rollback.
+ *   2. SELECT FOR UPDATE on the draft row too — blocks the owner's
+ *      concurrent PATCH/DELETE on the same draft until we're done.
+ *      Without this lock, the draft could be patched mid-publish and
+ *      we'd write a snapshot that doesn't match what the user sees.
+ *   3. Compare draft.baseVersion to spec_public_version. Mismatch →
+ *      conflict response. The conflict body's `currentPublicFiles` is
+ *      read here, BEFORE the project lock releases, so the {version,
+ *      files} pair is from one atomic moment.
+ *   4. Replace files on disk under <projectRoot>/specs/.
+ *   5. Increment spec_public_version, flip draft.status='published'.
+ *      The final UPDATE keeps the owner+status='draft' filter so a
+ *      racing PATCH/DELETE that landed under the same row lock would
+ *      have left it published-or-gone; the final write affects 0 rows
+ *      in that pathological case and we treat it as not_found.
+ *
+ * Disk write inside the tx: if it throws, the tx rolls back and disk
+ * is left in whatever partial state the FS operations produced —
+ * accepted Phase-1 narrow window (see spec-public-state.ts).
+ */
+export async function publishDraft(
+  draftId: string,
+  projectId: string,
+  orgId: string,
+  projectSlug: string,
+  ownerUserId: string,
+): Promise<PublishDraftResult> {
+  const db = getDb();
+  if (!db) return { error: "not_found" };
+
+  return db.transaction(async (tx) => {
+    const [proj] = await tx
+      .select({ specPublicVersion: projects.specPublicVersion })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .for("update")
+      .limit(1);
+    if (!proj) return { error: "not_found" as const };
+
+    const [draft] = await tx
+      .select({
+        id: specDrafts.id,
+        baseVersion: specDrafts.baseVersion,
+      })
+      .from(specDrafts)
+      .where(
+        and(
+          eq(specDrafts.id, draftId),
+          eq(specDrafts.projectId, projectId),
+          eq(specDrafts.ownerUserId, ownerUserId),
+          eq(specDrafts.status, "draft"),
+        ),
+      )
+      .for("update")
+      .limit(1);
+    if (!draft) return { error: "not_found" as const };
+
+    if (draft.baseVersion !== proj.specPublicVersion) {
+      // Read disk under the still-held project lock so the version +
+      // files pair we return cannot interleave with another publish.
+      const currentPublicFiles = await readPublicSpecFiles(
+        orgId,
+        projectSlug,
+      );
+      return {
+        error: "conflict" as const,
+        currentPublicVersion: proj.specPublicVersion,
+        currentPublicFiles,
+      };
+    }
+
+    const files = await tx
+      .select({ name: specDraftFiles.name, content: specDraftFiles.content })
+      .from(specDraftFiles)
+      .where(eq(specDraftFiles.draftId, draftId));
+
+    await writePublicSpecFiles(orgId, projectSlug, files);
+
+    const newVersion = proj.specPublicVersion + 1;
+    await tx
+      .update(projects)
+      .set({ specPublicVersion: newVersion })
+      .where(eq(projects.id, projectId));
+    const now = new Date();
+    const flipped = await tx
+      .update(specDrafts)
+      .set({ status: "published", publishedAt: now, updatedAt: now })
+      .where(
+        and(
+          eq(specDrafts.id, draftId),
+          eq(specDrafts.ownerUserId, ownerUserId),
+          eq(specDrafts.status, "draft"),
+        ),
+      )
+      .returning({ id: specDrafts.id });
+    if (flipped.length === 0) {
+      // Concurrent PATCH/DELETE landed under the same FOR UPDATE — the
+      // draft is no longer in a publishable state. Roll back by
+      // throwing, so the version-bump and disk write don't commit.
+      throw new Error("draft no longer in 'draft' status at publish time");
+    }
+
+    return { ok: true as const, newPublicVersion: newVersion };
+  });
 }
