@@ -665,12 +665,13 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 404 });
       });
 
-      it("GET /:draftId returns 404 for another user's draft", async () => {
-        // Two users in two different orgs; Alice owns the draft, Bob
-        // tries to read it but is denied at the project-access layer
-        // (403). Same-org cross-user requires an invite flow we don't
-        // have here, so this is the strongest isolation we can assert
-        // without leaving Phase 1's scope.
+      it("GET /:draftId 403s when reader is in a different org", async () => {
+        // Two users in two different orgs; Alice owns the draft, Bob is
+        // denied at the project-access layer (403). The store also
+        // implements draft-level 404 masking for same-org non-owners —
+        // covering that here would require an invite flow we don't have
+        // in test scope, so see the spec-draft-store unit tests / the
+        // store comment for the masking contract itself.
         const aliceHeaders = authAs("alice@example.com", "Alice");
         const bobHeaders = authAs("bob@example.com", "Bob");
         const { orgSlug, projSlug } = await bootstrapProject(aliceHeaders);

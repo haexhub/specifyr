@@ -233,10 +233,26 @@ export async function deleteDraft(
   const db = getDb();
   if (!db) return { error: "not_found" };
 
-  // Two-step on purpose: we want to distinguish "not yours / not found"
-  // from "you own this but it's published". The latter must surface as
-  // 409 with the immutability reason; published-as-not-found would be
-  // confusing to a UI that just showed the draft.
+  // Race-safe: the status filter lives INSIDE the DELETE's WHERE, so a
+  // concurrent publish that flips the row to 'published' between our
+  // request reaching the DB and the DELETE running will exclude it from
+  // the predicate — deleted.length stays 0 and we follow up to figure
+  // out whether the miss was "not yours / gone" or "you own this but
+  // it's been published" (the 409 case the UI needs to distinguish
+  // from a generic 404).
+  const deleted = await db
+    .delete(specDrafts)
+    .where(
+      and(
+        eq(specDrafts.id, draftId),
+        eq(specDrafts.projectId, projectId),
+        eq(specDrafts.ownerUserId, ownerUserId),
+        eq(specDrafts.status, "draft"),
+      ),
+    )
+    .returning({ id: specDrafts.id });
+  if (deleted.length > 0) return { ok: true };
+
   const [row] = await db
     .select({ status: specDrafts.status })
     .from(specDrafts)
@@ -248,9 +264,6 @@ export async function deleteDraft(
       ),
     )
     .limit(1);
-  if (!row) return { error: "not_found" };
-  if (row.status === "published") return { error: "published_immutable" };
-
-  await db.delete(specDrafts).where(eq(specDrafts.id, draftId));
-  return { ok: true };
+  if (row?.status === "published") return { error: "published_immutable" };
+  return { error: "not_found" };
 }
