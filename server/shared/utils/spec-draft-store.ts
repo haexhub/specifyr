@@ -1,6 +1,7 @@
 import { and, asc, desc, eq } from "drizzle-orm";
 import { getDb } from "../database/client";
-import { specDraftFiles, specDrafts } from "../database/schema";
+import { projects, specDraftFiles, specDrafts } from "../database/schema";
+import { writePublicSpecFiles } from "./spec-public-state";
 
 /**
  * DB-backed store for the browser-side Speckit agent's spec drafts.
@@ -266,4 +267,93 @@ export async function deleteDraft(
     .limit(1);
   if (row?.status === "published") return { error: "published_immutable" };
   return { error: "not_found" };
+}
+
+export type PublishDraftResult =
+  | { ok: true; newPublicVersion: number }
+  | { error: "not_found" }
+  | { error: "conflict"; currentPublicVersion: number };
+
+/**
+ * Publish a draft via compare-and-swap on `projects.spec_public_version`.
+ *
+ * Sequence inside one tx:
+ *   1. SELECT FOR UPDATE on the projects row — locks out concurrent
+ *      publishes until commit/rollback.
+ *   2. Load the draft (owner + status='draft' filter). Misses surface
+ *      as not_found so a non-owner probe is indistinguishable from a
+ *      stale UUID.
+ *   3. Compare draft.baseVersion to spec_public_version. Mismatch →
+ *      conflict response with the current public version.
+ *   4. Replace files on disk under <projectRoot>/specs/.
+ *   5. Increment spec_public_version, flip draft.status='published'.
+ *
+ * The disk write happens before the version bump but inside the tx.
+ * If it throws, the tx rolls back and disk is left in whatever partial
+ * state the FS operations produced — accepted Phase-1 narrow window
+ * (see spec-public-state.ts for the rationale).
+ */
+export async function publishDraft(
+  draftId: string,
+  projectId: string,
+  orgId: string,
+  projectSlug: string,
+  ownerUserId: string,
+): Promise<PublishDraftResult> {
+  const db = getDb();
+  if (!db) return { error: "not_found" };
+
+  return db.transaction(async (tx) => {
+    const [proj] = await tx
+      .select({ specPublicVersion: projects.specPublicVersion })
+      .from(projects)
+      .where(eq(projects.id, projectId))
+      .for("update")
+      .limit(1);
+    if (!proj) return { error: "not_found" as const };
+
+    const [draft] = await tx
+      .select({
+        id: specDrafts.id,
+        baseVersion: specDrafts.baseVersion,
+      })
+      .from(specDrafts)
+      .where(
+        and(
+          eq(specDrafts.id, draftId),
+          eq(specDrafts.projectId, projectId),
+          eq(specDrafts.ownerUserId, ownerUserId),
+          eq(specDrafts.status, "draft"),
+        ),
+      )
+      .limit(1);
+    if (!draft) return { error: "not_found" as const };
+
+    if (draft.baseVersion !== proj.specPublicVersion) {
+      return {
+        error: "conflict" as const,
+        currentPublicVersion: proj.specPublicVersion,
+      };
+    }
+
+    const files = await tx
+      .select({ name: specDraftFiles.name, content: specDraftFiles.content })
+      .from(specDraftFiles)
+      .where(eq(specDraftFiles.draftId, draftId));
+
+    await writePublicSpecFiles(orgId, projectSlug, files);
+
+    const newVersion = proj.specPublicVersion + 1;
+    await tx
+      .update(projects)
+      .set({ specPublicVersion: newVersion })
+      .where(eq(projects.id, projectId));
+    const now = new Date();
+    await tx
+      .update(specDrafts)
+      .set({ status: "published", publishedAt: now, updatedAt: now })
+      .where(eq(specDrafts.id, draftId));
+
+    return { ok: true as const, newPublicVersion: newVersion };
+  });
 }

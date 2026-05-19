@@ -706,5 +706,267 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 404 });
       });
     });
+
+    const publishUrl = (orgSlug: string, projSlug: string, draftId: string) =>
+      `/api/orgs/${orgSlug}/projects/${projSlug}/spec-drafts/${draftId}/publish`;
+    const publicStateUrl = (orgSlug: string, projSlug: string, q = "") =>
+      `/api/orgs/${orgSlug}/projects/${projSlug}/spec-public-state${q}`;
+
+    async function createDraft(
+      headers: AuthHeaders,
+      orgSlug: string,
+      projSlug: string,
+      body: {
+        title?: string;
+        baseVersion: number;
+        files: Array<{ name: string; content: string }>;
+        conversation?: unknown[];
+      },
+    ): Promise<string> {
+      const res = await $fetch<{ draftId: string }>(
+        draftsUrl(orgSlug, projSlug),
+        {
+          method: "POST",
+          headers,
+          body: {
+            title: body.title ?? "T",
+            baseVersion: body.baseVersion,
+            files: body.files,
+            conversation: body.conversation ?? [],
+          },
+        },
+      );
+      return res.draftId;
+    }
+
+    describe("POST /spec-drafts/:id/publish (CAS) + GET /spec-public-state", () => {
+      it("publishes a draft on baseVersion match", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(
+          headers,
+        );
+        const draftId = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [
+            { name: "spec.md", content: "# Public spec v1" },
+            { name: "plan.md", content: "# Plan" },
+          ],
+        });
+
+        const res = await $fetch<{ ok: true; newPublicVersion: number }>(
+          publishUrl(orgSlug, projSlug, draftId),
+          { method: "POST", headers, body: {} },
+        );
+        expect(res.ok).toBe(true);
+        expect(res.newPublicVersion).toBe(1);
+
+        // Files on disk under specs/.
+        const onDisk = await fs.readFile(
+          path.join(projectRoot, "specs", "spec.md"),
+          "utf8",
+        );
+        expect(onDisk).toBe("# Public spec v1");
+
+        // Public state endpoint reflects it.
+        const state = await $fetch<{
+          version: number;
+          files: Array<{ name: string; content: string }>;
+        }>(publicStateUrl(orgSlug, projSlug), { headers });
+        expect(state.version).toBe(1);
+        expect(state.files.map((f) => f.name).sort()).toEqual([
+          "plan.md",
+          "spec.md",
+        ]);
+      });
+
+      it("flips draft.status='published' so it cannot be patched anymore", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+        const draftId = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [{ name: "spec.md", content: "v1" }],
+        });
+
+        await $fetch(publishUrl(orgSlug, projSlug, draftId), {
+          method: "POST",
+          headers,
+          body: {},
+        });
+
+        await expect(
+          $fetch(draftsUrl(orgSlug, projSlug, `/${draftId}`), {
+            method: "PATCH",
+            headers,
+            body: { title: "should fail" },
+          }),
+        ).rejects.toMatchObject({ statusCode: 404 });
+      });
+
+      it("returns 409 + current public state on baseVersion mismatch", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        // First draft publishes successfully → version 1.
+        const firstId = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [{ name: "spec.md", content: "winner" }],
+        });
+        await $fetch(publishUrl(orgSlug, projSlug, firstId), {
+          method: "POST",
+          headers,
+          body: {},
+        });
+
+        // Second draft was forked at version 0 — its publish should
+        // see a mismatch.
+        const staleId = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [{ name: "spec.md", content: "loser" }],
+        });
+
+        try {
+          await $fetch(publishUrl(orgSlug, projSlug, staleId), {
+            method: "POST",
+            headers,
+            body: {},
+          });
+          throw new Error("expected 409");
+        } catch (err) {
+          const e = err as {
+            statusCode?: number;
+            data?: {
+              conflict?: boolean;
+              currentPublicVersion?: number;
+              currentPublicFiles?: Array<{ name: string; content: string }>;
+            };
+          };
+          expect(e.statusCode).toBe(409);
+          expect(e.data?.conflict).toBe(true);
+          expect(e.data?.currentPublicVersion).toBe(1);
+          expect(e.data?.currentPublicFiles).toEqual([
+            { name: "spec.md", content: "winner" },
+          ]);
+        }
+      });
+
+      it("removes obsolete files when a draft drops them", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug, projectRoot } = await bootstrapProject(
+          headers,
+        );
+        // Publish v1 with two files.
+        const v1Id = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [
+            { name: "spec.md", content: "v1" },
+            { name: "plan.md", content: "plan" },
+          ],
+        });
+        await $fetch(publishUrl(orgSlug, projSlug, v1Id), {
+          method: "POST",
+          headers,
+          body: {},
+        });
+        // Publish v2 with only spec.md.
+        const v2Id = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 1,
+          files: [{ name: "spec.md", content: "v2" }],
+        });
+        await $fetch(publishUrl(orgSlug, projSlug, v2Id), {
+          method: "POST",
+          headers,
+          body: {},
+        });
+
+        // plan.md should be gone from disk.
+        const planExists = await fs
+          .access(path.join(projectRoot, "specs", "plan.md"))
+          .then(() => true)
+          .catch(() => false);
+        expect(planExists).toBe(false);
+      });
+
+      it("rejects non-empty body (strict schema)", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+        const draftId = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [],
+        });
+
+        await expect(
+          $fetch(publishUrl(orgSlug, projSlug, draftId), {
+            method: "POST",
+            headers,
+            body: { force: true },
+          }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+      });
+
+      it("404s when publishing another user's draft", async () => {
+        const aliceHeaders = authAs("alice@example.com", "Alice");
+        const bobHeaders = authAs("bob@example.com", "Bob");
+        const { orgSlug, projSlug } = await bootstrapProject(aliceHeaders);
+        const draftId = await createDraft(aliceHeaders, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [],
+        });
+        await $fetch("/api/me", { headers: bobHeaders });
+
+        await expect(
+          $fetch(publishUrl(orgSlug, projSlug, draftId), {
+            method: "POST",
+            headers: bobHeaders,
+            body: {},
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+      });
+
+      it("public state is empty on a fresh project", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        const state = await $fetch<{
+          version: number;
+          files: Array<unknown>;
+        }>(publicStateUrl(orgSlug, projSlug), { headers });
+        expect(state.version).toBe(0);
+        expect(state.files).toEqual([]);
+      });
+
+      it("public state filters by name when provided", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+        const id = await createDraft(headers, orgSlug, projSlug, {
+          baseVersion: 0,
+          files: [
+            { name: "spec.md", content: "S" },
+            { name: "plan.md", content: "P" },
+          ],
+        });
+        await $fetch(publishUrl(orgSlug, projSlug, id), {
+          method: "POST",
+          headers,
+          body: {},
+        });
+
+        const state = await $fetch<{
+          version: number;
+          files: Array<{ name: string; content: string }>;
+        }>(publicStateUrl(orgSlug, projSlug, "?name=spec.md"), { headers });
+        expect(state.files).toEqual([{ name: "spec.md", content: "S" }]);
+      });
+
+      it("public state 403s for non-org-members", async () => {
+        const aliceHeaders = authAs("alice@example.com", "Alice");
+        const bobHeaders = authAs("bob@example.com", "Bob");
+        const { orgSlug, projSlug } = await bootstrapProject(aliceHeaders);
+        await $fetch("/api/me", { headers: bobHeaders });
+
+        await expect(
+          $fetch(publicStateUrl(orgSlug, projSlug), { headers: bobHeaders }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+      });
+    });
   });
 }
