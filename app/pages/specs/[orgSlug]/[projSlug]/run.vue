@@ -12,6 +12,7 @@ import type { WorkflowStep } from "~/utils/workflows";
 
 const { t } = useI18n();
 const router = useRouter();
+const route = useRoute();
 const { orgSlug, projSlug, apiBase, routeBase } = useProjectContext();
 const { project, workflow, workflowSteps } = await useProject();
 const { statusMap } = await useStepStates(workflowSteps);
