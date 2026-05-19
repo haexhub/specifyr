@@ -87,23 +87,23 @@ Zwei Klassen:
 
 | Tool | Backing | Input | Output |
 |---|---|---|---|
-| `list_files` | REST `GET /api/projects/{id}/files?glob=*` | `{ glob?: string }` | `{ files: [{ path, size, type }] }` |
-| `read_file` | REST `GET /api/projects/{id}/files/{*path}` | `{ path: string }` | `{ content, encoding }` |
-| `search_code` | REST `POST /api/projects/{id}/search` (ripgrep) | `{ query, glob?, limit? }` | `{ matches: [{ path, line, snippet }] }` |
-| `read_existing_spec` | REST `GET /api/projects/{id}/spec-public-state` | `{ name?: string }` (specific file or all) | `{ files: [{ name, content }], version }` |
-| `list_my_drafts` | REST `GET /api/projects/{id}/spec-drafts/mine` | none | `{ drafts: [{ id, title, base_version, status, updated_at }] }` |
-| `load_draft` | REST `GET /api/projects/{id}/spec-drafts/{draftId}` | `{ draftId }` | `{ title, files, base_version, conversation }` |
+| `list_files` | REST `GET /api/orgs/{orgSlug}/projects/{projSlug}/files?glob=*` | `{ glob?: string }` | `{ files: [{ path, size, type }] }` |
+| `read_file` | REST `GET /api/orgs/{orgSlug}/projects/{projSlug}/files/{*path}` | `{ path: string }` | `{ content, encoding }` |
+| `search_code` | REST `POST /api/orgs/{orgSlug}/projects/{projSlug}/search` (ripgrep) | `{ query, glob?, limit? }` | `{ matches: [{ path, line, snippet }] }` |
+| `read_existing_spec` | REST `GET /api/orgs/{orgSlug}/projects/{projSlug}/spec-public-state` | `{ name?: string }` (specific file or all) | `{ files: [{ name, content }], version }` |
+| `list_my_drafts` | REST `GET /api/orgs/{orgSlug}/projects/{projSlug}/spec-drafts/mine` | none | `{ drafts: [{ id, title, base_version, status, updated_at }] }` |
+| `load_draft` | REST `GET /api/orgs/{orgSlug}/projects/{projSlug}/spec-drafts/{draftId}` | `{ draftId }` | `{ title, files, base_version, conversation }` |
 | `update_draft_files` | **lokal** — Active-Session-Store-Write; wird nach Turn-Ende automatisch zum Server gePATCHt | `{ files: [{ name, content }] }` | `{ ok: true }` |
 
 **(B) User-Actions** — vom UI ausgelöst, NICHT vom LLM aufrufbar:
 
 | Aktion | Endpoint | Zweck |
 |---|---|---|
-| Publish | `POST /api/projects/{id}/spec-drafts/{draftId}/publish` | Compare-and-swap `base_version` ↔ `spec_public_version`. Bei Match: Files nach disk schreiben, version inkrementieren, draft.status="published". Bei Mismatch: 409 mit Conflict-Diff. |
-| Discard | `DELETE /api/projects/{id}/spec-drafts/{draftId}` | Owner verwirft Draft. Hard-delete für `status="draft"`; `status="published"` → 409 (Audit-Trail immutable). |
+| Publish | `POST /api/orgs/{orgSlug}/projects/{projSlug}/spec-drafts/{draftId}/publish` | Compare-and-swap `base_version` ↔ `spec_public_version`. Bei Match: Files nach disk schreiben, version inkrementieren, draft.status="published". Bei Mismatch: 409 mit Conflict-Diff. |
+| Discard | `DELETE /api/orgs/{orgSlug}/projects/{projSlug}/spec-drafts/{draftId}` | Owner verwirft Draft. Hard-delete für `status="draft"`; `status="published"` → 409 (Audit-Trail immutable). |
 | Retry Save | UI-Button (nur sichtbar wenn Auto-Save final fehlgeschlagen, siehe unten) | PATCH manuell erneut auslösen. |
 
-**(C) Auto-Save (implicit, nicht user-triggered)** — Nach jedem fertigen Agent-Turn `PATCH /api/projects/{id}/spec-drafts/{draftId}` mit `{ conversation, files }`. Bei Failure: 3 Auto-Retries mit exponential backoff (2s / 4s / 8s); danach Banner "Save failed — Retry" mit manuellem Button. Während ausstehender Saves hält der Browser den Turn im Active-Session-Store; bei Tab-Reload wird der Save fortgesetzt.
+**(C) Auto-Save (implicit, nicht user-triggered)** — Nach jedem fertigen Agent-Turn `PATCH /api/orgs/{orgSlug}/projects/{projSlug}/spec-drafts/{draftId}` mit `{ conversation, files }`. Bei Failure: 3 Auto-Retries mit exponential backoff (2s / 4s / 8s); danach Banner "Save failed — Retry" mit manuellem Button. Während ausstehender Saves hält der Browser den Turn im Active-Session-Store; bei Tab-Reload wird der Save fortgesetzt.
 
 **Bewusst NICHT in der Surface:** kein `write_arbitrary_file`, kein `execute_command`, kein `git_*`, kein `npm_install`, kein `read_git_log`. Was ein autonomer Hermes-Agent später braucht, ist eine eigene, getrennte Surface auf separater Infra.
 
@@ -237,7 +237,7 @@ Server-side endpoints, jeweils TDD-first.
 - Create: `server/shared/database/schema/spec-drafts.ts`
 - Modify: `server/shared/database/schema/projects.ts` (add `spec_public_version`)
 - Modify: `server/shared/database/schema/index.ts` (export)
-- Generated (NIE hand-editieren — siehe MEMORY): `server/shared/database/migrations/NNNN_*.sql` + journal/snapshot
+- Generated (NIE hand-editieren — Drizzle verwaltet diese; `drizzle-kit generate` aus dem Schema heraus): `server/shared/database/migrations/NNNN_*.sql` + journal/snapshot
 
 **Schema:**
 ```ts
@@ -281,7 +281,7 @@ export const specDraftFiles = pgTable("spec_draft_files", {
 
 **Commit:** `feat(db): spec drafts + public version for browser-side agent`
 
-#### Task 1.2: `GET /api/projects/{id}/files` — List
+#### Task 1.2: `GET /api/orgs/{orgSlug}/projects/{projSlug}/files` — List
 
 **Files:**
 - Create: `server/api/projects/[id]/files/index.get.ts`
@@ -312,7 +312,7 @@ it("rejects path traversal in glob param", async () => {
 
 **Commit:** `feat(api): list project files endpoint`
 
-#### Task 1.3: `GET /api/projects/{id}/files/{*path}` — Read
+#### Task 1.3: `GET /api/orgs/{orgSlug}/projects/{projSlug}/files/{*path}` — Read
 
 **Files:**
 - Create: `server/api/projects/[id]/files/[...path].get.ts`
@@ -330,7 +330,7 @@ it("rejects path traversal in glob param", async () => {
 
 **Commit:** `feat(api): read project file endpoint with path-traversal protection`
 
-#### Task 1.4: `POST /api/projects/{id}/search` — Code Search
+#### Task 1.4: `POST /api/orgs/{orgSlug}/projects/{projSlug}/search` — Code Search
 
 **Files:**
 - Create: `server/api/projects/[id]/search.post.ts`
@@ -410,7 +410,7 @@ it("rejects path traversal in glob param", async () => {
 
 **Commit:** `feat(api): publish spec draft with optimistic concurrency`
 
-#### Task 1.7: `GET /api/projects/{id}/spec-public-state` — Read Current Public State
+#### Task 1.7: `GET /api/orgs/{orgSlug}/projects/{projSlug}/spec-public-state` — Read Current Public State
 
 **Files:**
 - Create: `server/api/projects/[id]/spec-public-state/index.get.ts`

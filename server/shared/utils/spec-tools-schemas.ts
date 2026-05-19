@@ -36,12 +36,22 @@ export const projectRelativePath = z
     "must not contain '..' segment",
   );
 
-/** A glob expression. Subject to the same no-`..` rule as paths. */
+/**
+ * A glob expression rooted at the project directory. The pattern must
+ * stay project-relative — `..` segments and absolute paths are rejected
+ * so a caller cannot widen the search to the entire filesystem. The
+ * Windows drive-letter check is defensive: server is POSIX-only today,
+ * but the schema also runs in the browser bundle in Phase 2 where the
+ * input could originate from a different OS.
+ */
+const ABSOLUTE_GLOB_RE = /^(?:[\\/]|[A-Za-z]:[\\/])/;
+
 export const safeGlob = z
   .string()
   .min(1)
   .max(512)
-  .refine((g) => !g.includes(".."), "glob must not contain '..'");
+  .refine((g) => !g.includes(".."), "glob must not contain '..'")
+  .refine((g) => !ABSOLUTE_GLOB_RE.test(g), "glob must be project-relative");
 
 /** Bare file name inside `specs/` — no slashes, no dots-only. */
 export const specFileName = z

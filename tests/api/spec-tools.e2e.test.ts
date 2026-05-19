@@ -152,6 +152,15 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 400 });
       });
 
+      it("rejects an absolute glob", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        await expect(
+          $fetch(filesUrl(orgSlug, projSlug, "?glob=%2Fetc%2F**"), { headers }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+      });
+
       it("403s when the caller is not a member of the project's org", async () => {
         const aliceHeaders = authAs("alice@example.com", "Alice");
         const bobHeaders = authAs("bob@example.com", "Bob");

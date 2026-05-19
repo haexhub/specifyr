@@ -1,0 +1,1 @@
+ALTER TABLE "spec_drafts" ADD CONSTRAINT "spec_drafts_status_chk" CHECK ("spec_drafts"."status" IN ('draft', 'published'));

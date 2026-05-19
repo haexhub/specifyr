@@ -613,6 +613,14 @@ export const specDrafts = pgTable(
       t.projectId,
       t.status,
     ),
+    // Drizzle's `enum:` option is TS-only — the DB column is plain TEXT
+    // and would accept any string from a non-API writer. Enforce the
+    // allowed set at the DB layer too so a stray INSERT can't silently
+    // break the status-filtered indexes / publish workflow.
+    statusCheck: check(
+      "spec_drafts_status_chk",
+      sql`${t.status} IN ('draft', 'published')`,
+    ),
   }),
 );
 
