@@ -2,10 +2,13 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-> **Status:** Phase 0 in progress (2026-05-18); Phases 1–4 not yet scheduled.
+> **Status:** Phases 0 + 1 complete (2026-05-19). Phase 2 not yet started.
 > Supersedes `2026-05-18-untrusted-multi-tenant-isolation.md`.
 > Architecture decision: [`docs/adrs/2026-05-18-browser-mcp-architecture.md`](../adrs/2026-05-18-browser-mcp-architecture.md).
 > Owner: tbd. Estimated effort: ~6–8 weeks across 5 phases.
+>
+> **Phase 1 landed in PRs #79, #80, #81, #82, #84.** Notable deviations from
+> the original sketch are captured per task below.
 
 **Goal:** Den Speckit-Chat-Agent aus dem Specifyr-Server in den User-Browser verlagern. Der Server stellt nur eine schmale, getypte REST-Tool-Surface bereit und führt selbst keinen LLM- oder Agent-Code mehr aus.
 
@@ -208,7 +211,9 @@ type IdentityStoreState = {
 
 ## Phasen
 
-### Phase 0: Spec + ADR (1–2 Tage)
+### Phase 0: Spec + ADR (1–2 Tage) — ✅ done
+
+
 
 **Files:**
 - Create: [`docs/adrs/2026-05-18-browser-mcp-architecture.md`](../adrs/2026-05-18-browser-mcp-architecture.md)
@@ -227,11 +232,44 @@ type IdentityStoreState = {
 
 ---
 
-### Phase 1: REST Tool Surface (1.5–2 Wochen)
+### Phase 1: REST Tool Surface (1.5–2 Wochen) — ✅ done
 
-Server-side endpoints, jeweils TDD-first.
+Server-side endpoints, jeweils TDD-first. All seven tasks landed across
+PRs #79–#84, with several CR-driven hardening passes documented below.
 
-#### Task 1.1: DB-Migration für Draft-Bundle + Public-Version
+**Landed endpoints (under `/api/orgs/:orgSlug/projects/:projSlug/`):**
+| Method | Path | Backed by |
+|---|---|---|
+| GET    | `files`                          | `[slug]/projects/[projSlug]/files/index.get.ts` |
+| GET    | `files/:path`                    | `files/[...path].get.ts` |
+| POST   | `search`                         | `search.post.ts` |
+| GET    | `spec-public-state`              | `spec-public-state.get.ts` |
+| POST   | `spec-drafts`                    | `spec-drafts/index.post.ts` |
+| GET    | `spec-drafts`                    | `spec-drafts/index.get.ts` (404 sink) |
+| GET    | `spec-drafts/mine`               | `spec-drafts/mine.get.ts` |
+| GET    | `spec-drafts/:draftId`           | `spec-drafts/[draftId].get.ts` |
+| PATCH  | `spec-drafts/:draftId`           | `spec-drafts/[draftId].patch.ts` |
+| DELETE | `spec-drafts/:draftId`           | `spec-drafts/[draftId].delete.ts` |
+| POST   | `spec-drafts/:draftId/publish`   | `spec-drafts/[draftId]/publish.post.ts` |
+
+**Stores:** `server/shared/utils/spec-draft-store.ts` +
+`server/shared/utils/spec-public-state.ts`.
+
+**Schemas:** `server/shared/utils/spec-tools-schemas.ts`. Phase 2 will
+need these in the browser bundle — see the file's own header for the
+"move to top-level `shared/`" guidance.
+
+**Tests:** `tests/api/spec-tools.e2e.test.ts` covers all endpoints
+(38 tests in this file alone).
+
+#### Task 1.1: DB-Migration für Draft-Bundle + Public-Version — ✅ done (#79)
+
+**Deviations from sketch:**
+- Schema landed in the existing monolithic `server/shared/database/schema.ts` (not new per-table files) to match repo convention.
+- `status` column gained a DB-level `CHECK ("status" IN ('draft', 'published'))` constraint (migration `0013_public_captain_britain.sql`) after CR pointed out that Drizzle's `enum:` option is TS-only.
+- `conversation` is `jsonb` (default `'[]'::jsonb`), not `text` as originally sketched.
+- RLS policies deferred — the store enforces ownership/visibility at the app layer instead (see store comments).
+
 
 **Files:**
 - Create: `server/shared/database/schema/spec-drafts.ts`
@@ -281,7 +319,10 @@ export const specDraftFiles = pgTable("spec_draft_files", {
 
 **Commit:** `feat(db): spec drafts + public version for browser-side agent`
 
-#### Task 1.2: `GET /api/orgs/{orgSlug}/projects/{projSlug}/files` — List
+#### Task 1.2: `GET /api/orgs/{orgSlug}/projects/{projSlug}/files` — List — ✅ done (#79)
+
+**Deviations from sketch:** uses Node's built-in `fs.glob` (Node 22+) instead of `fast-glob`. Drops the `size` field from the output (deferred — unused, and stat-per-dirent doubled the work). Adds `truncated: boolean` so the LLM cannot silently assume the listing was exhaustive. `safeGlob` rejects absolute paths (CR-#79).
+
 
 **Files:**
 - Create: `server/api/projects/[id]/files/index.get.ts`
@@ -312,7 +353,10 @@ it("rejects path traversal in glob param", async () => {
 
 **Commit:** `feat(api): list project files endpoint`
 
-#### Task 1.3: `GET /api/orgs/{orgSlug}/projects/{projSlug}/files/{*path}` — Read
+#### Task 1.3: `GET /api/orgs/{orgSlug}/projects/{projSlug}/files/{*path}` — Read — ✅ done (#80)
+
+**Deviations from sketch:** path traversal closed with `fs.open(O_RDONLY | O_NOFOLLOW)` so the size check, realpath check, and read all bind to the same FileHandle — closes the TOCTOU window that the original lstat→realpath→readFile sequence had (CR-#80). 1 MiB cap. Heuristic UTF-8 vs base64 by null-byte presence + strict decode.
+
 
 **Files:**
 - Create: `server/api/projects/[id]/files/[...path].get.ts`
@@ -330,7 +374,10 @@ it("rejects path traversal in glob param", async () => {
 
 **Commit:** `feat(api): read project file endpoint with path-traversal protection`
 
-#### Task 1.4: `POST /api/orgs/{orgSlug}/projects/{projSlug}/search` — Code Search
+#### Task 1.4: `POST /api/orgs/{orgSlug}/projects/{projSlug}/search` — Code Search — ✅ done (#81)
+
+**Deviations from sketch:** Spawns `rg --json -F` (fixed-strings, so the LLM doesn't have to reason about regex escaping; `(.*)` no longer means anything special). `--no-config` to ignore user-level rg config. Argv array (no shell). Stream stdout, kill process at `limit` matches. `ripgrep` added to the Alpine base image so prod ships with it.
+
 
 **Files:**
 - Create: `server/api/projects/[id]/search.post.ts`
@@ -346,7 +393,14 @@ it("rejects path traversal in glob param", async () => {
 
 **Commit:** `feat(api): code search endpoint via ripgrep`
 
-#### Task 1.5: Spec-Draft CRUD-Endpoints
+#### Task 1.5: Spec-Draft CRUD-Endpoints — ✅ done (#82)
+
+**Deviations from sketch:**
+- All six routes land under `server/projects/api/orgs/[slug]/projects/[projSlug]/spec-drafts/` (org-scoped layout, not the sketch's `/api/projects/[id]/…`).
+- Store lives at `server/shared/utils/spec-draft-store.ts`.
+- Visibility model surfaced in the store comments: `status='draft'` is owner-only with **404 masking** (we don't leak existence to non-owners); `status='published'` is visible to any project-access caller.
+- `deleteDraft` is single-statement DELETE with status filter in WHERE — race-safe against a concurrent publish flipping the row (CR-#82). The follow-up SELECT only fires when 0 rows were deleted, to distinguish 404 from 409.
+
 
 **Files:**
 - Create: `server/api/projects/[id]/spec-drafts/index.post.ts` (create new draft)
@@ -378,7 +432,15 @@ it("rejects path traversal in glob param", async () => {
 - `feat(api): patch spec draft (owner only)`
 - `feat(api): delete spec draft (owner only, drafts only)`
 
-#### Task 1.6: Publish-Endpoint mit Compare-and-Swap
+#### Task 1.6: Publish-Endpoint mit Compare-and-Swap — ✅ done (#84)
+
+**Deviations from sketch:**
+- Both `projects` row AND `specDrafts` row are `SELECT FOR UPDATE` inside the tx. The draft lock blocks the owner's concurrent PATCH/DELETE from racing the publish (CR-#83).
+- `currentPublicFiles` is read INSIDE the publish tx and returned as part of the conflict result — the version + files pair therefore comes from one atomic moment under the project lock (CR-#83).
+- Final `status='published'` UPDATE keeps the `owner + status='draft'` filter and verifies one row was affected — a row that snuck under the row lock would have left the draft published-or-gone, so the publish rolls back rather than committing a half-done snapshot.
+- Disk-write happens inside the tx; if it throws the tx rolls back and disk is left in a partial state the next publish overwrites. Accepted Phase-1 narrow window, documented in `spec-public-state.ts`.
+- File names re-validated against a flat-name contract at the disk boundary (`writePublicSpecFiles`) — defense in depth, the wire-boundary Zod check is the primary guard (CR-#83).
+
 
 **Files:**
 - Create: `server/api/projects/[id]/spec-drafts/[draftId]/publish.post.ts`
@@ -410,7 +472,12 @@ it("rejects path traversal in glob param", async () => {
 
 **Commit:** `feat(api): publish spec draft with optimistic concurrency`
 
-#### Task 1.7: `GET /api/orgs/{orgSlug}/projects/{projSlug}/spec-public-state` — Read Current Public State
+#### Task 1.7: `GET /api/orgs/{orgSlug}/projects/{projSlug}/spec-public-state` — Read Current Public State — ✅ done (#84)
+
+**Deviations from sketch:**
+- Uses a **stabilization read** pattern: `version → files → version`, retry on mismatch. Returns 503 after 5 retries rather than emit an inconsistent pair under a hot publish loop (CR-#83). Promise.all would have allowed cross-moment snapshots.
+- Public state lives on disk under `<projectRoot>/specs/`; version lives in `projects.spec_public_version`. Disk = canonical content, DB version = "which version produced what's on disk".
+
 
 **Files:**
 - Create: `server/api/projects/[id]/spec-public-state/index.get.ts`
@@ -433,7 +500,24 @@ it("rejects path traversal in glob param", async () => {
 
 ---
 
-### Phase 2: Browser Agent (2–2.5 Wochen)
+### Phase 2: Browser Agent (2–2.5 Wochen) — ⬜ next
+
+**Entry checklist for a fresh session:**
+
+- Branch from `main`. Most recent Phase-1 PR is #84; main contains the
+  full REST surface listed in the Phase 1 table above.
+- Browser bundle will need to call the typed REST surface. The Zod
+  schemas in `server/shared/utils/spec-tools-schemas.ts` are written
+  to be portable; the file's header notes the "move to top-level
+  `shared/` directory" option for Nuxt 4 dual-import. Make that call
+  in Task 2.5 before importing them client-side.
+- The browser only talks to two destinations: the LLM provider (with
+  the user's own API key, never via our server) and our REST surface
+  (via session cookie). CSP in Task 2.1 must allowlist exactly those
+  hostnames.
+- Active-Session store is **ephemeral cache only** — Postgres is the
+  source of truth. Auto-PATCH after each completed agent turn; see
+  the architecture section above.
 
 #### Task 2.1: Dependencies + CSP-Headers
 
