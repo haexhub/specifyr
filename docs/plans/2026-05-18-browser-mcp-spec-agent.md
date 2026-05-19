@@ -50,7 +50,7 @@ Hermes-Runtime-Agents (autonome, langlaufende Workflows) sind **außerhalb diese
 │  │  ┌──────────────────────────────────────┐  │    │
 │  │  │ Browser Agent (Vercel AI SDK)        │  │    │
 │  │  │  - streamText({ model, tools })      │  │    │
-│  │  │  - 5 Tools, alle → REST              │  │    │
+│  │  │  - 7 Tools (6 REST + 1 local IDB)    │  │    │
 │  │  └──────────────────────────────────────┘  │    │
 │  │                                             │    │
 │  │  ┌──────────────────────────────────────┐  │    │
@@ -370,7 +370,7 @@ it("rejects path traversal in glob param", async () => {
 - Reject Symlinks außerhalb des Projekt-Roots (via `fs.realpath` + Vergleich mit `project-dir`)
 - Reject Pfade die nicht im project-dir sind
 
-**Implementation:** Use `path.resolve` + `path.relative` + prüfen ob das Ergebnis nicht mit `..` beginnt.
+**Implementation:** `path.resolve(projectDir, params.path)` → `fs.promises.realpath(...)` (folgt Symlinks) → `path.relative(projectDir, realPath)`; reject wenn das Ergebnis mit `..` startet oder absolut ist. Beide Schritte (resolve + realpath) sind nötig: `path.resolve` allein erkennt keine Symlinks, `realpath` allein keine `..`-Sequenzen die *innerhalb* des Project-Roots in einen Symlink hineinführen.
 
 **Commit:** `feat(api): read project file endpoint with path-traversal protection`
 
@@ -415,7 +415,7 @@ it("rejects path traversal in glob param", async () => {
 - `POST /spec-drafts` mit `{ title, baseVersion, files, conversation }` → 201, `{ draftId, updatedAt }`. `baseVersion` muss <= `project.spec_public_version` sein.
 - `GET /spec-drafts/mine` → `{ drafts: [{ id, title, baseVersion, status, updatedAt, publishedAt }] }` für caller's drafts in diesem Projekt.
 - `GET /spec-drafts/{id}` → `{ title, files, baseVersion, conversation, status }`. Owner kann always lesen; Published auch für andere; Draft fremder User: 404.
-- `PATCH /spec-drafts/{id}` mit `{ title?, files?, conversation? }`. Owner only. Setzt `updatedAt`. Files-Update ersetzt den ganzen Bundle (vereinfacht Diff-Tracking).
+- `PATCH /spec-drafts/{id}` mit `{ title?, files?, conversation? }`. Owner only. Setzt `updatedAt`. Files-Update ersetzt den ganzen Bundle (vereinfacht Diff-Tracking). `baseVersion` ist hier *nicht* änderbar — beim Conflict-Resolution-Flow re-derived der Publish-Endpoint die `baseVersion` aus dem aktuellen `spec_public_version` (siehe Publish-Semantik unten), der Browser muss nicht explizit rebasen.
 - `DELETE /spec-drafts/{id}` — Owner only, nur wenn `status="draft"` (published kann nicht gelöscht werden für Audit-Trail).
 
 **Tests (TDD, je Endpoint einzeln):**
@@ -447,21 +447,26 @@ it("rejects path traversal in glob param", async () => {
 - Create: `server/shared/utils/spec-publish.ts` (transactional logic)
 - Test: `tests/api/projects/spec-drafts-publish.test.ts`
 
-**Logik:**
+**Logik (Option A — DB-first-commit, disk-rename-after):**
 ```ts
 // In a transaction:
 1. SELECT spec_public_version FROM projects WHERE id = :projectId FOR UPDATE;
 2. SELECT base_version, files FROM spec_drafts JOIN spec_draft_files WHERE id = :draftId AND owner = :user AND status = "draft";
 3. IF draft.base_version != project.spec_public_version: ROLLBACK, return 409 with { currentPublicVersion, currentPublicFiles }
-4. Write files to disk: projects/<org>/<slug>/specs/<name> (atomic: write to .tmp + rename per file)
+4. Validate every file.name (no "..", no absolute path) und schreibe alle Files in ein per-Publish tmp-Verzeichnis: specs/.tmp/<publish-id>/<name>.
 5. UPDATE projects SET spec_public_version = spec_public_version + 1 WHERE id = :projectId;
 6. UPDATE spec_drafts SET status = "published", published_at = NOW() WHERE id = :draftId;
 7. COMMIT.
+// Post-commit (project row lock noch gehalten bis COMMIT):
+8. fs.renameSync(specs/.tmp/<publish-id>/*, specs/<name>) — atomarer Move pro File.
+9. Bei Fehler in Schritt 8 (sollte nicht passieren wenn tmp + final auf gleichem FS): rm -rf specs/.tmp/<publish-id>, log + alert; DB ist bereits committed, also Output ist published — Operator-Recovery nötig.
 ```
 
+**Warum diese Reihenfolge:** Disk-Write *vor* COMMIT wäre falsch (Crash zwischen Disk-Write und COMMIT → Disk hat neue Spec, DB nicht → Lost-Update). Disk-Write nach COMMIT lässt das Lock-Fenster minimal und der einzige Failure-Modus (rename zwischen tmp und specs/ auf demselben FS) ist praktisch ausgeschlossen.
+
 **Critical:**
-- Disk-Write + DB-Update müssen entweder beide gelingen oder beide nicht. Implementation: schreibe Files ins `specs/`-Verzeichnis NACH erfolgreichem DB-Update? Oder vorher? Lock auf project + write-then-update + rollback-if-disk-fails ist sicherer. Konkret: tmp-Verzeichnis schreiben, beim Commit per `fs.renameSync` atomisch umbenennen, bei Fehler im DB-Commit `rm -rf` des tmp.
-- Path-Traversal-Schutz: `name`-Field jedes Files validieren (kein `..`, kein absoluter Pfad).
+- Path-Traversal-Schutz: `name`-Field jedes Files validieren (kein `..`, kein absoluter Pfad), *bevor* tmp-Files geschrieben werden.
+- tmp-Pfad bleibt innerhalb von `projects/<org>/<slug>/specs/.tmp/`, ist also auf gleichem Filesystem wie das Ziel → `rename` ist atomar.
 
 **Tests:**
 - Happy path: 2 Files Draft → Publish → specs/ contains both, version inkrementiert, draft.status="published"
