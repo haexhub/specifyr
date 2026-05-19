@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Building2, KeyRound, LogIn, LogOut, ShieldCheck, User as UserIcon } from "lucide-vue-next";
+import { Building2, KeyRound, LogIn, LogOut, MessageSquareCode, ShieldCheck, User as UserIcon } from "lucide-vue-next";
 
 const { me, isDevAuth, logout, devLogin } = useMe();
 </script>
@@ -61,6 +61,21 @@ const { me, isDevAuth, logout, devLogin } = useMe();
             <div class="mt-0.5 text-sm text-muted-foreground">
               Manage API keys for Anthropic / OpenAI / Google. Stored
               AES-256-GCM encrypted.
+            </div>
+          </div>
+        </NuxtLink>
+      </li>
+      <li>
+        <NuxtLink
+          to="/settings/speckit-agent"
+          class="flex items-start gap-3 rounded-lg border border-border p-4 transition hover:bg-accent/50"
+        >
+          <MessageSquareCode class="mt-0.5 size-5 shrink-0 opacity-80" />
+          <div>
+            <div class="font-medium">Speckit agent</div>
+            <div class="mt-0.5 text-sm text-muted-foreground">
+              Browser-side LLM provider identities. Keys stay in this
+              browser; the Specifyr server never sees them.
             </div>
           </div>
         </NuxtLink>
