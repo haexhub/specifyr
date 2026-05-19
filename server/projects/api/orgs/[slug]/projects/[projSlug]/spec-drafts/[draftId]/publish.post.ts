@@ -1,5 +1,4 @@
 import { publishDraft } from "@su/spec-draft-store";
-import { readPublicSpecFiles } from "@su/spec-public-state";
 import {
   draftId as draftIdSchema,
   publishDraftBody,
@@ -53,13 +52,15 @@ export default defineEventHandler(async (event) => {
 
   if (result.error === "conflict") {
     // 409 + current state so the UI can render the diff in-place
-    // without a second round-trip.
+    // without a second round-trip. version + files come from the
+    // same locked moment inside publishDraft (see its docstring) —
+    // do NOT re-read disk here; doing so would re-open the race
+    // CodeRabbit caught on PR #83.
     setResponseStatus(event, 409);
-    const currentPublicFiles = await readPublicSpecFiles(orgId, projectSlug);
     return {
       conflict: true as const,
       currentPublicVersion: result.currentPublicVersion,
-      currentPublicFiles,
+      currentPublicFiles: result.currentPublicFiles,
     };
   }
 
