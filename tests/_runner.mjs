@@ -22,7 +22,9 @@ async function walk(dir, out = []) {
     if (entry.isDirectory()) {
       // tests/api/ is Vitest-driven (HTTP e2e against booted Nuxt) —
       // exclude from this runner so we don't re-execute or conflict.
-      if (entry.name === "api") continue;
+      // tests/unit/ is Vitest-driven (browser-side stores / composables
+      // in happy-dom) — same reason.
+      if (entry.name === "api" || entry.name === "unit") continue;
       await walk(p, out);
     } else if (TEST_EXT.test(entry.name)) {
       out.push(p);

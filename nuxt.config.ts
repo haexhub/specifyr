@@ -25,6 +25,23 @@ export default defineNuxtConfig({
         },
       },
     },
+    routeRules: {
+      "/projects/**": {
+        headers: {
+          "Content-Security-Policy": [
+            "default-src 'self'",
+            "connect-src 'self' https://api.anthropic.com https://api.openai.com https://generativelanguage.googleapis.com https://openrouter.ai",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data:",
+            "font-src 'self' data:",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+          ].join("; "),
+        },
+      },
+    },
   },
   typescript: {
     tsConfig: {
@@ -48,7 +65,7 @@ export default defineNuxtConfig({
       extensions: [".vue"],
     },
   ],
-  modules: ["shadcn-nuxt", "@nuxtjs/i18n"],
+  modules: ["shadcn-nuxt", "@nuxtjs/i18n", "@pinia/nuxt"],
   vite: {
     plugins: [tailwindcss()],
   },
