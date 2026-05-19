@@ -1,4 +1,4 @@
-import fs from "node:fs/promises";
+import fs, { constants as fsConstants } from "node:fs/promises";
 import path from "node:path";
 import { projectDir } from "@su/data-dirs";
 import { projectRelativePath } from "@su/spec-tools-schemas";
@@ -11,18 +11,15 @@ import { projectRelativePath } from "@su/spec-tools-schemas";
  *
  *  1. Zod (`projectRelativePath`) rejects empty paths, leading `/`,
  *     and any `..` segment in the URL-decoded input.
- *  2. We `path.resolve(rootReal, relPath)` and re-check the result
- *     still lives under the project root — catches edge cases the
- *     Zod check doesn't see (e.g. a fresh attack vector before we
- *     tighten the schema).
- *  3. `fs.lstat` is used (NOT stat) so we can detect symlinks BEFORE
- *     following them, and reject any symlink outright. Following
- *     them and then comparing realpaths would also work but admits
- *     a TOCTOU race where the target changes between the realpath
- *     check and the read.
- *  4. After lstat says "regular file" we still realpath the file
- *     and confirm the result is rooted at the project — belt-and-
- *     braces against an intermediate symlinked directory.
+ *  2. We `path.resolve(rootReal, relPath)` and check the result still
+ *     lives under the project root — purely syntactic.
+ *  3. `fs.open` with `O_RDONLY | O_NOFOLLOW` opens the file atomically,
+ *     refusing the open if the LEAF component is a symlink (ELOOP).
+ *     This binds the size check and the read to the same FileHandle,
+ *     closing the TOCTOU race that an lstat→read sequence admits.
+ *  4. After the file is open, we still `realpath(requested)` and check
+ *     the result is rooted — defence against an intermediate symlinked
+ *     directory (O_NOFOLLOW only protects the leaf).
  *
  * The 1 MiB cap is a sanity bound. The LLM cannot usefully digest
  * a multi-megabyte file in one call anyway; if a legitimate use
@@ -60,51 +57,67 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  let stat: Awaited<ReturnType<typeof fs.lstat>>;
+  let handle: Awaited<ReturnType<typeof fs.open>>;
   try {
-    stat = await fs.lstat(requested);
+    handle = await fs.open(
+      requested,
+      fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW,
+    );
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") {
       throw createError({ statusCode: 404, statusMessage: "not found" });
+    }
+    if (code === "ELOOP") {
+      // O_NOFOLLOW: the path's leaf was a symlink.
+      throw createError({
+        statusCode: 400,
+        statusMessage: "symlinks not allowed",
+      });
+    }
+    if (code === "EISDIR") {
+      throw createError({ statusCode: 400, statusMessage: "not a regular file" });
     }
     throw err;
   }
 
-  if (stat.isSymbolicLink()) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "symlinks not allowed",
-    });
-  }
-  if (!stat.isFile()) {
-    throw createError({ statusCode: 400, statusMessage: "not a regular file" });
-  }
-  if (stat.size > MAX_BYTES) {
-    throw createError({
-      statusCode: 413,
-      statusMessage: `file too large (>${MAX_BYTES} bytes)`,
-    });
-  }
-
-  const realFile = await fs.realpath(requested);
-  if (realFile !== rootReal && !realFile.startsWith(rootReal + path.sep)) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "path escapes project root via symlink",
-    });
-  }
-
-  const buf = await fs.readFile(realFile);
-  // Heuristic: null-byte = binary by convention. For null-free buffers
-  // try strict UTF-8 decode; failure falls through to base64. Keeps the
-  // happy path (markdown / code) lean.
-  if (!buf.includes(0)) {
-    try {
-      const decoded = new TextDecoder("utf-8", { fatal: true }).decode(buf);
-      return { content: decoded, encoding: "utf-8" as const };
-    } catch {
-      // not valid utf-8 → fall through
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) {
+      throw createError({ statusCode: 400, statusMessage: "not a regular file" });
     }
+    if (stat.size > MAX_BYTES) {
+      throw createError({
+        statusCode: 413,
+        statusMessage: `file too large (>${MAX_BYTES} bytes)`,
+      });
+    }
+
+    // Intermediate-symlink check: O_NOFOLLOW only refused a leaf symlink.
+    // A parent directory could still be a symlink that escapes the root,
+    // so we resolve the full path and confirm it stays inside.
+    const realFile = await fs.realpath(requested);
+    if (realFile !== rootReal && !realFile.startsWith(rootReal + path.sep)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: "path escapes project root via symlink",
+      });
+    }
+
+    const buf = await handle.readFile();
+    // Heuristic: null-byte = binary by convention. For null-free buffers
+    // try strict UTF-8 decode; failure falls through to base64. Keeps the
+    // happy path (markdown / code) lean.
+    if (!buf.includes(0)) {
+      try {
+        const decoded = new TextDecoder("utf-8", { fatal: true }).decode(buf);
+        return { content: decoded, encoding: "utf-8" as const };
+      } catch {
+        // not valid utf-8 → fall through
+      }
+    }
+    return { content: buf.toString("base64"), encoding: "base64" as const };
+  } finally {
+    await handle.close();
   }
-  return { content: buf.toString("base64"), encoding: "base64" as const };
 });
