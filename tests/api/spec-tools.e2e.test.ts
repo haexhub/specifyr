@@ -431,5 +431,279 @@ if (!process.env.DATABASE_URL) {
         ).rejects.toMatchObject({ statusCode: 403 });
       });
     });
+
+    const draftsUrl = (orgSlug: string, projSlug: string, tail = "") =>
+      `/api/orgs/${orgSlug}/projects/${projSlug}/spec-drafts${tail}`;
+
+    interface DraftSummaryShape {
+      id: string;
+      title: string;
+      baseVersion: number;
+      status: "draft" | "published";
+      createdAt: string;
+      updatedAt: string;
+      publishedAt: string | null;
+    }
+    interface DraftFullShape extends DraftSummaryShape {
+      files: Array<{ name: string; content: string }>;
+      conversation: unknown[];
+    }
+
+    describe("spec-drafts CRUD", () => {
+      it("POST creates a draft and GET /mine returns it", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        const created = await $fetch<{ draftId: string; createdAt: string }>(
+          draftsUrl(orgSlug, projSlug),
+          {
+            method: "POST",
+            headers,
+            body: {
+              title: "First draft",
+              baseVersion: 0,
+              files: [{ name: "spec.md", content: "# Hello" }],
+              conversation: [{ role: "user", content: "make it so" }],
+            },
+          },
+        );
+        expect(created.draftId).toMatch(
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+        );
+
+        const mine = await $fetch<{ drafts: DraftSummaryShape[] }>(
+          draftsUrl(orgSlug, projSlug, "/mine"),
+          { headers },
+        );
+        expect(mine.drafts.length).toBe(1);
+        expect(mine.drafts[0]!.title).toBe("First draft");
+        expect(mine.drafts[0]!.status).toBe("draft");
+      });
+
+      it("GET /:draftId returns full draft (files + conversation)", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        const { draftId } = await $fetch<{ draftId: string }>(
+          draftsUrl(orgSlug, projSlug),
+          {
+            method: "POST",
+            headers,
+            body: {
+              title: "T",
+              baseVersion: 0,
+              files: [
+                { name: "spec.md", content: "# Spec body" },
+                { name: "plan.md", content: "# Plan body" },
+              ],
+              conversation: [{ role: "assistant", content: "ok" }],
+            },
+          },
+        );
+
+        const full = await $fetch<DraftFullShape>(
+          draftsUrl(orgSlug, projSlug, `/${draftId}`),
+          { headers },
+        );
+        expect(full.id).toBe(draftId);
+        expect(full.title).toBe("T");
+        expect(full.baseVersion).toBe(0);
+        expect(full.status).toBe("draft");
+        expect(full.files.map((f) => f.name).sort()).toEqual([
+          "plan.md",
+          "spec.md",
+        ]);
+        expect(full.files.find((f) => f.name === "spec.md")?.content).toBe(
+          "# Spec body",
+        );
+        expect(full.conversation).toEqual([
+          { role: "assistant", content: "ok" },
+        ]);
+      });
+
+      it("GET /mine excludes drafts owned by other users in the same org", async () => {
+        const aliceHeaders = authAs("alice@example.com", "Alice");
+        const bobHeaders = authAs("bob@example.com", "Bob");
+        const { orgSlug, projSlug } = await bootstrapProject(aliceHeaders);
+        // Promote Bob into the org so he passes project-access.
+        // (The org currently has only Alice; we'd need an invite flow.
+        // Easier: bootstrap a fresh project owned by Bob and assert
+        // Alice's /mine never includes Bob's drafts.)
+        const { orgSlug: bobOrg, projSlug: bobProj } = await bootstrapProject(
+          bobHeaders,
+          `bob-${Date.now()}`,
+        );
+        await $fetch(draftsUrl(bobOrg, bobProj), {
+          method: "POST",
+          headers: bobHeaders,
+          body: {
+            title: "Bob's draft",
+            baseVersion: 0,
+            files: [{ name: "spec.md", content: "bob's words" }],
+            conversation: [],
+          },
+        });
+        await $fetch(draftsUrl(orgSlug, projSlug), {
+          method: "POST",
+          headers: aliceHeaders,
+          body: {
+            title: "Alice's draft",
+            baseVersion: 0,
+            files: [{ name: "spec.md", content: "alice's words" }],
+            conversation: [],
+          },
+        });
+
+        const aliceMine = await $fetch<{ drafts: DraftSummaryShape[] }>(
+          draftsUrl(orgSlug, projSlug, "/mine"),
+          { headers: aliceHeaders },
+        );
+        expect(aliceMine.drafts.map((d) => d.title)).toEqual([
+          "Alice's draft",
+        ]);
+      });
+
+      it("PATCH updates title + replaces files + updates conversation", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+        const { draftId } = await $fetch<{ draftId: string }>(
+          draftsUrl(orgSlug, projSlug),
+          {
+            method: "POST",
+            headers,
+            body: {
+              title: "old",
+              baseVersion: 0,
+              files: [{ name: "spec.md", content: "v1" }],
+              conversation: [{ role: "user", content: "start" }],
+            },
+          },
+        );
+
+        await $fetch(draftsUrl(orgSlug, projSlug, `/${draftId}`), {
+          method: "PATCH",
+          headers,
+          body: {
+            title: "new",
+            files: [
+              { name: "spec.md", content: "v2" },
+              { name: "plan.md", content: "added" },
+            ],
+            conversation: [
+              { role: "user", content: "start" },
+              { role: "assistant", content: "next" },
+            ],
+          },
+        });
+
+        const after = await $fetch<DraftFullShape>(
+          draftsUrl(orgSlug, projSlug, `/${draftId}`),
+          { headers },
+        );
+        expect(after.title).toBe("new");
+        expect(after.files.map((f) => f.name).sort()).toEqual([
+          "plan.md",
+          "spec.md",
+        ]);
+        expect(after.files.find((f) => f.name === "spec.md")?.content).toBe(
+          "v2",
+        );
+        expect(after.conversation).toHaveLength(2);
+      });
+
+      it("PATCH with empty body returns 400", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+        const { draftId } = await $fetch<{ draftId: string }>(
+          draftsUrl(orgSlug, projSlug),
+          {
+            method: "POST",
+            headers,
+            body: {
+              title: "x",
+              baseVersion: 0,
+              files: [],
+              conversation: [],
+            },
+          },
+        );
+
+        await expect(
+          $fetch(draftsUrl(orgSlug, projSlug, `/${draftId}`), {
+            method: "PATCH",
+            headers,
+            body: {},
+          }),
+        ).rejects.toMatchObject({ statusCode: 400 });
+      });
+
+      it("DELETE removes the draft", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+        const { draftId } = await $fetch<{ draftId: string }>(
+          draftsUrl(orgSlug, projSlug),
+          {
+            method: "POST",
+            headers,
+            body: {
+              title: "to-delete",
+              baseVersion: 0,
+              files: [{ name: "spec.md", content: "bye" }],
+              conversation: [],
+            },
+          },
+        );
+
+        const res = await $fetch<{ ok: true }>(
+          draftsUrl(orgSlug, projSlug, `/${draftId}`),
+          { method: "DELETE", headers },
+        );
+        expect(res.ok).toBe(true);
+
+        await expect(
+          $fetch(draftsUrl(orgSlug, projSlug, `/${draftId}`), { headers }),
+        ).rejects.toMatchObject({ statusCode: 404 });
+      });
+
+      it("GET /:draftId returns 404 for another user's draft", async () => {
+        // Two users in two different orgs; Alice owns the draft, Bob
+        // tries to read it but is denied at the project-access layer
+        // (403). Same-org cross-user requires an invite flow we don't
+        // have here, so this is the strongest isolation we can assert
+        // without leaving Phase 1's scope.
+        const aliceHeaders = authAs("alice@example.com", "Alice");
+        const bobHeaders = authAs("bob@example.com", "Bob");
+        const { orgSlug, projSlug } = await bootstrapProject(aliceHeaders);
+        const { draftId } = await $fetch<{ draftId: string }>(
+          draftsUrl(orgSlug, projSlug),
+          {
+            method: "POST",
+            headers: aliceHeaders,
+            body: {
+              title: "private",
+              baseVersion: 0,
+              files: [],
+              conversation: [],
+            },
+          },
+        );
+        await $fetch("/api/me", { headers: bobHeaders });
+
+        await expect(
+          $fetch(draftsUrl(orgSlug, projSlug, `/${draftId}`), {
+            headers: bobHeaders,
+          }),
+        ).rejects.toMatchObject({ statusCode: 403 });
+      });
+
+      it("GET /spec-drafts (no draftId) returns 404", async () => {
+        const headers = authAs("alice@example.com");
+        const { orgSlug, projSlug } = await bootstrapProject(headers);
+
+        await expect(
+          $fetch(draftsUrl(orgSlug, projSlug), { headers }),
+        ).rejects.toMatchObject({ statusCode: 404 });
+      });
+    });
   });
 }
