@@ -18,7 +18,9 @@ services:
     container_name: specifyr-prod
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Host-Port-Schema einheitlich mit dev (siehe docker-compose.yml).
+      # Override via SPECIFYR_PORT in .env.
+      - "${SPECIFYR_PORT:-10000}:3000"
     environment:
       HOST: 0.0.0.0
       PORT: 3000

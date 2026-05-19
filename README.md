@@ -67,9 +67,10 @@ docker compose down             # Stop containers
 
 The dev compose bundles two parallel access paths:
 
-- **`http://localhost:4242`** — specifyr direct, bypassing auth. The
+- **`http://localhost:10000`** — specifyr direct, bypassing auth. The
   `SPECIFYR_DEV_USER_EMAIL` env-fallback is the "logged-in user" here, so
-  this is the fastest path for code iteration.
+  this is the fastest path for code iteration. Port = `SPECIFYR_PORT`
+  (default `PORT_BASE`=10000); see `.env.example` for the full scheme.
 - **`http://specifyr.localhost`** — full multi-user flow through Traefik
   → Authentik (UI on `http://auth.localhost`, default login
   `akadmin` / `akadmin-dev`). Use this to exercise the prod-shape auth
