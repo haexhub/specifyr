@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.19.0](https://github.com/haexhub/specifyr/compare/v0.18.0...v0.19.0) (2026-05-19)
+
+
+### Features
+
+* **api:** code search endpoint via ripgrep ([#81](https://github.com/haexhub/specifyr/issues/81)) ([72f4684](https://github.com/haexhub/specifyr/commit/72f4684eec951b41d149f55f3af029e15fd62e03))
+* **api:** publish + read-public-state endpoints (Tasks 1.6 + 1.7) ([#84](https://github.com/haexhub/specifyr/issues/84)) ([6463c93](https://github.com/haexhub/specifyr/commit/6463c93056c300a307bd257a1453778a3c144725))
+* **api:** read project file endpoint (Task 1.3) ([#80](https://github.com/haexhub/specifyr/issues/80)) ([1883373](https://github.com/haexhub/specifyr/commit/1883373d10994dae1009ee49e1b9c0fe19abceb2))
+* **api:** spec-draft CRUD endpoints (Task 1.5) ([#82](https://github.com/haexhub/specifyr/issues/82)) ([1ae0cf3](https://github.com/haexhub/specifyr/commit/1ae0cf3f2422028df358a526f8d8f5665bfd5f39))
+* browser-side Speckit agent — Phase 1 kickoff (Tasks 1.1 + 1.2) ([#79](https://github.com/haexhub/specifyr/issues/79)) ([9f8a4c3](https://github.com/haexhub/specifyr/commit/9f8a4c393d3ac6ae01c842b88e10636c9d8491c2))
+* **chat:** keep-alive ACP sessions + workflow-aware recovery ([#76](https://github.com/haexhub/specifyr/issues/76)) ([67dfd68](https://github.com/haexhub/specifyr/commit/67dfd68cfe3135bacde755a7c9dd2d65e8eaf12a))
+* **speckit:** Phase 2 — browser-side spec agent (UI + stores + tools) ([#86](https://github.com/haexhub/specifyr/issues/86)) ([ef1d53b](https://github.com/haexhub/specifyr/commit/ef1d53b22fd81300a2b89b0591427f72c78dfdeb))
+
 ## [0.18.0](https://github.com/haexhub/specifyr/compare/v0.17.0...v0.18.0) (2026-05-15)
 
 
