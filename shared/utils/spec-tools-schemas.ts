@@ -2,23 +2,19 @@ import { z } from "zod";
 
 /**
  * Tool-surface and REST-payload schemas for the browser-side Speckit
- * agent. Phase-0 sketch — locks the API shape before any endpoint or
- * tool definition is implemented.
+ * agent. Lives at the top-level `shared/` directory so the Nuxt-4
+ * dual-import contract lets both Nitro endpoints and the browser-side
+ * tool definitions consume the same Zod source.
  *
  * The seven LLM-callable tools (list_files, read_file, search_code,
  * read_existing_spec, list_my_drafts, load_draft, update_draft_files)
  * each declare an `<Name>Input` and `<Name>Output` schema. Six map to
- * REST endpoints; `update_draft_files` is local IndexedDB only and
- * has no server route.
+ * REST endpoints; `update_draft_files` runs purely in the active-
+ * session store and has no server route.
  *
  * The three user-actions (save / publish / discard) are not tool-
  * callable; their request/response schemas live in the lower half of
  * this file.
- *
- * When Phase 2 needs these schemas in the browser, move this file to
- * a top-level `shared/` directory (Nuxt 4 dual-import) — or duplicate
- * the minimum needed. Do NOT add a deep relative import from `app/`
- * into `server/` directly.
  */
 
 // ---------------------------------------------------------------------------

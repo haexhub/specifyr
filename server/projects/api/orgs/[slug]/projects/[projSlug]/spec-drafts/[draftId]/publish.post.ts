@@ -2,7 +2,7 @@ import { publishDraft } from "@su/spec-draft-store";
 import {
   draftId as draftIdSchema,
   publishDraftBody,
-} from "@su/spec-tools-schemas";
+} from "#shared/utils/spec-tools-schemas";
 import { parseBody } from "@su/validation";
 
 /**

@@ -7,7 +7,7 @@
 //   A reka-ui <Tabs> would be a stateful client-only widget that re-implements
 //   half of that.
 
-import { FileText, Activity, KeyRound, GitBranch } from "lucide-vue-next";
+import { FileText, Activity, KeyRound, GitBranch, MessageSquareCode } from "lucide-vue-next";
 
 const props = defineProps<{ orgSlug: string; projSlug: string }>();
 const route = useRoute();
@@ -16,8 +16,9 @@ const base = computed(() => `/specs/${props.orgSlug}/${props.projSlug}`);
 const isRuntime = computed(() => route.path.startsWith(`${base.value}/runtime`));
 const isSecrets = computed(() => route.path.startsWith(`${base.value}/secrets`));
 const isRepository = computed(() => route.path.startsWith(`${base.value}/repository`));
+const isChat = computed(() => route.path.startsWith(`${base.value}/chat`));
 const isSpeckit = computed(
-  () => !isRuntime.value && !isSecrets.value && !isRepository.value,
+  () => !isRuntime.value && !isSecrets.value && !isRepository.value && !isChat.value,
 );
 </script>
 
@@ -32,6 +33,16 @@ const isSpeckit = computed(
     >
       <FileText class="size-3.5" />
       Speckit
+    </NuxtLink>
+    <NuxtLink
+      :to="`${base}/chat`"
+      class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm transition"
+      :class="isChat
+        ? 'bg-background font-medium text-foreground shadow-sm'
+        : 'text-muted-foreground hover:text-foreground'"
+    >
+      <MessageSquareCode class="size-3.5" />
+      Chat
     </NuxtLink>
     <NuxtLink
       :to="`${base}/runtime`"

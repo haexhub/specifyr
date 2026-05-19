@@ -1,5 +1,5 @@
 import { deleteDraft } from "@su/spec-draft-store";
-import { draftId as draftIdSchema } from "@su/spec-tools-schemas";
+import { draftId as draftIdSchema } from "#shared/utils/spec-tools-schemas";
 
 /**
  * Discard a draft. Hard-deletes `status='draft'` rows (and cascades

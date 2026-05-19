@@ -72,5 +72,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Phase-2 vitest reads tsconfig.json, which extends ./.nuxt/tsconfig.json.
+      # Without this step the file is missing in CI and all unit suites fail to
+      # transform.
+      - name: Prepare Nuxt
+        run: pnpm exec nuxt prepare
+
       - name: Run tests
         run: pnpm test

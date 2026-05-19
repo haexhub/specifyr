@@ -25,6 +25,28 @@ export default defineNuxtConfig({
         },
       },
     },
+    routeRules: {
+      // CSP applies origin-wide because localStorage (where provider API
+      // keys are persisted) is shared across all pages on this origin —
+      // an XSS on /settings/speckit-agent or any other page would
+      // otherwise be able to exfiltrate them. The connect-src allowlist
+      // is intentionally narrow: the four LLM provider hosts plus 'self'.
+      "/**": {
+        headers: {
+          "Content-Security-Policy": [
+            "default-src 'self'",
+            "connect-src 'self' https://api.anthropic.com https://api.openai.com https://generativelanguage.googleapis.com https://openrouter.ai",
+            "script-src 'self'",
+            "style-src 'self' 'unsafe-inline'",
+            "img-src 'self' data:",
+            "font-src 'self' data:",
+            "frame-ancestors 'none'",
+            "base-uri 'self'",
+            "form-action 'self'",
+          ].join("; "),
+        },
+      },
+    },
   },
   typescript: {
     tsConfig: {
@@ -48,7 +70,7 @@ export default defineNuxtConfig({
       extensions: [".vue"],
     },
   ],
-  modules: ["shadcn-nuxt", "@nuxtjs/i18n"],
+  modules: ["shadcn-nuxt", "@nuxtjs/i18n", "@pinia/nuxt"],
   vite: {
     plugins: [tailwindcss()],
   },

@@ -20,9 +20,11 @@ async function walk(dir, out = []) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {
     const p = path.join(dir, entry.name);
     if (entry.isDirectory()) {
-      // tests/api/ is Vitest-driven (HTTP e2e against booted Nuxt) —
-      // exclude from this runner so we don't re-execute or conflict.
-      if (entry.name === "api") continue;
+      // tests/api/ and tests/unit/ are Vitest-driven and run from
+      // their own configs (vitest.config.ts / vitest.unit.config.ts).
+      // `pnpm test` chains them via `test:unit && test:node`, so they
+      // are NOT skipped — they're just outside this runner's scope.
+      if (entry.name === "api" || entry.name === "unit") continue;
       await walk(p, out);
     } else if (TEST_EXT.test(entry.name)) {
       out.push(p);

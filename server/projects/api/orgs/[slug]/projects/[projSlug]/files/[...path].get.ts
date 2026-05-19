@@ -1,7 +1,7 @@
 import fs, { constants as fsConstants } from "node:fs/promises";
 import path from "node:path";
 import { projectDir } from "@su/data-dirs";
-import { projectRelativePath } from "@su/spec-tools-schemas";
+import { projectRelativePath } from "#shared/utils/spec-tools-schemas";
 
 /**
  * Read a single file from the project's working tree. Backs the

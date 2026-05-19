@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { projectDir } from "@su/data-dirs";
-import { listFilesInput } from "@su/spec-tools-schemas";
+import { listFilesInput } from "#shared/utils/spec-tools-schemas";
 import { parseQuery } from "@su/validation";
 
 /**
